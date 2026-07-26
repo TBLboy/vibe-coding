@@ -1,0 +1,33 @@
+{
+  "name": "vibe-toolbelt",
+  "version": "0.4.0",
+  "description": "Global Vibe Coding MCP toolbelt for documentation, code hosting, browser automation, documents, and web research.",
+  "author": {
+    "name": "Local Vibe Coding"
+  },
+  "license": "MIT",
+  "keywords": [
+    "vibe-coding",
+    "mcp",
+    "research",
+    "browser",
+    "github"
+  ],
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Vibe Coding Toolbelt",
+    "shortDescription": "MCP tools for the global Vibe Coding workflow.",
+    "longDescription": "Optional global MCP capabilities without OpenCode providers or runtime plugins.",
+    "developerName": "Local Vibe Coding",
+    "category": "Productivity",
+    "capabilities": [
+      "MCP",
+      "Network"
+    ],
+    "defaultPrompt": [
+      "Research a documented solution and record the evidence.",
+      "Use browser automation to validate this implementation."
+    ],
+    "brandColor": "#2F6B8F"
+  }
+}
