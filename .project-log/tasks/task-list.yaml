@@ -1,0 +1,44 @@
+﻿version: "0.2"
+active_goal: null
+tasks:
+  - id: TASK-001
+    title: Audit installed Vibe Coding Codex framework
+    kind: task
+    phase: verification
+    goal: Verify the installed Vibe Coding Codex Global Core framework
+    status: done
+    authority: A
+    owner: agent
+    related_business_logic: []
+    depends_on: []
+    inputs:
+      - installed Codex configuration
+      - Vibe Workflow runtime
+      - release package
+      - test suite
+    outputs:
+      - audit evidence
+      - non-blocking environment issue list
+    done_when:
+      - installer, package validation, and unit tests pass
+      - Project Log, Loop Core, Hooks, Goal, and role rendering pass
+      - host issues are separated from framework issues
+    verification:
+      status: passed
+      commands:
+        - py -3 scripts/global_installer.py verify
+        - py -3 -m unittest discover -s tests -p test_*.py
+        - py -3 scripts/validate_project.py --root .
+        - py -3 scripts/validate_workflow.py --root .
+      evidence:
+        - AUDIT-001
+        - AUDIT-002
+        - AUDIT-003
+        - AUDIT-004
+        - AUDIT-005
+        - AUDIT-006
+        - AUDIT-007
+        - AUDIT-008
+      limitations:
+        - codex doctor reports a host npm/Zed package-path mismatch
+        - MCP was intentionally not installed

@@ -1,0 +1,157 @@
+schema_version: 1
+evidence:
+- id: AUDIT-001
+  kind: installer-verification
+  subject: Installed Vibe Coding Codex Global Core package
+  status: valid
+  command: py -3 scripts/global_installer.py verify
+  result_ref: Global installation verification passed
+  covers:
+    files:
+    - codex-vibe-global-core/codex-vibe-global-core/scripts/global_installer.py
+    requirements: []
+    tasks: []
+  version_binding:
+    git_commit: null
+    diff_hash: null
+    file_hashes:
+      codex-vibe-global-core/codex-vibe-global-core/scripts/global_installer.py: 48052dc659f5e8f53acc55ad2adefe29e1426479d7a658e02a1112484a70330f
+  recorded_at: '2026-07-26T14:57:00Z'
+  invalidated_at: null
+  invalidation_reason: null
+- id: AUDIT-002
+  kind: automated-test
+  subject: Vibe workflow runtime unit tests
+  status: valid
+  command: py -3 -m unittest discover -s tests -p test_*.py
+  result_ref: 17 tests passed
+  covers:
+    files:
+    - codex-vibe-global-core/codex-vibe-global-core/tests
+    requirements: []
+    tasks: []
+  version_binding:
+    git_commit: null
+    diff_hash: null
+    file_hashes: {}
+  recorded_at: '2026-07-26T14:57:01Z'
+  invalidated_at: null
+  invalidation_reason: null
+- id: AUDIT-003
+  kind: validation
+  subject: Project Log and Loop Core validation
+  status: valid
+  command: validate_project.py; validate_workflow.py; loopctl restore; loopctl validate
+  result_ref: All validations passed
+  covers:
+    files:
+    - .project-log
+    requirements: []
+    tasks: []
+  version_binding:
+    git_commit: null
+    diff_hash: null
+    file_hashes: {}
+  recorded_at: '2026-07-26T14:57:01Z'
+  invalidated_at: null
+  invalidation_reason: null
+- id: AUDIT-004
+  kind: hook-smoke-test
+  subject: SessionStart, PreCompact, and PostToolUse integration
+  status: valid
+  command: Hook stdin smoke tests and PostToolUse evidence invalidation
+  result_ref: SessionStart/PreCompact returned context; PostToolUse marked covered
+    evidence stale
+  covers:
+    files:
+    - C:/Users/12187/.codex/vibe-workflow/hooks/session_start.py
+    - C:/Users/12187/.codex/vibe-workflow/hooks/pre_compact.py
+    - C:/Users/12187/.codex/vibe-workflow/hooks/post_tool_use.py
+    requirements: []
+    tasks: []
+  version_binding:
+    git_commit: null
+    diff_hash: null
+    file_hashes:
+      C:/Users/12187/.codex/vibe-workflow/hooks/session_start.py: a73cf5f789443544d2c13d05454926fc61d6db6e43bf74e3aa166f1982078818
+      C:/Users/12187/.codex/vibe-workflow/hooks/pre_compact.py: 4c101a09eb09c0e07ceb216d20d795b88bcf0fcf97090e11b4a794904cc72cc7
+      C:/Users/12187/.codex/vibe-workflow/hooks/post_tool_use.py: 1ae772f7bdf88aa787dfee3005f7a247f428716ecfd4f9994ccd37ca25a01791
+  recorded_at: '2026-07-26T14:58:31Z'
+  invalidated_at: null
+  invalidation_reason: null
+- id: AUDIT-005
+  kind: native-goal-bridge
+  subject: Native Codex Goal synchronization and completion guard
+  status: valid
+  command: loopctl goal-bind; loopctl goal-sync complete; loopctl evaluate goal
+  result_ref: Goal binding and sync work; completion still requires Project Goal evidence
+  covers:
+    files:
+    - C:/Users/12187/.codex/vibe-workflow/scripts/loopctl.py
+    requirements: []
+    tasks: []
+  version_binding:
+    git_commit: null
+    diff_hash: null
+    file_hashes:
+      C:/Users/12187/.codex/vibe-workflow/scripts/loopctl.py: b13b0817dac3999a2de7351f4c96e00ab2582c12edac95a1c0e9ac79039bd26b
+  recorded_at: '2026-07-26T14:58:31Z'
+  invalidated_at: null
+  invalidation_reason: null
+- id: AUDIT-006
+  kind: configuration
+  subject: Codex hook configuration registration
+  status: valid
+  command: codex --strict-config doctor --json and TOML registration count
+  result_ref: Config parses; SessionStart/PostToolUse/PreCompact=1; Stop=0; prompt/agent=0
+  covers:
+    files:
+    - C:/Users/12187/.codex/config.toml
+    requirements: []
+    tasks: []
+  version_binding:
+    git_commit: null
+    diff_hash: null
+    file_hashes:
+      C:/Users/12187/.codex/config.toml: d23974c9819b3cfe732442326470c155a7b230f77da0265f0924ce6920845f53
+  recorded_at: '2026-07-26T14:58:31Z'
+  invalidated_at: null
+  invalidation_reason: null
+- id: AUDIT-007
+  kind: role-rendering
+  subject: Eight Vibe subagent role templates
+  status: valid
+  command: render_subagent_prompt.py for all eight roles
+  result_ref: 8/8 roles rendered successfully
+  covers:
+    files:
+    - C:/Users/12187/.codex/vibe-workflow/scripts/render_subagent_prompt.py
+    requirements: []
+    tasks: []
+  version_binding:
+    git_commit: null
+    diff_hash: null
+    file_hashes:
+      C:/Users/12187/.codex/vibe-workflow/scripts/render_subagent_prompt.py: 79f7c1897b0728659f273d16ac634c71c21bac06f4458774a77b3a38e232a838
+  recorded_at: '2026-07-26T14:58:32Z'
+  invalidated_at: null
+  invalidation_reason: null
+- id: AUDIT-008
+  kind: package-validation
+  subject: Source package and published release validation
+  status: valid
+  command: runtime/scripts/validate_package.py
+  result_ref: Package validation passed
+  covers:
+    files:
+    - codex-vibe-global-core/codex-vibe-global-core/runtime/scripts/validate_package.py
+    requirements: []
+    tasks: []
+  version_binding:
+    git_commit: null
+    diff_hash: null
+    file_hashes:
+      codex-vibe-global-core/codex-vibe-global-core/runtime/scripts/validate_package.py: c5e585ef6c5a3b27751ad1e82f486bde477c1cf7d0562dc9b374ff108affb145
+  recorded_at: '2026-07-26T14:58:32Z'
+  invalidated_at: null
+  invalidation_reason: null

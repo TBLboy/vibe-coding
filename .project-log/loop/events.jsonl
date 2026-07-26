@@ -1,0 +1,10 @@
+
+{"schema_version":1,"event_id":"LE-000001","time":"2026-07-26T14:57:00Z","run_id":null,"type":"evidence-recorded","evidence_id":"AUDIT-001","status":"valid"}
+{"schema_version":1,"event_id":"LE-000002","time":"2026-07-26T14:57:01Z","run_id":null,"type":"evidence-recorded","evidence_id":"AUDIT-002","status":"valid"}
+{"schema_version":1,"event_id":"LE-000003","time":"2026-07-26T14:57:01Z","run_id":null,"type":"evidence-recorded","evidence_id":"AUDIT-003","status":"valid"}
+{"schema_version":1,"event_id":"LE-000004","time":"2026-07-26T14:58:31Z","run_id":null,"type":"evidence-recorded","evidence_id":"AUDIT-004","status":"valid"}
+{"schema_version":1,"event_id":"LE-000005","time":"2026-07-26T14:58:31Z","run_id":null,"type":"evidence-recorded","evidence_id":"AUDIT-005","status":"valid"}
+{"schema_version":1,"event_id":"LE-000006","time":"2026-07-26T14:58:31Z","run_id":null,"type":"evidence-recorded","evidence_id":"AUDIT-006","status":"valid"}
+{"schema_version":1,"event_id":"LE-000007","time":"2026-07-26T14:58:32Z","run_id":null,"type":"evidence-recorded","evidence_id":"AUDIT-007","status":"valid"}
+{"schema_version":1,"event_id":"LE-000008","time":"2026-07-26T14:58:32Z","run_id":null,"type":"evidence-recorded","evidence_id":"AUDIT-008","status":"valid"}
+{"schema_version":1,"event_id":"LE-000009","time":"2026-07-26T15:03:28Z","run_id":null,"type":"handoff-generated","reason":"active"}
