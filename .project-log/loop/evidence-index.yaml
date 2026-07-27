@@ -245,3 +245,46 @@ evidence:
   recorded_at: '2026-07-27T10:17:25+08:00'
   invalidated_at: null
   invalidation_reason: null
+- id: MCP-006
+  kind: automated-test
+  subject: Windows-compatible installer and CodeGraph regression suite
+  status: valid
+  command: py -3 -m unittest discover -s tests -v
+  result_ref: 20 tests passed; 1 historical migration test skipped
+  covers:
+    files:
+    - tests/test_installer.py
+    requirements: []
+    tasks:
+    - TASK-004
+  version_binding:
+    git_commit: 9b4f5363ffb93dd2684556d5809fa789ccc98158
+    diff_hash: 2731a73e9a165e1055831b45257c907cc1516c75a84f22be36b36053d29832e3
+    file_hashes:
+      tests/test_installer.py: 67859ab403c465c69177da79971ca0d9050d7037abab5781e33a090bb0acc16e
+  recorded_at: '2026-07-27T13:59:46Z'
+  invalidated_at: null
+  invalidation_reason: null
+- id: MCP-007
+  kind: release-build
+  subject: Vibe Coding 0.4.1 release archive after Windows test fixes
+  status: valid
+  command: py -3 build_release.py
+  result_ref: dist/vibe-coding-codex-global-core-0.4.1.zip generated; release validation
+    passed
+  covers:
+    files:
+    - build_release.py
+    - tests/test_installer.py
+    requirements: []
+    tasks:
+    - TASK-004
+  version_binding:
+    git_commit: 9b4f5363ffb93dd2684556d5809fa789ccc98158
+    diff_hash: 2731a73e9a165e1055831b45257c907cc1516c75a84f22be36b36053d29832e3
+    file_hashes:
+      build_release.py: 542724e14c91631c7a940741ac3d4127c4cb8961a760daeefb355603c859c474
+      tests/test_installer.py: 67859ab403c465c69177da79971ca0d9050d7037abab5781e33a090bb0acc16e
+  recorded_at: '2026-07-27T13:58:34Z'
+  invalidated_at: null
+  invalidation_reason: null

@@ -511,18 +511,19 @@ def mcp_output_matches(output: str, command: list[str]) -> bool:
 def run_plugin(home: Path, root: Path, *, entry: dict[str, Any] | None = None, remove: bool = False) -> bool:
     plugin = entry.get("plugin", PLUGIN) if entry else PLUGIN
     marketplace = entry.get("marketplace", PLUGIN_MARKETPLACE) if entry else PLUGIN_MARKETPLACE
-    if shutil.which("codex") is None:
+    codex = shutil.which("codex")
+    if codex is None:
         if remove:
             print("[!] codex CLI was not found; skipped optional MCP removal.")
             return False
         raise RuntimeError("codex CLI was not found; cannot install the selected vibe-toolbelt MCP")
     environment = plugin_env(home)
     if remove:
-        subprocess.run(["codex", "plugin", "remove", plugin], env=environment, check=False)
-        subprocess.run(["codex", "plugin", "marketplace", "remove", marketplace], env=environment, check=False)
+        subprocess.run([codex, "plugin", "remove", plugin], env=environment, check=False)
+        subprocess.run([codex, "plugin", "marketplace", "remove", marketplace], env=environment, check=False)
         return True
-    subprocess.run(["codex", "plugin", "marketplace", "add", str(root)], env=environment, check=True)
-    subprocess.run(["codex", "plugin", "add", plugin], env=environment, check=True)
+    subprocess.run([codex, "plugin", "marketplace", "add", str(root)], env=environment, check=True)
+    subprocess.run([codex, "plugin", "add", plugin], env=environment, check=True)
     return True
 
 
@@ -550,7 +551,10 @@ def install_optional_mcp(home: Path, root: Path, entry: dict[str, Any]) -> tuple
 def verify_optional_mcp(home: Path, root: Path, entry: dict[str, Any]) -> None:
     name = entry["name"]
     if entry.get("kind") == "codex-plugin":
-        result = run_command(["codex", "plugin", "list"], env=plugin_env(home))
+        codex = shutil.which("codex")
+        if not codex:
+            raise RuntimeError("codex CLI was not found; cannot verify the selected vibe-toolbelt MCP")
+        result = run_command([codex, "plugin", "list"], env=plugin_env(home))
         plugin = entry.get("plugin", PLUGIN)
         if result.returncode or plugin not in result.stdout or "installed, enabled" not in result.stdout:
             raise RuntimeError(f"Optional {name} MCP plugin is not installed and enabled.")
@@ -770,7 +774,10 @@ def verify(root: Path, home: Path, skills: Path, *, check_plugin: bool = False) 
             verify_optional_mcp(home, root, catalog[name])
     elif check_plugin and shutil.which("codex") is not None:
         # Compatibility with manually authored legacy state files.
-        result = run_command(["codex", "plugin", "list"], env=plugin_env(home))
+        codex = shutil.which("codex")
+        if not codex:
+            raise RuntimeError("codex CLI was not found; cannot verify the selected vibe-toolbelt MCP")
+        result = run_command([codex, "plugin", "list"], env=plugin_env(home))
         if result.returncode or PLUGIN not in result.stdout or "installed, enabled" not in result.stdout:
             raise RuntimeError("Optional vibe-toolbelt plugin is not installed and enabled.")
     print("[+] Global installation verification passed.")

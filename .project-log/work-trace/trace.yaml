@@ -62,3 +62,20 @@ entries:
   - MCP-004
   - MCP-005
   knowledge_candidate: false
+- id: TRACE-006
+  task_id: TASK-004
+  timestamp: '2026-07-27T21:54:40+08:00'
+  context: 本机 Windows 全量测试暴露了模拟 Conda、Codex、CodeGraph 命令和 Hook 路径断言的跨平台问题。
+  hypothesis: 测试夹具应通过平台原生可执行入口调用 Python，并分别断言 Unix 与 Windows Hook 配置；测试写入 TOML 的 Windows 路径也必须合法转义。
+  decision_ref: null
+  action: 在 tests/test_installer.py 新增跨平台测试命令包装器，覆盖 commandWindows，并将 CodeGraph 测试路径写为 POSIX 表示。
+  expected_result: 三个此前失败的 Windows 回归测试和完整测试集通过。
+  observation: 聚焦三项测试通过；完整 21 项 unittest、包校验、插件校验和编译检查通过。
+  actual_result: Windows 测试夹具问题已消除；20 个 unittest、包校验、插件校验、编译检查和 0.4.1 发布构建均通过，仅历史 0.3.0 迁移测试保持 skipped。
+  delta: 测试仅改进可移植性和断言覆盖，不改变生产安装器行为。
+  lesson: Windows 集成测试不能直接执行无扩展名脚本，跨平台配置断言应覆盖实际平台字段。
+  next_adjustment: 重启 Codex 或 Zed ACP Thread，确认新会话实际暴露 CodeGraph MCP tools。
+  evidence:
+  - MCP-006
+  - MCP-007
+  knowledge_candidate: false

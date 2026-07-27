@@ -184,3 +184,102 @@ evidence:
   artifacts:
   - /home/tbl/Project/lerobot_v1.0/.codegraph/
   - /home/tbl/Project/lerobot_v1.0/CODE_MAP.md
+- id: MCP-006
+  task_id: TASK-004
+  business_logic: []
+  acceptance_criteria:
+  - Windows installer regression fixtures are executable on Windows
+  - Hook tests cover both Unix and Windows command fields
+  - selected CodeGraph MCP regression passes on Windows
+  result: passed
+  level: 2
+  commands:
+  - py -3 -m unittest discover -s tests -v
+  - py -3 runtime/scripts/validate_package.py --root .
+  - py -3 -m compileall -q runtime scripts tests
+  - plugin-creator validate_plugin.py plugins/vibe-toolbelt
+  limitations:
+  - 一个旧版 0.3.0 迁移测试因本地缺少历史归档而 skipped。
+  artifacts:
+  - tests/test_installer.py
+  - runtime/scripts/validate_package.py
+  - plugins/vibe-toolbelt
+- id: MCP-007
+  task_id: TASK-004
+  business_logic: []
+  acceptance_criteria:
+  - release archive builds after Windows regression fixes
+  - release archive checksum is recorded
+  result: passed
+  level: 3
+  commands:
+  - py -3 build_release.py
+  limitations:
+  - 一个旧版 0.3.0 迁移测试因本地缺少历史归档而 skipped。
+  artifacts:
+  - dist/vibe-coding-codex-global-core-0.4.1.zip
+
+- id: INSTALL-001
+  task_id: TASK-005
+  business_logic: []
+  acceptance_criteria:
+  - global installation is Vibe Coding 0.4.1
+  - isolated Conda Python environment is usable and persisted
+  - no optional MCP is configured
+  - installer, package, Project Log, Workflow, Loop, unit tests, and installed-runtime smoke test pass
+  result: passed
+  level: 4
+  commands:
+  - .\update.ps1 --access-profile keep-existing --without-mcp
+  - D:\conda\envs\vibe-coding\python.exe scripts\global_installer.py verify
+  - D:\conda\envs\vibe-coding\python.exe runtime\scripts\validate_package.py --root .
+  - D:\conda\envs\vibe-coding\python.exe runtime\scripts\validate_project.py --root .
+  - D:\conda\envs\vibe-coding\python.exe runtime\scripts\validate_workflow.py --root .
+  - D:\conda\envs\vibe-coding\python.exe runtime\scripts\loopctl.py --root . --json validate
+  - D:\conda\envs\vibe-coding\python.exe -m pytest -q
+  - installed runtime init_project.py, validate_project.py, loopctl.py validate, and render_subagent_prompt.py smoke test
+  limitations:
+  - ???? 0.3.0 ?????????????? skipped?
+  - Codex doctor reports a nonblocking duplicate npm/Zed installation diagnostic.
+  artifacts:
+  - C:\Users\12187\.codex\.vibe-codex-installation-state.json
+  - C:\Users\12187\.codex\vibe-python
+  - C:\Users\12187\.codex\backups\vibe-global-update-20260727-221129-704101
+
+- id: INSTALL-002
+  task_id: TASK-005
+  business_logic: []
+  acceptance_criteria:
+  - Vibe Coding Core 0.4.1 remains globally installed
+  - selected `codegraph` MCP is configured and enabled
+  - selected `vibe-toolbelt` plugin is installed, enabled, and version 0.4.1
+  - Windows plugin installation regression is covered
+  - installer, package, project, workflow, Loop validation, and full tests pass
+  result: passed
+  level: 4
+  commands:
+  - D:\conda\envs\vibe-coding\python.exe -m pytest tests\test_installer.py -q
+  - D:\conda\envs\vibe-coding\python.exe scripts\global_installer.py update --access-profile keep-existing --mcp codegraph --mcp vibe-toolbelt
+  - codex --version
+  - codex mcp get codegraph
+  - codex plugin list
+  - D:\conda\envs\vibe-coding\python.exe scripts\global_installer.py verify
+  - D:\conda\envs\vibe-coding\python.exe runtime\scripts\validate_package.py --root .
+  - D:\conda\envs\vibe-coding\python.exe runtime\scripts\validate_project.py --root .
+  - D:\conda\envs\vibe-coding\python.exe runtime\scripts\validate_workflow.py --root .
+  - D:\conda\envs\vibe-coding\python.exe runtime\scripts\loopctl.py --root . --json validate
+  - D:\conda\envs\vibe-coding\python.exe -m pytest -q
+  results:
+  - installer regression: 8 passed, 1 skipped
+  - full test suite: 21 passed, 1 skipped, 4 subtests passed
+  - Codex CLI: 0.145.0
+  - codegraph: enabled
+  - vibe-toolbelt: installed, enabled, 0.4.1
+  limitations:
+  - Actual MCP/plugin tool invocation in the current ACP thread remains unverified until the session is restarted.
+  - Codex doctor still reports a nonblocking duplicate npm/Zed installation diagnostic.
+  artifacts:
+  - scripts/global_installer.py
+  - tests/test_installer.py
+  - C:\Users\12187\.codex\.vibe-codex-installation-state.json
+  - C:\Users\12187\.codex\backups\vibe-global-update-20260727-222855-802325

@@ -27,6 +27,24 @@ def run_installer(*arguments: str, env: dict[str, str] | None = None) -> subproc
     )
 
 
+def write_test_executable(directory: Path, name: str, python_source: str) -> Path:
+    if os.name != "nt":
+        path = directory / name
+        path.write_text("#!/usr/bin/env python3\n" + python_source, encoding="utf-8")
+        path.chmod(0o700)
+        return path
+
+    script = directory / f"{name}.py"
+    script.write_text(python_source, encoding="utf-8")
+    path = directory / f"{name}.cmd"
+    path.write_text(
+        "@echo off\n"
+        f'"{sys.executable}" "%~dp0{name}.py" %*\n',
+        encoding="utf-8",
+    )
+    return path
+
+
 class InstallerTests(unittest.TestCase):
     def test_fresh_install_is_core_only_by_default(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -37,18 +55,50 @@ class InstallerTests(unittest.TestCase):
             self.assertEqual(state["optional_mcps"], [])
             self.assertFalse(state["mcp_plugin_installed"])
 
+    def test_selected_vibe_toolbelt_plugin_is_installed_and_verified(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = Path(temporary)
+            home = workspace / "codex-home"
+            bin_dir = workspace / "bin"
+            bin_dir.mkdir()
+            codex = write_test_executable(
+                bin_dir,
+                "codex",
+                "import os, sys\n"
+                "state = os.path.join(os.environ['CODEX_HOME'], 'fake-plugin-installed')\n"
+                "args = sys.argv[1:]\n"
+                "if args[:3] == ['plugin', 'marketplace', 'add']:\n"
+                "    raise SystemExit(0)\n"
+                "if args[:2] == ['plugin', 'add']:\n"
+                "    open(state, 'w').close()\n"
+                "    raise SystemExit(0)\n"
+                "if args[:2] == ['plugin', 'list']:\n"
+                "    if os.path.exists(state):\n"
+                "        print('vibe-toolbelt@vibe-global-toolbox installed, enabled 0.4.1')\n"
+                "    raise SystemExit(0)\n"
+                "raise SystemExit(0)\n",
+            )
+            env = os.environ.copy()
+            env["PATH"] = str(bin_dir) + os.pathsep + env["PATH"]
+            install = run_installer(
+                "install", "--codex-home", str(home), "--mcp", "vibe-toolbelt", "--skip-preflight", env=env
+            )
+            self.assertEqual(install.returncode, 0, install.stdout)
+            state = json.loads((home / ".vibe-codex-installation-state.json").read_text(encoding="utf-8"))
+            self.assertEqual(state["optional_mcps"], ["vibe-toolbelt"])
+            self.assertEqual(state["optional_mcps_owned"], ["vibe-toolbelt"])
+            self.assertTrue(state["mcp_plugin_installed"])
+
     def test_selected_codegraph_mcp_is_configured_and_verified(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             workspace = Path(temporary)
             home = workspace / "codex-home"
             bin_dir = workspace / "bin"
             bin_dir.mkdir()
-            codegraph = bin_dir / "codegraph"
-            codegraph.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
-            codegraph.chmod(0o700)
-            codex = bin_dir / "codex"
-            codex.write_text(
-                "#!/usr/bin/env python3\n"
+            codegraph = write_test_executable(bin_dir, "codegraph", "raise SystemExit(0)\n")
+            codex = write_test_executable(
+                bin_dir,
+                "codex",
                 "import json, os, sys\n"
                 "state = os.path.join(os.environ['CODEX_HOME'], 'fake-mcp.json')\n"
                 "args = sys.argv[1:]\n"
@@ -68,9 +118,7 @@ class InstallerTests(unittest.TestCase):
                 "    if os.path.exists(state): os.unlink(state)\n"
                 "    raise SystemExit(0)\n"
                 "raise SystemExit(0)\n",
-                encoding="utf-8",
             )
-            codex.chmod(0o700)
             env = os.environ.copy()
             env["PATH"] = str(bin_dir) + os.pathsep + env["PATH"]
             install = run_installer(
@@ -85,7 +133,7 @@ class InstallerTests(unittest.TestCase):
             config_path.write_text(
                 config.replace(
                     "# VIBE-CODEX-GLOBAL:CONFIG:END",
-                    '[mcp_servers.codegraph]\ncommand = "' + str(codegraph) + '"\nargs = ["serve", "--mcp"]\n\n'
+                    '[mcp_servers.codegraph]\ncommand = "' + codegraph.as_posix() + '"\nargs = ["serve", "--mcp"]\n\n'
                     "# VIBE-CODEX-GLOBAL:CONFIG:END",
                 ),
                 encoding="utf-8",
@@ -128,10 +176,10 @@ class InstallerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             workspace = Path(temporary)
             home = workspace / "codex-home"
-            manager = workspace / "conda"
             created = workspace / "created"
-            manager.write_text(
-                "#!/usr/bin/env python3\n"
+            manager = write_test_executable(
+                workspace,
+                "conda",
                 "import pathlib, sys\n"
                 f"created = pathlib.Path({str(created)!r})\n"
                 "if len(sys.argv) > 1 and sys.argv[1] == 'create':\n"
@@ -141,9 +189,7 @@ class InstallerTests(unittest.TestCase):
                 f"    print({str(Path(sys.executable).resolve())!r})\n"
                 "    raise SystemExit(0)\n"
                 "raise SystemExit(1)\n",
-                encoding="utf-8",
             )
-            manager.chmod(0o700)
             env = os.environ.copy()
             env["CONDA_EXE"] = str(manager)
             env.pop("VIBE_PYTHON", None)
@@ -175,9 +221,15 @@ class InstallerTests(unittest.TestCase):
             self.assertEqual(install.returncode, 0, install.stdout)
             config = (home / "config.toml").read_text(encoding="utf-8")
             parsed = tomllib.loads(config)
-            command = parsed["hooks"]["SessionStart"][0]["hooks"][0]["command"]
-            self.assertTrue(command.startswith(f'\"{Path(sys.executable).resolve()}\" '), command)
+            session_hook = parsed["hooks"]["SessionStart"][0]["hooks"][0]
+            command = session_hook["command"]
+            command_windows = session_hook["commandWindows"]
+            expected_unix_python = Path(sys.executable).resolve().as_posix()
+            expected_windows_python = str(Path(sys.executable).resolve())
+            self.assertTrue(command.startswith(f'\"{expected_unix_python}\" '), command)
+            self.assertTrue(command_windows.startswith(f'\"{expected_windows_python}\" '), command_windows)
             self.assertNotEqual(command.split(maxsplit=1)[0], "python3")
+            self.assertNotEqual(command_windows.split(maxsplit=1)[0], "python3")
 
     def test_local_modification_is_preserved_when_package_file_is_unchanged(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
