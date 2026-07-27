@@ -1,2 +1,44 @@
-version: "0.2"
-entries: []
+version: '0.2'
+entries:
+- id: TRACE-003
+  task_id: TASK-003
+  timestamp: '2026-07-27T10:09:55+08:00'
+  context: 用户要求将 Vibe Coding 涉及 Python 的部分改为跨项目全局使用 Miniforge vibe-coding 环境。
+  hypothesis: 用户级解释器配置文件加上安装器生成的绝对路径 Hook，可以消除新项目继承系统 python3 的版本漂移。
+  decision_ref: null
+  action: 新增 CODEX_HOME/vibe-python 与 VIBE_PYTHON 解析；修改安装器、Linux wrappers、全局 Agent
+    提示词和文档；更新全局安装。
+  expected_result: 所有新项目的 Vibe Hooks 与 Project Log 工具使用 Python 3.11.15。
+  observation: 全局 config.toml 三个 Hook 均绑定 /home/tbl/miniforge3/envs/vibe-coding/bin/python3.11；包校验、18
+    个 unittest、安装 verify、新项目 smoke test 均通过。
+  actual_result: 全局 Vibe Python 配置生效；项目数据不受影响。
+  delta: 新增用户级 /home/tbl/.codex/vibe-python；更新全局 managed AGENTS/config/runtime/Skills。
+  lesson: 跨项目控制层配置应放在 CODEX_HOME，而不是每个项目的 .project-log；项目自身应用环境仍需独立管理。
+  next_adjustment: 重启 Codex 会话，使新的 Hook 命令在新会话中加载。
+  evidence:
+  - PYTHON-001
+  - PYTHON-002
+  - PYTHON-003
+  knowledge_candidate: false
+- id: TRACE-004
+  task_id: TASK-003
+  timestamp: '2026-07-27T10:17:25+08:00'
+  context: 用户进一步要求安装器自己创建 Miniforge/Miniconda 风格的 vibe-coding 环境，并让后续全局依赖固定使用该环境。
+  hypothesis: 安装包装脚本先运行无第三方依赖 bootstrap，再调用已准备好的 Python 安装器，可以覆盖新机器和新项目而不依赖系统 python
+    版本。
+  decision_ref: null
+  action: 新增 bootstrap_vibe_python.py；install/update/uninstall 包装脚本调用它；bootstrap 查找现有
+    Conda、创建/修复 vibe-coding、安装 PyYAML/jsonschema、写入 CODEX_HOME/vibe-python。
+  expected_result: 缺少配置时自动准备环境；真实更新后 Hooks 和 verify 使用该环境。
+  observation: 模拟缺失环境测试通过；真实 update.sh 完成全局更新；三个 Hooks 均绑定 vibe-coding Python；包校验与
+    19 个 unittest 通过。
+  actual_result: 安装路径已具备自动创建/修复环境能力；没有 Conda 时明确失败，不自动下载 Miniforge。
+  delta: 从“要求用户先创建环境”改为“安装脚本在已有 Conda 管理器下自动创建环境”。
+  lesson: 引导式安装应在进入需要 tomllib 的安装器前完成 Python bootstrap；否则系统 Python 3.10 会在导入阶段失败。
+  next_adjustment: 若需要零前置依赖安装，还需另行设计并经用户确认 Miniforge 下载、校验和安装策略。
+  evidence:
+  - PYTHON-001
+  - PYTHON-002
+  - PYTHON-003
+  - PYTHON-004
+  knowledge_candidate: false

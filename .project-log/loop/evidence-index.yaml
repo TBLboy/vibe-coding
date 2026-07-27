@@ -155,3 +155,93 @@ evidence:
   recorded_at: '2026-07-26T14:58:32Z'
   invalidated_at: null
   invalidation_reason: null
+- id: PYTHON-001
+  kind: package-validation
+  subject: Global Vibe Python resolver package validation and tests
+  status: valid
+  command: 'vibe-coding environment: validate_package.py, unittest, compileall'
+  result_ref: .project-log/verification/evidence.yaml#PYTHON-001
+  covers:
+    files:
+    - scripts/global_installer.py
+    - tests/test_installer.py
+    requirements:
+    - global interpreter resolver
+    tasks:
+    - TASK-003
+  version_binding:
+    git_commit: 82c3fecae3a07ad57fd507114b62af4d3bc568e7
+    diff_hash: null
+    file_hashes:
+      scripts/global_installer.py: f93067af1031a7919119834e3f29b75576fb072fe571fdf7f6d7e85f7633c36f
+      tests/test_installer.py: 391d1df085599bba4b15f1b02a63014614976e9e615bf889bf3382ec649f6955
+  recorded_at: '2026-07-27T10:09:55+08:00'
+  invalidated_at: null
+  invalidation_reason: null
+- id: PYTHON-002
+  kind: configuration
+  subject: Global Codex Hooks pinned to vibe-coding interpreter
+  status: valid
+  command: global_installer.py update plus TOML hook command inspection
+  result_ref: .project-log/verification/evidence.yaml#PYTHON-002
+  covers:
+    files:
+    - ~/.codex/vibe-python
+    - ~/.codex/config.toml
+    requirements:
+    - cross-project hook interpreter
+    tasks:
+    - TASK-003
+  version_binding:
+    git_commit: 82c3fecae3a07ad57fd507114b62af4d3bc568e7
+    diff_hash: null
+    file_hashes: {}
+  recorded_at: '2026-07-27T10:09:55+08:00'
+  invalidated_at: null
+  invalidation_reason: null
+- id: PYTHON-003
+  kind: smoke-test
+  subject: Fresh project and installed runtime smoke test
+  status: valid
+  command: init_project.py, validate_project.py, loopctl restore, SessionStart and
+    PreCompact
+  result_ref: .project-log/verification/evidence.yaml#PYTHON-003
+  covers:
+    files:
+    - runtime/scripts/
+    - runtime/hooks/
+    requirements:
+    - new project reusability
+    tasks:
+    - TASK-003
+  version_binding:
+    git_commit: 82c3fecae3a07ad57fd507114b62af4d3bc568e7
+    diff_hash: null
+    file_hashes: {}
+  recorded_at: '2026-07-27T10:09:55+08:00'
+  invalidated_at: null
+  invalidation_reason: null
+- id: PYTHON-004
+  kind: bootstrap-integration
+  subject: Conda Vibe Python bootstrap and wrapper update
+  status: valid
+  command: bootstrap_vibe_python.py fake-Conda integration plus update.sh real global
+    update
+  result_ref: .project-log/verification/evidence.yaml#PYTHON-004
+  covers:
+    files:
+    - scripts/bootstrap_vibe_python.py
+    - install.sh
+    - update.sh
+    - uninstall.sh
+    requirements:
+    - automatic Conda environment preparation
+    tasks:
+    - TASK-003
+  version_binding:
+    git_commit: null
+    diff_hash: null
+    file_hashes: {}
+  recorded_at: '2026-07-27T10:17:25+08:00'
+  invalidated_at: null
+  invalidation_reason: null

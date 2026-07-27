@@ -27,6 +27,8 @@ PLUGIN_MARKETPLACE = "vibe-global-toolbox"
 STATE_NAME = ".vibe-codex-installation-state.json"
 LEGACY_STATE_NAME = "installation-state.json"
 EXCLUDED_NAMES = {"__pycache__", LEGACY_STATE_NAME}
+PYTHON_CONFIG_NAME = "vibe-python"
+PYTHON_ENV_NAME = "VIBE_PYTHON"
 
 
 def package_root() -> Path:
@@ -188,6 +190,37 @@ def toml_string(value: str) -> str:
     return json.dumps(value)
 
 
+def configured_python(home: Path) -> Path:
+    """Resolve the global interpreter used by Vibe runtime commands.
+
+    An explicit VIBE_PYTHON environment variable wins. Otherwise the user-level
+    CODEX_HOME/vibe-python file is read. The file contains one executable path
+    and is intentionally not managed or deleted by install/update/uninstall.
+    Falling back to the interpreter running the installer preserves compatibility
+    for isolated tests and older installations.
+    """
+    raw = os.environ.get(PYTHON_ENV_NAME, "").strip()
+    config_path = home / PYTHON_CONFIG_NAME
+    if not raw and config_path.is_file():
+        for line in config_path.read_text(encoding="utf-8").splitlines():
+            candidate_line = line.strip()
+            if candidate_line and not candidate_line.startswith("#"):
+                raw = candidate_line
+                break
+    if not raw:
+        return Path(sys.executable).resolve()
+
+    candidate = Path(raw).expanduser()
+    if not candidate.is_absolute():
+        resolved = shutil.which(raw)
+        candidate = Path(resolved) if resolved else candidate
+    candidate = candidate.resolve()
+    if not candidate.is_file():
+        source = PYTHON_ENV_NAME if os.environ.get(PYTHON_ENV_NAME, "").strip() else str(config_path)
+        raise RuntimeError(f"Configured Vibe Python executable does not exist ({source}): {candidate}")
+    return candidate
+
+
 def managed_config_block(home: Path, access_profile: str, include_hooks: bool) -> str:
     runtime = home / "vibe-workflow" / "hooks"
     session = runtime / "session_start.py"
@@ -199,9 +232,11 @@ def managed_config_block(home: Path, access_profile: str, include_hooks: bool) -
     elif access_profile == "full":
         lines.extend(['approval_policy = "never"', 'sandbox_mode = "danger-full-access"', ""])
 
+    python = configured_python(home)
+
     def add_hook(event: str, script: Path, *, asynchronous: bool = False) -> None:
-        unix_command = f'python3 "{script.as_posix()}"'
-        windows_command = f'py -3 "{script}"'
+        unix_command = f'"{python.as_posix()}" "{script.as_posix()}"'
+        windows_command = f'"{python}" "{script}"'
         lines.extend(
             [
                 f"[[hooks.{event}]]",
@@ -412,8 +447,12 @@ def run_command(command: list[str], *, timeout: int = 30, env: dict[str, str] | 
 
 
 def preflight(home: Path, *, skip_doctor: bool = False) -> dict[str, Any]:
+    python = configured_python(home)
     if sys.version_info < (3, 11):
-        raise RuntimeError("Python 3.11 or newer is required.")
+        raise RuntimeError(
+            "Python 3.11 or newer is required. Run the installer with the configured Vibe Python: "
+            f"{python}"
+        )
     codex = shutil.which("codex")
     if not codex:
         raise RuntimeError("Codex CLI is not installed or not on PATH.")
@@ -458,12 +497,13 @@ def preflight(home: Path, *, skip_doctor: bool = False) -> dict[str, Any]:
         "features": feature_state,
         "doctor": doctor_result,
         "python_version": sys.version.split()[0],
+        "python_executable": str(python),
     }
 
 
-def validate_source_package(root: Path) -> None:
+def validate_source_package(root: Path, home: Path) -> None:
     validator = root / "runtime/scripts/validate_package.py"
-    result = run_command([sys.executable, str(validator), "--root", str(root)])
+    result = run_command([str(configured_python(home)), str(validator), "--root", str(root)])
     if result.returncode:
         raise RuntimeError(result.stdout)
 
@@ -479,8 +519,8 @@ def install_or_update(
     skip_preflight: bool,
     skip_doctor: bool,
 ) -> None:
-    validate_source_package(root)
     home.mkdir(parents=True, exist_ok=True)
+    validate_source_package(root, home)
     skills.mkdir(parents=True, exist_ok=True)
     old_state = read_state(home)
     probe = old_state.get("preflight") if skip_preflight else preflight(home, skip_doctor=skip_doctor)
@@ -498,6 +538,9 @@ def install_or_update(
 
     plugin_installed = bool(old_state.get("mcp_plugin_installed"))
     if without_mcp:
+        # --without-mcp explicitly makes the optional plugin unmanaged for this
+        # installation/update, so verify must not require a stale old state bit.
+        plugin_installed = False
         print("[*] MCP plugin skipped by --without-mcp.")
     else:
         plugin_installed = run_plugin(home, root)
@@ -525,7 +568,7 @@ def install_or_update(
 
 
 def verify(root: Path, home: Path, skills: Path, *, check_plugin: bool = False) -> None:
-    validate_source_package(root)
+    validate_source_package(root, home)
     agents = home / "AGENTS.md"
     if not agents.is_file():
         raise RuntimeError(f"Global AGENTS.md is missing: {agents}")

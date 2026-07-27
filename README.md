@@ -45,6 +45,32 @@
 py -3 -m pip install -r runtime\scripts\requirements.txt
 ```
 
+### 全局 Vibe Python
+
+安装器会优先复用 `$CODEX_HOME/vibe-python`；如果不存在，会寻找 Conda/Miniforge/Miniconda，并自动创建名为 `vibe-coding` 的 Python 3.11 环境，安装 `runtime/scripts/requirements.txt`，然后将该环境写入全局配置。
+
+Linux/macOS 推荐直接运行：
+
+```bash
+./install.sh --without-mcp
+```
+
+如果机器没有 Conda/Miniforge/Miniconda，安装器不会静默下载大型发行版，而是给出明确错误；可以先安装 Miniforge，或显式设置 `VIBE_PYTHON`。也可以手动指定环境：
+
+```bash
+mkdir -p "${CODEX_HOME:-$HOME/.codex}"
+printf '%s\n' '/absolute/path/to/miniforge3/envs/vibe-coding/bin/python' \
+  > "${CODEX_HOME:-$HOME/.codex}/vibe-python"
+```
+
+也可以临时用环境变量覆盖：
+
+```bash
+export VIBE_PYTHON='/absolute/path/to/miniforge3/envs/vibe-coding/bin/python'
+```
+
+配置文件优先用于跨项目和新 Codex 会话；环境变量优先级更高。该解释器必须是 Python 3.11+，并安装 `PyYAML` 和 `jsonschema`。
+
 Linux/macOS：
 
 ```bash

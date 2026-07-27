@@ -1,10 +1,10 @@
-﻿# Current Session
+# Current Session
 
-- Current phase: implementation
+- Current phase: business-intent
 - Current goal: maintain the Codex Vibe Coding framework source
-- Current task: TASK-002 — expand Skill routing and keep repository source-only
-- Confirmed facts: nine additional routes are explicit; all routed Skills have local SKILL.md files; package validation passed; 17 standard-library tests passed with one expected skip
-- Active decisions: keep the native Codex `/goal` and subagent orchestration model; do not track ZIP release artifacts in the source repository
-- Blocking items: pytest is not installed; the equivalent unittest suite passed
-- Recent evidence: ROUTE-001 through ROUTE-003
-- Next step: continue development from remote commit `06d0f0e` on `origin/main`
+- Current task: TASK-003 — bootstrap global Vibe Python and bind Hooks
+- Confirmed facts: install/update/uninstall wrappers now run `bootstrap_vibe_python.py`; missing configuration triggers Conda/Miniforge/Miniconda `vibe-coding` Python 3.11 environment creation and runtime dependency installation; global Hooks use the resulting interpreter.
+- Active decisions: Vibe control-layer Python is global; project application dependencies remain project-owned; Miniforge distribution itself is not auto-downloaded.
+- Blocking items: none on the current Miniforge host
+- Recent evidence: PYTHON-001 through PYTHON-004
+- Next step: restart Codex so the new managed Hook commands are loaded.

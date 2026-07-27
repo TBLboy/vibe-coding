@@ -1,87 +1,154 @@
-﻿version: "0.2"
+version: '0.2'
 active_goal: null
 tasks:
-  - id: TASK-001
-    title: Audit installed Vibe Coding Codex framework
-    kind: task
-    phase: verification
-    goal: Verify the installed Vibe Coding Codex Global Core framework
-    status: done
-    authority: A
-    owner: agent
-    related_business_logic: []
-    depends_on: []
-    inputs:
-      - installed Codex configuration
-      - Vibe Workflow runtime
-      - release package
-      - test suite
-    outputs:
-      - audit evidence
-      - non-blocking environment issue list
-    done_when:
-      - installer, package validation, and unit tests pass
-      - Project Log, Loop Core, Hooks, Goal, and role rendering pass
-      - host issues are separated from framework issues
-    verification:
-      status: passed
-      commands:
-        - py -3 scripts/global_installer.py verify
-        - py -3 -m unittest discover -s tests -p test_*.py
-        - py -3 scripts/validate_project.py --root .
-        - py -3 scripts/validate_workflow.py --root .
-      evidence:
-        - AUDIT-001
-        - AUDIT-002
-        - AUDIT-003
-        - AUDIT-004
-        - AUDIT-005
-        - AUDIT-006
-        - AUDIT-007
-        - AUDIT-008
-      limitations:
-        - codex doctor reports a host npm/Zed package-path mismatch
-        - MCP was intentionally not installed
-  - id: TASK-002
-    title: Expand Codex Skill routing and keep repository source-only
-    kind: task
-    phase: implementation
-    goal: Make high-value installed Skills discoverable through the global Agent route table and stop tracking release archives
-    status: done
-    authority: A
-    owner: agent
-    related_business_logic: []
-    depends_on:
-      - TASK-001
-    inputs:
-      - prompts/vibe-global-agent.md
-      - skills directory
-      - existing release archives
-    outputs:
-      - expanded Skill route table
-      - source-only Git repository configuration
-    done_when:
-      - orchestration, research, context, workflow-maintenance, extraction, Skill-authoring, plan-stress-test, and UX-audit routes are explicit
-      - every newly routed Skill has a local SKILL.md
-      - release archives are removed from Git tracking and ignored
-      - package validation and the standard-library test suite pass
-    verification:
-      status: passed
-      commands:
-        - py -3 runtime/scripts/validate_package.py --root .
-        - py -3 -m unittest discover -s tests -v
-      evidence:
-        - ROUTE-001
-        - ROUTE-002
-        - ROUTE-003
-      limitations:
-        - pytest is not installed in the current Python environment; unittest execution passed
-    result:
-      summary: Added nine explicit Skill routes, removed tracked ZIP artifacts, and added ZIP ignore rules
-      changed_files:
-        - prompts/vibe-global-agent.md
-        - .gitignore
-        - .project-log/tasks/task-list.yaml
-        - .project-log/current-session.md
-      deviations: []
-      follow_ups: []
+- id: TASK-001
+  title: Audit installed Vibe Coding Codex framework
+  kind: task
+  phase: verification
+  goal: Verify the installed Vibe Coding Codex Global Core framework
+  status: done
+  authority: A
+  owner: agent
+  related_business_logic: []
+  depends_on: []
+  inputs:
+  - installed Codex configuration
+  - Vibe Workflow runtime
+  - release package
+  - test suite
+  outputs:
+  - audit evidence
+  - non-blocking environment issue list
+  done_when:
+  - installer, package validation, and unit tests pass
+  - Project Log, Loop Core, Hooks, Goal, and role rendering pass
+  - host issues are separated from framework issues
+  verification:
+    status: passed
+    commands:
+    - py -3 scripts/global_installer.py verify
+    - py -3 -m unittest discover -s tests -p test_*.py
+    - py -3 scripts/validate_project.py --root .
+    - py -3 scripts/validate_workflow.py --root .
+    evidence:
+    - AUDIT-001
+    - AUDIT-002
+    - AUDIT-003
+    - AUDIT-004
+    - AUDIT-005
+    - AUDIT-006
+    - AUDIT-007
+    - AUDIT-008
+    limitations:
+    - codex doctor reports a host npm/Zed package-path mismatch
+    - MCP was intentionally not installed
+- id: TASK-002
+  title: Expand Codex Skill routing and keep repository source-only
+  kind: task
+  phase: implementation
+  goal: Make high-value installed Skills discoverable through the global Agent route
+    table and stop tracking release archives
+  status: done
+  authority: A
+  owner: agent
+  related_business_logic: []
+  depends_on:
+  - TASK-001
+  inputs:
+  - prompts/vibe-global-agent.md
+  - skills directory
+  - existing release archives
+  outputs:
+  - expanded Skill route table
+  - source-only Git repository configuration
+  done_when:
+  - orchestration, research, context, workflow-maintenance, extraction, Skill-authoring,
+    plan-stress-test, and UX-audit routes are explicit
+  - every newly routed Skill has a local SKILL.md
+  - release archives are removed from Git tracking and ignored
+  - package validation and the standard-library test suite pass
+  verification:
+    status: passed
+    commands:
+    - py -3 runtime/scripts/validate_package.py --root .
+    - py -3 -m unittest discover -s tests -v
+    evidence:
+    - ROUTE-001
+    - ROUTE-002
+    - ROUTE-003
+    limitations:
+    - pytest is not installed in the current Python environment; unittest execution
+      passed
+  result:
+    summary: Added nine explicit Skill routes, removed tracked ZIP artifacts, and
+      added ZIP ignore rules
+    changed_files:
+    - prompts/vibe-global-agent.md
+    - .gitignore
+    - .project-log/tasks/task-list.yaml
+    - .project-log/current-session.md
+    deviations: []
+    follow_ups: []
+- id: TASK-003
+  title: 配置全局 Vibe Python 解释器并绑定 Hooks
+  kind: task
+  phase: implementation
+  goal: 让安装器在缺少全局配置时自动创建或修复 Conda/Miniforge/Miniconda 的 vibe-coding Python 3.11 环境，并让所有跨项目
+    Vibe Python 功能使用它。
+  status: done
+  authority: A
+  owner: agent
+  related_business_logic: []
+  depends_on:
+  - TASK-002
+  inputs:
+  - 用户的 Miniforge 环境 vibe-coding
+  - global_installer.py
+  - Codex config.toml
+  - 全局 Agent 提示词
+  outputs:
+  - CODEX_HOME/vibe-python 全局配置
+  - 绑定到配置解释器的 Hooks
+  - 自动 bootstrap/修复脚本
+  - 安装器和文档支持
+  done_when:
+  - 安装器优先读取 CODEX_HOME/vibe-python 或 VIBE_PYTHON
+  - 配置缺失时自动寻找 Conda/Miniforge/Miniconda 并创建 vibe-coding Python 3.11 环境
+  - 自动安装 runtime/scripts/requirements.txt
+  - 全局 Hooks 使用配置解释器，新项目无需单独设置
+  - 安装器验证和测试通过
+  verification:
+    status: passed
+    commands:
+    - /home/tbl/Project/vibe-coding/install.sh or update.sh bootstrap_vibe_python.py
+    - /home/tbl/miniforge3/envs/vibe-coding/bin/python runtime/scripts/validate_package.py
+      --root .
+    - /home/tbl/miniforge3/envs/vibe-coding/bin/python -m unittest discover -s tests
+      -p test_*.py -q
+    - /home/tbl/miniforge3/envs/vibe-coding/bin/python scripts/global_installer.py
+      verify --codex-home /home/tbl/.codex --without-mcp
+    - fresh project init/validate/restore and SessionStart/PreCompact hook smoke test
+    evidence:
+    - PYTHON-001
+    - PYTHON-002
+    - PYTHON-003
+    - PYTHON-004
+    limitations:
+    - PostToolUse 未单独执行真实写入工具回调；其脚本已包含在安装包测试和配置注册中。
+  result:
+    summary: 新增用户级 CODEX_HOME/vibe-python 与 VIBE_PYTHON 临时覆盖；安装/升级包装脚本会自动创建或修复 Conda
+      环境 vibe-coding、安装 runtime 依赖，并将全局 Hooks 绑定到 /home/tbl/miniforge3/envs/vibe-coding/bin/python3.11。
+    changed_files:
+    - scripts/global_installer.py
+    - tests/test_installer.py
+    - install.sh
+    - update.sh
+    - prompts/vibe-global-agent.md
+    - README.md
+    - AI_INSTALL.md
+    - scripts/bootstrap_vibe_python.py
+    deviations: []
+    follow_ups:
+    - 重启 Codex 会话以确保新的全局 config.toml Hooks 被重新加载。
+  created_at: '2026-07-27T10:09:55+08:00'
+  updated_at: '2026-07-27T10:09:55+08:00'

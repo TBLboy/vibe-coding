@@ -64,6 +64,14 @@ business-intent
 
 当前代码行为不能自动成为功能规则，技术约束也不能自动成为产品要求。未来技术方案进入 `solution-research`，不得在业务澄清阶段提前决定。
 
+## 全局 Vibe Python 环境
+
+- 所有 Vibe Coding runtime、Loop Core、Project Log 校验和 Hooks 的 Python 命令，默认使用用户级配置 `${CODEX_HOME:-$HOME/.codex}/vibe-python` 指向的解释器。
+- 该文件只包含一个 Python 可执行文件的绝对路径；若不存在，必须使用 Python 3.11+ 并明确报告环境降级，不得静默使用不兼容的 `python` 或 `python3`。
+- 安装器生成的全局 Hooks 已绑定到该解释器，因此新项目不需要单独配置 Python。
+- 安装脚本在配置缺失时会寻找 Conda/Miniforge/Miniconda，创建或修复名为 `vibe-coding` 的 Python 3.11 环境并安装 Vibe runtime 依赖；没有 Conda 时必须报告并停止，不得静默切换到系统 Python。
+- 这项全局设置只约束 Vibe Coding 控制层；项目自身的 Python 应用依赖仍由项目环境管理。
+
 ## Skill 路由
 
 - 业务规则、边界、异常不清：`a-business-clarify`

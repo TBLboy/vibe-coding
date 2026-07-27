@@ -22,14 +22,15 @@ AI 必须完成：
 1. 先阅读 README.md、AI_INSTALL.md 和 scripts/global_installer.py 的参数。
 2. 确认 Codex 是当前可升级到的最新稳定版；运行 codex --version、codex doctor 和 codex features list。
 3. 确认 Python 3.11+。Windows 必须使用 py -3，不要使用可能指向 Python 2 的 python。
-4. 安装 runtime/scripts/requirements.txt。
-5. 默认使用 --access-profile keep-existing，不修改我现有权限配置。
-6. 如果公司网络或 MCP 前置工具不可用，使用 --without-mcp 完成核心安装，不要阻塞核心工作流。
-7. 不使用 --skip-preflight。
-8. 安装后运行 global_installer.py verify。
-9. 创建临时项目，运行已安装的 init_project.py、validate_project.py、loopctl.py restore 和 loopctl.py validate。
-10. 不修改或删除任何真实项目的 .project-log。
-11. 最后报告版本、CODEX_HOME、Skill 路径、Hook 状态、备份路径、验证结果和任何限制。
+4. 运行安装包装脚本；它会优先复用 `${CODEX_HOME:-$HOME/.codex}/vibe-python`，否则使用 Conda/Miniforge/Miniconda 创建 `vibe-coding` Python 3.11 环境并安装 `runtime/scripts/requirements.txt`；也可用 `VIBE_PYTHON` 临时覆盖。
+5. 安装 runtime/scripts/requirements.txt。
+6. 默认使用 --access-profile keep-existing，不修改我现有权限配置。
+7. 如果公司网络或 MCP 前置工具不可用，使用 --without-mcp 完成核心安装，不要阻塞核心工作流。
+8. 不使用 --skip-preflight。
+9. 安装后运行 global_installer.py verify。
+10. 创建临时项目，运行已安装的 init_project.py、validate_project.py、loopctl.py restore 和 loopctl.py validate。
+11. 不修改或删除任何真实项目的 .project-log。
+12. 最后报告版本、CODEX_HOME、Skill 路径、Hook 状态、备份路径、验证结果和任何限制。
 ```
 
 ## Windows 执行步骤
