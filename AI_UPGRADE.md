@@ -1,6 +1,6 @@
 # AI 升级指南
 
-适用于已经安装旧版 Vibe Coding Codex Global Core，需要升级到 0.4.0 的电脑。
+适用于已经安装旧版 Vibe Coding Codex Global Core，需要升级到 0.4.1 的电脑。
 
 ## 升级保证
 
@@ -22,7 +22,7 @@
 4. Windows 使用 py -3，安装 Python 依赖。
 5. 先运行 global_installer.py preflight，再运行 update。
 6. 默认 --access-profile keep-existing。
-7. 公司网络受限时使用 --without-mcp；不要因此跳过核心升级。
+7. 默认保留此前已启用的可选 MCP；如需新增 CodeGraph，使用 `--mcp codegraph`；公司网络受限时使用 --without-mcp。
 8. 如果安装器报告冲突，停止并逐文件比较：旧包基线、用户当前文件、新包文件。未经确认不得覆盖用户修改。
 9. 升级后运行 verify、全部单元测试和临时项目 smoke test。
 10. 报告备份路径、升级文件、保留文件、冲突、验证结果和回滚命令。
@@ -35,7 +35,7 @@
 ```powershell
 py -3 -m pip install -r runtime\scripts\requirements.txt
 py -3 scripts\global_installer.py preflight
-.\update.ps1 --without-mcp
+.\update.ps1
 py -3 scripts\global_installer.py verify
 ```
 
@@ -44,7 +44,7 @@ py -3 scripts\global_installer.py verify
 ```bash
 python3 -m pip install -r runtime/scripts/requirements.txt
 python3 scripts/global_installer.py preflight
-./update.sh --without-mcp
+./update.sh
 python3 scripts/global_installer.py verify
 ```
 
@@ -100,10 +100,10 @@ AI 应：
 
 ## 回滚
 
-每次安装或升级都会输出备份目录。若升级后需要回到升级前状态，优先让 AI：
+每次安装或升级都会输出备份目录。可选 MCP 配置也应先确认 `codex mcp list`，若升级后需要回到升级前状态，优先让 AI：
 
 1. 记录当前冲突和修改。
-2. 运行卸载器移除 0.4.0 受管资产。
+2. 运行卸载器移除当前版本受管资产。
 3. 从升级命令输出的备份目录恢复旧 runtime、Skills、`AGENTS.md` 和 `config.toml`。
 4. 运行旧版 verify。
 

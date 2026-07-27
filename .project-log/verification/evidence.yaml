@@ -48,12 +48,9 @@ evidence:
   result: passed
   level: 3
   commands:
-  - /home/tbl/miniforge3/envs/vibe-coding/bin/python runtime/scripts/validate_package.py
-    --root .
-  - /home/tbl/miniforge3/envs/vibe-coding/bin/python -m unittest discover -s tests
-    -p test_*.py -q
-  - /home/tbl/miniforge3/envs/vibe-coding/bin/python -m compileall -q runtime scripts
-    plugins
+  - /home/tbl/miniforge3/envs/vibe-coding/bin/python runtime/scripts/validate_package.py --root .
+  - /home/tbl/miniforge3/envs/vibe-coding/bin/python -m unittest discover -s tests -p test_*.py -q
+  - /home/tbl/miniforge3/envs/vibe-coding/bin/python -m compileall -q runtime scripts plugins
   limitations:
   - 1 个历史 0.3.0 archive 测试按预期跳过。
   artifacts:
@@ -79,8 +76,7 @@ evidence:
   business_logic:
   - 新项目应能复用全局 Vibe Python 设置完成初始化和恢复。
   acceptance_criteria:
-  - 临时项目 init/validate/restore 及 SessionStart/PreCompact smoke test 通过；global verify
-    通过。
+  - 临时项目 init/validate/restore 及 SessionStart/PreCompact smoke test 通过；global verify 通过。
   result: passed
   level: 3
   commands:
@@ -95,14 +91,12 @@ evidence:
   business_logic:
   - 安装时应能自动准备并固定跨项目使用的 Conda-backed Vibe Python 环境。
   acceptance_criteria:
-  - 模拟缺失 Conda 环境时 bootstrap 创建环境并写入 vibe-python；真实 update.sh 使用 bootstrap 后全局 verify
-    通过。
+  - 模拟缺失 Conda 环境时 bootstrap 创建环境并写入 vibe-python；真实 update.sh 使用 bootstrap 后全局 verify 通过。
   result: passed
   level: 3
   commands:
   - unittest test_bootstrap_creates_missing_conda_environment
-  - /home/tbl/Project/vibe-coding/update.sh --codex-home /home/tbl/.codex --without-mcp
-    --skip-preflight
+  - /home/tbl/Project/vibe-coding/update.sh --codex-home /home/tbl/.codex --without-mcp --skip-preflight
   - global_installer.py verify
   limitations:
   - 未实现自动下载安装 Miniforge 发行版；机器必须已有 Conda/Miniforge/Miniconda，或显式提供 VIBE_PYTHON。
@@ -112,3 +106,81 @@ evidence:
   - update.sh
   - uninstall.sh
   - /home/tbl/.codex/vibe-python
+- id: MCP-001
+  task_id: TASK-004
+  business_logic: []
+  acceptance_criteria:
+  - optional-mcps.json is required and schema-valid
+  - unknown MCP entries are rejected
+  result: passed
+  level: 2
+  commands:
+  - runtime/scripts/validate_package.py --root .
+  limitations: []
+  artifacts:
+  - runtime/mcp/optional-mcps.json
+  - runtime/scripts/validate_package.py
+- id: MCP-002
+  task_id: TASK-004
+  business_logic: []
+  acceptance_criteria:
+  - default install has no optional MCP
+  - --mcp codegraph configures and verifies
+  - --without-mcp preserves legacy MCP config
+  result: passed
+  level: 3
+  commands:
+  - python -m unittest discover -s tests -p test_*.py -q
+  limitations:
+  - 测试使用隔离 Codex fake CLI，不代表所有 Codex 版本输出格式。
+  artifacts:
+  - tests/test_installer.py
+  - scripts/global_installer.py
+- id: MCP-003
+  task_id: TASK-004
+  business_logic: []
+  acceptance_criteria:
+  - release validation, unit tests and plugin validation pass
+  result: passed
+  level: 3
+  commands:
+  - python build_release.py
+  limitations:
+  - 一个旧版 0.3.0 迁移测试因本地缺少历史归档而 skipped。
+  artifacts:
+  - dist/vibe-coding-codex-global-core-0.4.1.zip
+  - 'dist/vibe-coding-codex-global-core-0.4.1.zip.sha256 (SHA-256: 009c6a797ea90bb492e6cfcce7c55538b5913bd61f42d66a44670335ce6a4d1d)'
+- id: MCP-004
+  task_id: TASK-004
+  business_logic: []
+  acceptance_criteria:
+  - installed package is 0.4.1
+  - Codex global verify passes
+  - codegraph is enabled
+  result: passed
+  level: 4
+  commands:
+  - python scripts/global_installer.py update --mcp codegraph --skip-doctor
+  - python scripts/global_installer.py verify
+  - codex mcp list
+  - codex mcp get codegraph
+  limitations:
+  - 跳过了 Codex doctor，仅因本次变更不需要重新诊断主机；preflight features 检查已通过。
+  artifacts:
+  - /home/tbl/.codex/.vibe-codex-installation-state.json
+  - /home/tbl/.codex/config.toml
+  - /home/tbl/.codex/backups/vibe-global-update-20260727-115448-079438
+- id: MCP-005
+  task_id: TASK-004
+  business_logic: []
+  acceptance_criteria:
+  - CodeGraph project index is current and queryable
+  result: passed
+  level: 3
+  commands:
+  - codegraph status /home/tbl/Project/lerobot_v1.0
+  limitations:
+  - 未在当前 ACP 线程中直接调用 MCP tool；需要重启 Codex/Zed ACP 后验证工具暴露。
+  artifacts:
+  - /home/tbl/Project/lerobot_v1.0/.codegraph/
+  - /home/tbl/Project/lerobot_v1.0/CODE_MAP.md

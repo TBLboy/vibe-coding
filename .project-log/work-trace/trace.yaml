@@ -6,11 +6,10 @@ entries:
   context: 用户要求将 Vibe Coding 涉及 Python 的部分改为跨项目全局使用 Miniforge vibe-coding 环境。
   hypothesis: 用户级解释器配置文件加上安装器生成的绝对路径 Hook，可以消除新项目继承系统 python3 的版本漂移。
   decision_ref: null
-  action: 新增 CODEX_HOME/vibe-python 与 VIBE_PYTHON 解析；修改安装器、Linux wrappers、全局 Agent
-    提示词和文档；更新全局安装。
+  action: 新增 CODEX_HOME/vibe-python 与 VIBE_PYTHON 解析；修改安装器、Linux wrappers、全局 Agent 提示词和文档；更新全局安装。
   expected_result: 所有新项目的 Vibe Hooks 与 Project Log 工具使用 Python 3.11.15。
-  observation: 全局 config.toml 三个 Hook 均绑定 /home/tbl/miniforge3/envs/vibe-coding/bin/python3.11；包校验、18
-    个 unittest、安装 verify、新项目 smoke test 均通过。
+  observation: 全局 config.toml 三个 Hook 均绑定 /home/tbl/miniforge3/envs/vibe-coding/bin/python3.11；包校验、18 个 unittest、安装 verify、新项目
+    smoke test 均通过。
   actual_result: 全局 Vibe Python 配置生效；项目数据不受影响。
   delta: 新增用户级 /home/tbl/.codex/vibe-python；更新全局 managed AGENTS/config/runtime/Skills。
   lesson: 跨项目控制层配置应放在 CODEX_HOME，而不是每个项目的 .project-log；项目自身应用环境仍需独立管理。
@@ -24,14 +23,12 @@ entries:
   task_id: TASK-003
   timestamp: '2026-07-27T10:17:25+08:00'
   context: 用户进一步要求安装器自己创建 Miniforge/Miniconda 风格的 vibe-coding 环境，并让后续全局依赖固定使用该环境。
-  hypothesis: 安装包装脚本先运行无第三方依赖 bootstrap，再调用已准备好的 Python 安装器，可以覆盖新机器和新项目而不依赖系统 python
-    版本。
+  hypothesis: 安装包装脚本先运行无第三方依赖 bootstrap，再调用已准备好的 Python 安装器，可以覆盖新机器和新项目而不依赖系统 python 版本。
   decision_ref: null
-  action: 新增 bootstrap_vibe_python.py；install/update/uninstall 包装脚本调用它；bootstrap 查找现有
-    Conda、创建/修复 vibe-coding、安装 PyYAML/jsonschema、写入 CODEX_HOME/vibe-python。
+  action: 新增 bootstrap_vibe_python.py；install/update/uninstall 包装脚本调用它；bootstrap 查找现有 Conda、创建/修复 vibe-coding、安装 PyYAML/jsonschema、写入
+    CODEX_HOME/vibe-python。
   expected_result: 缺少配置时自动准备环境；真实更新后 Hooks 和 verify 使用该环境。
-  observation: 模拟缺失环境测试通过；真实 update.sh 完成全局更新；三个 Hooks 均绑定 vibe-coding Python；包校验与
-    19 个 unittest 通过。
+  observation: 模拟缺失环境测试通过；真实 update.sh 完成全局更新；三个 Hooks 均绑定 vibe-coding Python；包校验与 19 个 unittest 通过。
   actual_result: 安装路径已具备自动创建/修复环境能力；没有 Conda 时明确失败，不自动下载 Miniforge。
   delta: 从“要求用户先创建环境”改为“安装脚本在已有 Conda 管理器下自动创建环境”。
   lesson: 引导式安装应在进入需要 tomllib 的安装器前完成 Python bootstrap；否则系统 Python 3.10 会在导入阶段失败。
@@ -41,4 +38,27 @@ entries:
   - PYTHON-002
   - PYTHON-003
   - PYTHON-004
+  knowledge_candidate: false
+- id: TRACE-005
+  task_id: TASK-004
+  timestamp: '2026-07-27T11:48:34+08:00'
+  context: 用户确认采用 CodeGraph，并要求将 MCP 设计为 Vibe Coding 的可选安装项。
+  hypothesis: 将可选 MCP 做成源码 catalog、安装器选择参数和可验证状态，可以同时支持当前 CodeGraph 和未来 MCP，而不强制污染核心安装。
+  decision_ref: DEC-001
+  action: 新增 runtime/mcp/optional-mcps.json；扩展 global_installer.py 的 --mcp、状态、验证、卸载和冲突保护；补充 validator、测试、文档；构建 0.4.1 并更新全局
+    Codex。
+  expected_result: 新安装默认核心-only；选择 codegraph 后 Codex MCP enabled；CodeGraph 索引保持 up to date。
+  observation: 包校验、21 个 unittest、release/plugin validation、全局 verify、codex mcp list/get 和 codegraph status 均通过；隔离真实 Codex
+    安装/卸载与 --without-mcp 保留测试通过。
+  actual_result: Vibe Coding 0.4.1 已安装；state.optional_mcps=[codegraph]；CodeGraph 1.5.0 enabled；LeRobot 索引 804 files / 17,512
+    nodes / 46,134 edges。
+  delta: 相对 TASK-003，新增可选 MCP 生命周期和当前 CodeGraph 实例；未把 CodeGraph 安装进 /home/tbl/miniforge3/envs/lerobot。
+  lesson: MCP 配置必须与应用 Python 环境分离，并记录 catalog、选择状态、所有权和验证证据。
+  next_adjustment: 重启 Codex 或 Zed ACP Thread，确认新会话实际暴露 CodeGraph MCP tools。
+  evidence:
+  - MCP-001
+  - MCP-002
+  - MCP-003
+  - MCP-004
+  - MCP-005
   knowledge_candidate: false

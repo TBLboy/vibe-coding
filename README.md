@@ -1,4 +1,4 @@
-# Vibe Coding - Codex Global Core 0.4.0
+# Vibe Coding - Codex Global Core 0.4.1
 
 面向最新稳定版 OpenAI Codex CLI / Desktop 的用户级全局 Vibe Coding 工作流。
 
@@ -12,7 +12,7 @@
 - 使用 `loopctl` 管理 Project Goal、证据有效性、失败归因、Retry Contract、有限循环和 Handoff。
 - 安装三个低风险 command Hooks：`SessionStart`、`PostToolUse`、`PreCompact`。
 - 逐文件三方升级，保护用户本地修改；升级冲突在写入前停止。
-- 可选安装 `vibe-toolbelt` MCP Plugin。
+- 通过声明式 catalog 管理可选 MCP；新安装默认只安装核心，不强制安装任何 MCP。
 
 ## 工作流
 
@@ -49,10 +49,10 @@ py -3 -m pip install -r runtime\scripts\requirements.txt
 
 安装器会优先复用 `$CODEX_HOME/vibe-python`；如果不存在，会寻找 Conda/Miniforge/Miniconda，并自动创建名为 `vibe-coding` 的 Python 3.11 环境，安装 `runtime/scripts/requirements.txt`，然后将该环境写入全局配置。
 
-Linux/macOS 推荐直接运行：
+Linux/macOS 推荐直接运行（默认不安装可选 MCP）：
 
 ```bash
-./install.sh --without-mcp
+./install.sh
 ```
 
 如果机器没有 Conda/Miniforge/Miniconda，安装器不会静默下载大型发行版，而是给出明确错误；可以先安装 Miniforge，或显式设置 `VIBE_PYTHON`。也可以手动指定环境：
@@ -84,14 +84,14 @@ python3 -m pip install -r runtime/scripts/requirements.txt
 Windows：
 
 ```powershell
-.\install.ps1 --without-mcp
+.\install.ps1
 ```
 
 Linux/macOS：
 
 ```bash
 chmod +x install.sh update.sh uninstall.sh
-./install.sh --without-mcp
+./install.sh
 ```
 
 默认行为：
@@ -99,7 +99,8 @@ chmod +x install.sh update.sh uninstall.sh
 - 保留现有 Codex 权限配置。
 - 启用三个低风险 Hooks。
 - 自动备份到 `<CODEX_HOME>/backups/`。
-- `--without-mcp` 跳过可选 MCP Plugin，适合公司受限网络。
+- 新安装默认不启用可选 MCP；用 `--mcp NAME` 显式选择。
+- `--without-mcp` 保留为兼容参数，显式跳过所有可选 MCP，适合公司受限网络。
 
 可选访问配置：
 
@@ -117,13 +118,13 @@ chmod +x install.sh update.sh uninstall.sh
 Windows：
 
 ```powershell
-.\update.ps1 --without-mcp
+.\update.ps1
 ```
 
 Linux/macOS：
 
 ```bash
-./update.sh --without-mcp
+./update.sh
 ```
 
 0.3.0 旧安装状态会在整树 hash 未变化时自动迁移为逐文件状态。规则：
@@ -177,4 +178,29 @@ loopctl validate
 
 ## 可选 MCP
 
-不使用 `--without-mcp` 时安装 `vibe-toolbelt`。它依赖本机可用的 Node.js/`npx`、`uvx`、Playwright 浏览器及按需提供的凭据。包不存储 API key 或 token。
+可选 MCP 声明在 `runtime/mcp/optional-mcps.json`，安装器不会默认强制安装。当前 catalog 包含：
+
+- `codegraph`：为工程建立代码图谱、符号关系和调用/影响分析；优先使用 PATH 中的 `codegraph`，否则回退到 `npx`。
+- `vibe-toolbelt`：Vibe Coding 的文档、浏览器、文档处理和 Web 研究工具集。
+
+按需选择一个或多个 MCP（`--mcp` 可重复）：
+
+```bash
+./install.sh --mcp codegraph
+./update.sh --mcp codegraph --mcp vibe-toolbelt
+```
+
+Windows：
+
+```powershell
+.\install.ps1 --mcp codegraph
+```
+
+检查可选 MCP：
+
+```bash
+codex mcp list
+codex mcp get codegraph
+```
+
+`--without-mcp` 只表示本次安装/升级不处理可选 MCP，不会阻塞核心安装。包不存储 API key 或 token。

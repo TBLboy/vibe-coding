@@ -9,7 +9,7 @@ import sys
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
 
-VERSION = "0.4.0"
+VERSION = "0.4.1"
 EXCLUDED_DIRS = {".git", "__pycache__", "dist"}
 EXCLUDED_SUFFIXES = {".pyc", ".pyo", ".zip"}
 

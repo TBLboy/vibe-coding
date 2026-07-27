@@ -1,10 +1,10 @@
 # Current Session
 
-- Current phase: business-intent
-- Current goal: maintain the Codex Vibe Coding framework source
-- Current task: TASK-003 — bootstrap global Vibe Python and bind Hooks
-- Confirmed facts: install/update/uninstall wrappers now run `bootstrap_vibe_python.py`; missing configuration triggers Conda/Miniforge/Miniconda `vibe-coding` Python 3.11 environment creation and runtime dependency installation; global Hooks use the resulting interpreter.
-- Active decisions: Vibe control-layer Python is global; project application dependencies remain project-owned; Miniforge distribution itself is not auto-downloaded.
-- Blocking items: none on the current Miniforge host
-- Recent evidence: PYTHON-001 through PYTHON-004
-- Next step: restart Codex so the new managed Hook commands are loaded.
+- Current phase: verification
+- Current goal: maintain and release the Codex Vibe Coding framework source
+- Current task: TASK-004 — optional MCP catalog and CodeGraph integration (done)
+- Confirmed facts: Vibe Coding 0.4.1 is installed globally; optional MCP catalog contains codegraph and vibe-toolbelt; new installs default to core-only; current Codex state selects codegraph; LeRobot CodeGraph index is up to date.
+- Active decisions: DEC-001 — optional MCPs are declarative and opt-in; CodeGraph stays outside the LeRobot Python environment.
+- Blocking items: none for installation or CLI verification
+- Recent evidence: MCP-001 through MCP-005
+- Next step: restart Codex or the Zed ACP Thread and confirm CodeGraph MCP tools are exposed in the new session.

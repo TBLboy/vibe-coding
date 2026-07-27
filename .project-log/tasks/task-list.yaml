@@ -46,8 +46,7 @@ tasks:
   title: Expand Codex Skill routing and keep repository source-only
   kind: task
   phase: implementation
-  goal: Make high-value installed Skills discoverable through the global Agent route
-    table and stop tracking release archives
+  goal: Make high-value installed Skills discoverable through the global Agent route table and stop tracking release archives
   status: done
   authority: A
   owner: agent
@@ -62,8 +61,8 @@ tasks:
   - expanded Skill route table
   - source-only Git repository configuration
   done_when:
-  - orchestration, research, context, workflow-maintenance, extraction, Skill-authoring,
-    plan-stress-test, and UX-audit routes are explicit
+  - orchestration, research, context, workflow-maintenance, extraction, Skill-authoring, plan-stress-test, and UX-audit routes
+    are explicit
   - every newly routed Skill has a local SKILL.md
   - release archives are removed from Git tracking and ignored
   - package validation and the standard-library test suite pass
@@ -77,11 +76,9 @@ tasks:
     - ROUTE-002
     - ROUTE-003
     limitations:
-    - pytest is not installed in the current Python environment; unittest execution
-      passed
+    - pytest is not installed in the current Python environment; unittest execution passed
   result:
-    summary: Added nine explicit Skill routes, removed tracked ZIP artifacts, and
-      added ZIP ignore rules
+    summary: Added nine explicit Skill routes, removed tracked ZIP artifacts, and added ZIP ignore rules
     changed_files:
     - prompts/vibe-global-agent.md
     - .gitignore
@@ -93,8 +90,7 @@ tasks:
   title: 配置全局 Vibe Python 解释器并绑定 Hooks
   kind: task
   phase: implementation
-  goal: 让安装器在缺少全局配置时自动创建或修复 Conda/Miniforge/Miniconda 的 vibe-coding Python 3.11 环境，并让所有跨项目
-    Vibe Python 功能使用它。
+  goal: 让安装器在缺少全局配置时自动创建或修复 Conda/Miniforge/Miniconda 的 vibe-coding Python 3.11 环境，并让所有跨项目 Vibe Python 功能使用它。
   status: done
   authority: A
   owner: agent
@@ -121,12 +117,9 @@ tasks:
     status: passed
     commands:
     - /home/tbl/Project/vibe-coding/install.sh or update.sh bootstrap_vibe_python.py
-    - /home/tbl/miniforge3/envs/vibe-coding/bin/python runtime/scripts/validate_package.py
-      --root .
-    - /home/tbl/miniforge3/envs/vibe-coding/bin/python -m unittest discover -s tests
-      -p test_*.py -q
-    - /home/tbl/miniforge3/envs/vibe-coding/bin/python scripts/global_installer.py
-      verify --codex-home /home/tbl/.codex --without-mcp
+    - /home/tbl/miniforge3/envs/vibe-coding/bin/python runtime/scripts/validate_package.py --root .
+    - /home/tbl/miniforge3/envs/vibe-coding/bin/python -m unittest discover -s tests -p test_*.py -q
+    - /home/tbl/miniforge3/envs/vibe-coding/bin/python scripts/global_installer.py verify --codex-home /home/tbl/.codex --without-mcp
     - fresh project init/validate/restore and SessionStart/PreCompact hook smoke test
     evidence:
     - PYTHON-001
@@ -136,8 +129,8 @@ tasks:
     limitations:
     - PostToolUse 未单独执行真实写入工具回调；其脚本已包含在安装包测试和配置注册中。
   result:
-    summary: 新增用户级 CODEX_HOME/vibe-python 与 VIBE_PYTHON 临时覆盖；安装/升级包装脚本会自动创建或修复 Conda
-      环境 vibe-coding、安装 runtime 依赖，并将全局 Hooks 绑定到 /home/tbl/miniforge3/envs/vibe-coding/bin/python3.11。
+    summary: 新增用户级 CODEX_HOME/vibe-python 与 VIBE_PYTHON 临时覆盖；安装/升级包装脚本会自动创建或修复 Conda 环境 vibe-coding、安装 runtime 依赖，并将全局 Hooks
+      绑定到 /home/tbl/miniforge3/envs/vibe-coding/bin/python3.11。
     changed_files:
     - scripts/global_installer.py
     - tests/test_installer.py
@@ -152,3 +145,62 @@ tasks:
     - 重启 Codex 会话以确保新的全局 config.toml Hooks 被重新加载。
   created_at: '2026-07-27T10:09:55+08:00'
   updated_at: '2026-07-27T10:09:55+08:00'
+- id: TASK-004
+  title: 建立可选 MCP catalog 并安装 CodeGraph
+  kind: task
+  phase: verification
+  goal: 让 Vibe Coding 安装器按需管理可选 MCP，并在 Codex 中启用 CodeGraph 工程代码图谱。
+  status: done
+  authority: A
+  owner: agent
+  related_business_logic: []
+  depends_on:
+  - TASK-003
+  inputs:
+  - scripts/global_installer.py
+  - runtime/scripts/validate_package.py
+  - Codex MCP 配置
+  - CodeGraph 1.5.0
+  outputs:
+  - runtime/mcp/optional-mcps.json
+  - 可重复的 --mcp NAME 安装参数
+  - CodeGraph Codex 配置
+  - 0.4.1 发布包
+  done_when:
+  - 新安装默认不强制安装可选 MCP
+  - --mcp codegraph 能配置并验证 Codex MCP
+  - 可选 MCP catalog 被纳入包校验与发布包
+  - 已有配置和 --without-mcp 行为不被静默破坏
+  verification:
+    status: passed
+    commands:
+    - /home/tbl/miniforge3/envs/vibe-coding/bin/python runtime/scripts/validate_package.py --root .
+    - /home/tbl/miniforge3/envs/vibe-coding/bin/python -m unittest discover -s tests -p test_*.py -q
+    - /home/tbl/miniforge3/envs/vibe-coding/bin/python build_release.py
+    - scripts/global_installer.py update --mcp codegraph --skip-doctor
+    - scripts/global_installer.py verify
+    - codex mcp list; codex mcp get codegraph; codegraph status /home/tbl/Project/lerobot_v1.0
+    evidence:
+    - MCP-001
+    - MCP-002
+    - MCP-003
+    - MCP-004
+    - MCP-005
+    limitations:
+    - 当前 Codex ACP 线程需要重启后才会在工具列表中暴露新 MCP；命令行配置和服务状态已验证。
+  result:
+    summary: 新增声明式可选 MCP catalog，默认核心安装；支持 --mcp 重复选择，CodeGraph 已安装并配置到当前 Codex；Vibe Coding 升级为 0.4.1。
+    changed_files:
+    - runtime/mcp/optional-mcps.json
+    - scripts/global_installer.py
+    - runtime/scripts/validate_package.py
+    - tests/test_installer.py
+    - README.md
+    - AI_INSTALL.md
+    - AI_UPGRADE.md
+    - build_release.py
+    deviations: []
+    follow_ups:
+    - 重启 Codex 或 Zed ACP Thread，使 CodeGraph MCP 工具在新会话加载。
+  created_at: '2026-07-27T11:48:34+08:00'
+  updated_at: '2026-07-27T11:54:48+08:00'

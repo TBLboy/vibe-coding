@@ -30,6 +30,7 @@ REQUIRED_RUNTIME = {
     "hooks/post_tool_use.py",
     "hooks/pre_compact.py",
     "agents/roles.json",
+    "mcp/optional-mcps.json",
     "project-log-template/workflow.yaml",
     "project-log-template/business-logic/clarification.yaml",
     "project-log-template/goals/active-goal.yaml",
@@ -110,6 +111,39 @@ def validate(root: Path) -> list[str]:
                 errors.append(f"role template is not registered: {template}")
         except Exception as exc:  # noqa: BLE001
             errors.append(f"failed to validate roles.json: {exc}")
+
+    catalog_path = root / "runtime/mcp/optional-mcps.json"
+    if catalog_path.is_file():
+        try:
+            catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
+            entries = catalog.get("mcps") if isinstance(catalog, dict) else None
+            if not isinstance(entries, list) or not entries:
+                errors.append("optional MCP catalog must contain a non-empty 'mcps' list")
+            else:
+                names: set[str] = set()
+                for entry in entries:
+                    if not isinstance(entry, dict):
+                        errors.append("optional MCP catalog contains a non-object entry")
+                        continue
+                    name = entry.get("name")
+                    kind = entry.get("kind")
+                    if not isinstance(name, str) or not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", name):
+                        errors.append(f"optional MCP catalog has invalid name: {name!r}")
+                    elif name in names:
+                        errors.append(f"optional MCP catalog has duplicate name: {name}")
+                    else:
+                        names.add(name)
+                    if kind == "codex-stdio":
+                        command = entry.get("command")
+                        if not isinstance(command, list) or not command or not all(isinstance(part, str) for part in command):
+                            errors.append(f"optional MCP {name!r} has invalid command")
+                    elif kind == "codex-plugin":
+                        if not isinstance(entry.get("plugin"), str):
+                            errors.append(f"optional MCP {name!r} is missing plugin")
+                    else:
+                        errors.append(f"optional MCP {name!r} has unsupported kind: {kind!r}")
+        except Exception as exc:  # noqa: BLE001
+            errors.append(f"failed to validate optional MCP catalog: {exc}")
 
     plugin_manifest = root / "plugins/vibe-toolbelt/.codex-plugin/plugin.json"
     marketplace = root / ".agents/plugins/marketplace.json"

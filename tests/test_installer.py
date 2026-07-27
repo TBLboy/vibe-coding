@@ -16,9 +16,10 @@ INSTALLER = ROOT / "scripts/global_installer.py"
 BOOTSTRAP = ROOT / "scripts/bootstrap_vibe_python.py"
 
 
-def run_installer(*arguments: str) -> subprocess.CompletedProcess[str]:
+def run_installer(*arguments: str, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, str(INSTALLER), *arguments],
+        env=env,
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
@@ -27,6 +28,78 @@ def run_installer(*arguments: str) -> subprocess.CompletedProcess[str]:
 
 
 class InstallerTests(unittest.TestCase):
+    def test_fresh_install_is_core_only_by_default(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary) / "codex-home"
+            install = run_installer("install", "--codex-home", str(home), "--skip-preflight")
+            self.assertEqual(install.returncode, 0, install.stdout)
+            state = json.loads((home / ".vibe-codex-installation-state.json").read_text(encoding="utf-8"))
+            self.assertEqual(state["optional_mcps"], [])
+            self.assertFalse(state["mcp_plugin_installed"])
+
+    def test_selected_codegraph_mcp_is_configured_and_verified(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = Path(temporary)
+            home = workspace / "codex-home"
+            bin_dir = workspace / "bin"
+            bin_dir.mkdir()
+            codegraph = bin_dir / "codegraph"
+            codegraph.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            codegraph.chmod(0o700)
+            codex = bin_dir / "codex"
+            codex.write_text(
+                "#!/usr/bin/env python3\n"
+                "import json, os, sys\n"
+                "state = os.path.join(os.environ['CODEX_HOME'], 'fake-mcp.json')\n"
+                "args = sys.argv[1:]\n"
+                "if args[:2] == ['mcp', 'get']:\n"
+                "    name = args[2]\n"
+                "    if not os.path.exists(state): raise SystemExit(1)\n"
+                "    data = json.load(open(state))\n"
+                "    if data.get('name') != name: raise SystemExit(1)\n"
+                "    print('command: ' + data['command'])\n"
+                "    print('args: ' + ' '.join(data['args']))\n"
+                "    raise SystemExit(0)\n"
+                "if args[:2] == ['mcp', 'add']:\n"
+                "    name = args[2]; marker = args.index('--')\n"
+                "    json.dump({'name': name, 'command': args[marker + 1], 'args': args[marker + 2:]}, open(state, 'w'))\n"
+                "    raise SystemExit(0)\n"
+                "if args[:2] == ['mcp', 'remove']:\n"
+                "    if os.path.exists(state): os.unlink(state)\n"
+                "    raise SystemExit(0)\n"
+                "raise SystemExit(0)\n",
+                encoding="utf-8",
+            )
+            codex.chmod(0o700)
+            env = os.environ.copy()
+            env["PATH"] = str(bin_dir) + os.pathsep + env["PATH"]
+            install = run_installer(
+                "install", "--codex-home", str(home), "--mcp", "codegraph", "--skip-preflight", env=env
+            )
+            self.assertEqual(install.returncode, 0, install.stdout)
+            state = json.loads((home / ".vibe-codex-installation-state.json").read_text(encoding="utf-8"))
+            self.assertEqual(state["optional_mcps"], ["codegraph"])
+            self.assertEqual(state["optional_mcps_owned"], ["codegraph"])
+            config_path = home / "config.toml"
+            config = config_path.read_text(encoding="utf-8")
+            config_path.write_text(
+                config.replace(
+                    "# VIBE-CODEX-GLOBAL:CONFIG:END",
+                    '[mcp_servers.codegraph]\ncommand = "' + str(codegraph) + '"\nargs = ["serve", "--mcp"]\n\n'
+                    "# VIBE-CODEX-GLOBAL:CONFIG:END",
+                ),
+                encoding="utf-8",
+            )
+            verify = run_installer("verify", "--codex-home", str(home), env=env)
+            self.assertEqual(verify.returncode, 0, verify.stdout)
+            update = run_installer(
+                "update", "--codex-home", str(home), "--without-mcp", "--skip-preflight", env=env
+            )
+            self.assertEqual(update.returncode, 0, update.stdout)
+            self.assertIn("[mcp_servers.codegraph]", (home / "config.toml").read_text(encoding="utf-8"))
+            state = json.loads((home / ".vibe-codex-installation-state.json").read_text(encoding="utf-8"))
+            self.assertEqual(state["optional_mcps"], [])
+
     def test_fresh_install_verify_and_uninstall(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             home = Path(temporary) / "codex-home"
@@ -166,7 +239,7 @@ class InstallerTests(unittest.TestCase):
             )
             self.assertEqual(update.returncode, 0, update.stdout)
             state = json.loads((home / ".vibe-codex-installation-state.json").read_text(encoding="utf-8"))
-            self.assertEqual(state["package_version"], "0.4.0")
+            self.assertEqual(state["package_version"], "0.4.1")
             self.assertTrue((home / "vibe-workflow/scripts/loopctl.py").is_file())
 
     def test_without_hooks_can_still_set_access_profile(self) -> None:

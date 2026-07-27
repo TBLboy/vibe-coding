@@ -1,2 +1,60 @@
-version: "0.2"
-decisions: []
+version: '0.2'
+decisions:
+- id: DEC-001
+  title: 可选 MCP 使用声明式 catalog，CodeGraph 仅按用户选择安装
+  category: tooling
+  status: active
+  authority: B
+  user_approval: approved
+  related_tasks:
+  - TASK-004
+  related_business_logic: []
+  context: Vibe Coding 需要支持不同项目按需使用 MCP，且 CodeGraph 应由 Codex 使用而不是安装进 LeRobot 应用环境。
+  hypothesis: 将 MCP 定义放在 runtime/mcp/optional-mcps.json，并通过安装器 --mcp NAME 选择，可保持核心安装轻量并支持后续扩展。
+  options:
+  - name: 将所有 MCP 强制安装
+    benefits:
+    - 开箱即用
+    costs:
+    - 增加依赖和网络失败面
+    risks:
+    - 污染不需要 MCP 的环境
+  - name: 声明式可选 catalog，默认不安装（选择）
+    benefits:
+    - 核心安装可逆且轻量
+    - 可重复选择多个 MCP
+    - 配置来源可审计
+    costs:
+    - 需要增加状态和验证逻辑
+    risks:
+    - 新会话前需重启 ACP 才能暴露新增工具
+  - name: 仅手工维护个人 Codex config
+    benefits:
+    - 实现成本最低
+    costs:
+    - 无法随框架安装复用
+    - 缺少验证和状态
+    risks:
+    - 不同机器配置漂移
+  decision: 采用声明式可选 MCP catalog；新安装默认不启用；用户用 --mcp codegraph 显式选择，CodeGraph 通过 Codex MCP 配置运行。
+  reason_summary:
+  - 不强制引入可选依赖
+  - 安装器可以验证、记录和保护配置
+  - CodeGraph 与 LeRobot Python 环境解耦
+  conditions:
+  - CodeGraph 可执行文件在 PATH 中时优先使用；否则允许 npx 回退。
+  - 用户现有不同 MCP 配置不得被静默覆盖。
+  action: 新增 catalog、安装器参数、状态字段、校验、测试和文档；将 codegraph 配置到 /home/tbl/.codex。
+  expected_result: Vibe Coding 0.4.1 可选择性安装 MCP，CodeGraph 在 Codex 中 enabled。
+  reversal_plan: 使用备份目录回滚 Vibe Coding 受管文件，并执行 codex mcp remove codegraph。
+  observation: 已完成实现、发布包构建和实际 Codex 配置。
+  actual_result: CodeGraph 1.5.0 作为 Codex stdio MCP enabled；LeRobot 索引 804 files / 17,512 nodes / 46,134 edges 且 up to date。
+  outcome_status: successful
+  lesson: 可选工具应以 catalog + state + verify 三件套管理，避免把一次性本机配置变成不可审计的隐式依赖。
+  evidence:
+  - MCP-001
+  - MCP-004
+  - MCP-005
+  supersedes: []
+  created_at: '2026-07-27T11:48:34+08:00'
+  updated_at: '2026-07-27T11:54:48+08:00'

@@ -17,7 +17,7 @@ from typing import Any
 
 
 TITLE = "Vibe Coding - Codex Global Core"
-PACKAGE_VERSION = "0.4.0"
+PACKAGE_VERSION = "0.4.1"
 BEGIN = "<!-- VIBE-CODEX-GLOBAL:BEGIN -->"
 END = "<!-- VIBE-CODEX-GLOBAL:END -->"
 CONFIG_BEGIN = "# VIBE-CODEX-GLOBAL:CONFIG:BEGIN"
@@ -29,6 +29,7 @@ LEGACY_STATE_NAME = "installation-state.json"
 EXCLUDED_NAMES = {"__pycache__", LEGACY_STATE_NAME}
 PYTHON_CONFIG_NAME = "vibe-python"
 PYTHON_ENV_NAME = "VIBE_PYTHON"
+MCP_CATALOG_RELATIVE = Path("runtime/mcp/optional-mcps.json")
 
 
 def package_root() -> Path:
@@ -186,6 +187,27 @@ def strip_config_block(text: str) -> str:
     return (text[:start].rstrip() + "\n\n" + text[end:].lstrip()).strip() + "\n"
 
 
+def preserved_mcp_sections(text: str) -> str:
+    """Keep MCP entries that older installers placed inside their block.
+
+    Codex's ``mcp add`` may insert a table immediately before the managed
+    block marker. Moving those tables outside the regenerated block prevents a
+    later ``--without-mcp`` update from silently deleting an existing server.
+    """
+    start = text.find(CONFIG_BEGIN)
+    if start < 0:
+        return ""
+    end = text.find(CONFIG_END, start)
+    if end < 0:
+        raise RuntimeError("config.toml contains an unterminated Vibe managed block.")
+    block = text[start:end]
+    matches = re.findall(
+        r"(?ms)^\[\[?mcp_servers(?:\.[^\]]+)?\]\]?\n.*?(?=^\[|\Z)",
+        block,
+    )
+    return "\n\n".join(match.rstrip() for match in matches).strip()
+
+
 def toml_string(value: str) -> str:
     return json.dumps(value)
 
@@ -263,6 +285,7 @@ def managed_config_block(home: Path, access_profile: str, include_hooks: bool) -
 def install_config(home: Path, *, without_hooks: bool, access_profile: str) -> None:
     path = home / "config.toml"
     old = path.read_text(encoding="utf-8") if path.exists() else ""
+    preserved_mcp = preserved_mcp_sections(old)
     base = strip_config_block(old) if CONFIG_BEGIN in old else old
     try:
         parsed = tomllib.loads(base) if base.strip() else {}
@@ -278,10 +301,15 @@ def install_config(home: Path, *, without_hooks: bool, access_profile: str) -> N
             )
     if without_hooks and access_profile == "keep-existing":
         if CONFIG_BEGIN in old:
-            path.write_text(base, encoding="utf-8", newline="\n")
+            merged = base.rstrip()
+            if preserved_mcp:
+                merged += ("\n\n" if merged else "") + preserved_mcp
+            path.write_text((merged + "\n") if merged else "", encoding="utf-8", newline="\n")
         return
     block = managed_config_block(home, access_profile, include_hooks=not without_hooks)
     merged = base.rstrip() + ("\n\n" if base.rstrip() else "") + block + "\n"
+    if preserved_mcp:
+        merged += "\n" + preserved_mcp + "\n"
     try:
         tomllib.loads(merged)
     except tomllib.TOMLDecodeError as exc:
@@ -418,17 +446,131 @@ def plugin_env(home: Path) -> dict[str, str]:
     return environment
 
 
-def run_plugin(home: Path, root: Path, remove: bool = False) -> bool:
-    if shutil.which("codex") is None:
-        print("[!] codex CLI was not found; skipped optional MCP plugin action.")
+def load_optional_mcp_catalog(root: Path) -> dict[str, dict[str, Any]]:
+    path = root / MCP_CATALOG_RELATIVE
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RuntimeError(f"optional MCP catalog is invalid: {path}: {exc}") from exc
+    entries = payload.get("mcps") if isinstance(payload, dict) else None
+    if not isinstance(entries, list):
+        raise RuntimeError("optional MCP catalog must contain a 'mcps' list")
+    catalog: dict[str, dict[str, Any]] = {}
+    for entry in entries:
+        if not isinstance(entry, dict) or not isinstance(entry.get("name"), str):
+            raise RuntimeError("optional MCP catalog contains an invalid entry")
+        name = entry["name"]
+        if name in catalog:
+            raise RuntimeError(f"optional MCP catalog contains duplicate entry: {name}")
+        catalog[name] = entry
+    return catalog
+
+
+def optional_mcp_names(state: dict[str, Any]) -> list[str]:
+    configured = state.get("optional_mcps")
+    if isinstance(configured, list):
+        return [name for name in configured if isinstance(name, str)]
+    # Preserve installations created before the catalog existed.
+    if state.get("mcp_plugin_installed"):
+        return ["vibe-toolbelt"]
+    return []
+
+
+def command_for_mcp(entry: dict[str, Any]) -> list[str]:
+    command = entry.get("command")
+    if not isinstance(command, list) or not command or not all(isinstance(part, str) for part in command):
+        raise RuntimeError(f"optional MCP {entry.get('name')!r} has an invalid command")
+    executable = shutil.which(command[0])
+    if executable:
+        return [executable, *command[1:]]
+    fallback = entry.get("fallback_command")
+    if isinstance(fallback, list) and fallback and all(isinstance(part, str) for part in fallback):
+        if shutil.which(fallback[0]):
+            return fallback
+    raise RuntimeError(
+        f"optional MCP {entry.get('name')!r} requires {command[0]!r}; "
+        "install its prerequisite or provide the command on PATH"
+    )
+
+
+def mcp_get(home: Path, name: str) -> subprocess.CompletedProcess[str] | None:
+    codex = shutil.which("codex")
+    if not codex:
+        return None
+    return run_command([codex, "mcp", "get", name], env=plugin_env(home))
+
+
+def mcp_output_matches(output: str, command: list[str]) -> bool:
+    actual_command = next((line.split(":", 1)[1].strip() for line in output.splitlines() if line.strip().startswith("command:")), "")
+    actual_args = next((line.split(":", 1)[1].strip() for line in output.splitlines() if line.strip().startswith("args:")), "")
+    if not actual_command:
         return False
+    return Path(actual_command).name == Path(command[0]).name and actual_args == " ".join(command[1:])
+
+
+def run_plugin(home: Path, root: Path, *, entry: dict[str, Any] | None = None, remove: bool = False) -> bool:
+    plugin = entry.get("plugin", PLUGIN) if entry else PLUGIN
+    marketplace = entry.get("marketplace", PLUGIN_MARKETPLACE) if entry else PLUGIN_MARKETPLACE
+    if shutil.which("codex") is None:
+        if remove:
+            print("[!] codex CLI was not found; skipped optional MCP removal.")
+            return False
+        raise RuntimeError("codex CLI was not found; cannot install the selected vibe-toolbelt MCP")
     environment = plugin_env(home)
     if remove:
-        subprocess.run(["codex", "plugin", "remove", PLUGIN], env=environment, check=False)
-        subprocess.run(["codex", "plugin", "marketplace", "remove", PLUGIN_MARKETPLACE], env=environment, check=False)
+        subprocess.run(["codex", "plugin", "remove", plugin], env=environment, check=False)
+        subprocess.run(["codex", "plugin", "marketplace", "remove", marketplace], env=environment, check=False)
         return True
     subprocess.run(["codex", "plugin", "marketplace", "add", str(root)], env=environment, check=True)
-    subprocess.run(["codex", "plugin", "add", PLUGIN], env=environment, check=True)
+    subprocess.run(["codex", "plugin", "add", plugin], env=environment, check=True)
+    return True
+
+
+def install_optional_mcp(home: Path, root: Path, entry: dict[str, Any]) -> tuple[bool, bool]:
+    name = entry["name"]
+    kind = entry.get("kind")
+    if kind == "codex-plugin":
+        return run_plugin(home, root, entry=entry), True
+    if kind != "codex-stdio":
+        raise RuntimeError(f"optional MCP {name!r} has unsupported kind: {kind!r}")
+    codex = shutil.which("codex")
+    if not codex:
+        raise RuntimeError("codex CLI was not found; cannot install the selected MCP")
+    command = command_for_mcp(entry)
+    existing = mcp_get(home, name)
+    if existing and existing.returncode == 0:
+        if mcp_output_matches(existing.stdout, command):
+            print(f"[*] Optional MCP already configured: {name}")
+            return True, False
+        raise RuntimeError(f"MCP configuration conflict for {name!r}; existing Codex entry differs")
+    subprocess.run([codex, "mcp", "add", name, "--", *command], env=plugin_env(home), check=True)
+    return True, True
+
+
+def verify_optional_mcp(home: Path, root: Path, entry: dict[str, Any]) -> None:
+    name = entry["name"]
+    if entry.get("kind") == "codex-plugin":
+        result = run_command(["codex", "plugin", "list"], env=plugin_env(home))
+        plugin = entry.get("plugin", PLUGIN)
+        if result.returncode or plugin not in result.stdout or "installed, enabled" not in result.stdout:
+            raise RuntimeError(f"Optional {name} MCP plugin is not installed and enabled.")
+        return
+    result = mcp_get(home, name)
+    if result is None or result.returncode:
+        raise RuntimeError(f"Optional MCP {name!r} is not configured in Codex.")
+    command = command_for_mcp(entry)
+    if not mcp_output_matches(result.stdout, command):
+        raise RuntimeError(f"Optional MCP {name!r} configuration differs from the catalog.")
+
+
+def remove_optional_mcp(home: Path, root: Path, entry: dict[str, Any]) -> bool:
+    if entry.get("kind") == "codex-plugin":
+        return run_plugin(home, root, entry=entry, remove=True)
+    codex = shutil.which("codex")
+    if not codex:
+        print(f"[!] codex CLI was not found; skipped optional MCP removal: {entry['name']}")
+        return False
+    subprocess.run([codex, "mcp", "remove", entry["name"]], env=plugin_env(home), check=False)
     return True
 
 
@@ -513,6 +655,7 @@ def install_or_update(
     home: Path,
     skills: Path,
     *,
+    mcp_names: list[str] | None,
     without_mcp: bool,
     without_hooks: bool,
     access_profile: str,
@@ -524,6 +667,25 @@ def install_or_update(
     skills.mkdir(parents=True, exist_ok=True)
     old_state = read_state(home)
     probe = old_state.get("preflight") if skip_preflight else preflight(home, skip_doctor=skip_doctor)
+    catalog = load_optional_mcp_catalog(root)
+    if without_mcp and mcp_names:
+        raise RuntimeError("--mcp and --without-mcp cannot be used together")
+    if without_mcp:
+        selected_mcps: list[str] = []
+        print("[*] Optional MCPs skipped by --without-mcp.")
+    elif mcp_names is None:
+        # New installations are core-only by default; updates preserve the
+        # optional MCPs explicitly enabled by an earlier installation.
+        selected_mcps = optional_mcp_names(old_state) if old_state else []
+        if selected_mcps:
+            print("[*] Preserving selected optional MCPs: " + ", ".join(selected_mcps))
+    else:
+        selected_mcps = list(dict.fromkeys(mcp_names))
+    unknown = sorted(set(selected_mcps) - set(catalog))
+    if unknown:
+        available = ", ".join(sorted(catalog)) or "(none)"
+        raise RuntimeError(f"unknown optional MCP(s): {', '.join(unknown)}; available: {available}")
+
     sources = source_file_map(root)
     previous = legacy_managed_files(home, skills, old_state)
     operations, conflicts, preserved, managed = plan_sync(home, skills, sources, previous)
@@ -536,14 +698,13 @@ def install_or_update(
     install_config(home, without_hooks=without_hooks, access_profile=access_profile)
     apply_sync(home, skills, sources, operations)
 
-    plugin_installed = bool(old_state.get("mcp_plugin_installed"))
-    if without_mcp:
-        # --without-mcp explicitly makes the optional plugin unmanaged for this
-        # installation/update, so verify must not require a stale old state bit.
-        plugin_installed = False
-        print("[*] MCP plugin skipped by --without-mcp.")
-    else:
-        plugin_installed = run_plugin(home, root)
+    owned_mcps: list[str] = []
+    for name in selected_mcps:
+        _, owned = install_optional_mcp(home, root, catalog[name])
+        if owned:
+            owned_mcps.append(name)
+
+    plugin_installed = "vibe-toolbelt" in selected_mcps
 
     state = {
         "schema": 2,
@@ -557,7 +718,11 @@ def install_or_update(
         "preserved_local": preserved,
         "hooks_installed": not without_hooks,
         "access_profile": access_profile,
+        # Keep the legacy bit for older uninstallers while making the state
+        # extensible to multiple optional MCPs.
         "mcp_plugin_installed": plugin_installed,
+        "optional_mcps": selected_mcps,
+        "optional_mcps_owned": owned_mcps,
         "preflight": probe,
     }
     write_state(home, state)
@@ -594,7 +759,17 @@ def verify(root: Path, home: Path, skills: Path, *, check_plugin: bool = False) 
         if not config.is_file() or CONFIG_BEGIN not in config.read_text(encoding="utf-8"):
             raise RuntimeError("Vibe Hook config block is missing.")
         tomllib.loads(config.read_text(encoding="utf-8"))
-    if check_plugin and shutil.which("codex") is not None:
+    catalog = load_optional_mcp_catalog(root)
+    selected_mcps = optional_mcp_names(state)
+    if selected_mcps:
+        if shutil.which("codex") is None:
+            raise RuntimeError("Codex CLI is required to verify selected optional MCPs.")
+        for name in selected_mcps:
+            if name not in catalog:
+                raise RuntimeError(f"installation state references unknown optional MCP: {name}")
+            verify_optional_mcp(home, root, catalog[name])
+    elif check_plugin and shutil.which("codex") is not None:
+        # Compatibility with manually authored legacy state files.
         result = run_command(["codex", "plugin", "list"], env=plugin_env(home))
         if result.returncode or PLUGIN not in result.stdout or "installed, enabled" not in result.stdout:
             raise RuntimeError("Optional vibe-toolbelt plugin is not installed and enabled.")
@@ -653,7 +828,13 @@ def uninstall(root: Path, home: Path, skills: Path) -> None:
     original = Path(state.get("original_backup_dir", "")) if state.get("original_backup_dir") else None
     if original and original.is_dir():
         restore_backup_files(original, home, skills)
-    if state.get("mcp_plugin_installed"):
+    catalog = load_optional_mcp_catalog(root)
+    owned = state.get("optional_mcps_owned")
+    if isinstance(owned, list):
+        for name in owned:
+            if isinstance(name, str) and name in catalog:
+                remove_optional_mcp(home, root, catalog[name])
+    elif state.get("mcp_plugin_installed"):
         run_plugin(home, root, remove=True)
     if state_path(home).exists():
         state_path(home).unlink()
@@ -667,7 +848,14 @@ def main() -> int:
     parser.add_argument("action", choices=("install", "update", "verify", "preflight", "uninstall"))
     parser.add_argument("--codex-home", help="Override CODEX_HOME for isolated tests or another profile.")
     parser.add_argument("--skills-root", help="Override the detected user Skill root.")
-    parser.add_argument("--without-mcp", action="store_true")
+    parser.add_argument(
+        "--mcp",
+        dest="mcp_names",
+        action="append",
+        metavar="NAME",
+        help="Enable an optional MCP from runtime/mcp/optional-mcps.json (repeatable).",
+    )
+    parser.add_argument("--without-mcp", action="store_true", help="Do not install optional MCPs (legacy compatibility).")
     parser.add_argument("--without-hooks", action="store_true")
     parser.add_argument("--access-profile", choices=("keep-existing", "workspace", "full"), default="keep-existing")
     parser.add_argument("--skip-preflight", action="store_true", help="Only for isolated package tests.")
@@ -682,6 +870,7 @@ def main() -> int:
                 root,
                 home,
                 skills,
+                mcp_names=args.mcp_names,
                 without_mcp=args.without_mcp,
                 without_hooks=args.without_hooks,
                 access_profile=args.access_profile,

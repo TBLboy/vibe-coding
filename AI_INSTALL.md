@@ -1,6 +1,6 @@
 # AI 安装指南
 
-本指南用于让 Codex 或其他本机 AI Agent 安装 Vibe Coding Codex Global Core 0.4.0。
+本指南用于让 Codex 或其他本机 AI Agent 安装 Vibe Coding Codex Global Core 0.4.1。
 
 ## 安装目标
 
@@ -25,12 +25,13 @@ AI 必须完成：
 4. 运行安装包装脚本；它会优先复用 `${CODEX_HOME:-$HOME/.codex}/vibe-python`，否则使用 Conda/Miniforge/Miniconda 创建 `vibe-coding` Python 3.11 环境并安装 `runtime/scripts/requirements.txt`；也可用 `VIBE_PYTHON` 临时覆盖。
 5. 安装 runtime/scripts/requirements.txt。
 6. 默认使用 --access-profile keep-existing，不修改我现有权限配置。
-7. 如果公司网络或 MCP 前置工具不可用，使用 --without-mcp 完成核心安装，不要阻塞核心工作流。
-8. 不使用 --skip-preflight。
-9. 安装后运行 global_installer.py verify。
-10. 创建临时项目，运行已安装的 init_project.py、validate_project.py、loopctl.py restore 和 loopctl.py validate。
-11. 不修改或删除任何真实项目的 .project-log。
-12. 最后报告版本、CODEX_HOME、Skill 路径、Hook 状态、备份路径、验证结果和任何限制。
+7. 默认不安装可选 MCP；如果用户明确选择，使用 `--mcp codegraph` 或其他 catalog 名称（可重复）。
+8. 如果公司网络或 MCP 前置工具不可用，使用 --without-mcp 完成核心安装，不要阻塞核心工作流。
+9. 不使用 --skip-preflight。
+10. 安装后运行 global_installer.py verify。
+11. 创建临时项目，运行已安装的 init_project.py、validate_project.py、loopctl.py restore 和 loopctl.py validate。
+12. 不修改或删除任何真实项目的 .project-log。
+13. 最后报告版本、CODEX_HOME、Skill 路径、Hook 状态、已选 MCP、备份路径、验证结果和任何限制。
 ```
 
 ## Windows 执行步骤
@@ -42,11 +43,11 @@ codex doctor
 codex features list
 py -3 -m pip install -r runtime\scripts\requirements.txt
 py -3 scripts\global_installer.py preflight
-.\install.ps1 --without-mcp
+.\install.ps1
 py -3 scripts\global_installer.py verify
 ```
 
-如确认本机具备 MCP 前置条件，可省略 `--without-mcp`。
+如用户明确要启用 CodeGraph，可改为 `./install.sh --mcp codegraph`（Windows 使用 `--mcp codegraph`）；默认不启用可选 MCP。
 
 ## Linux/macOS 执行步骤
 
@@ -57,7 +58,7 @@ codex doctor
 codex features list
 python3 -m pip install -r runtime/scripts/requirements.txt
 python3 scripts/global_installer.py preflight
-./install.sh --without-mcp
+./install.sh
 python3 scripts/global_installer.py verify
 ```
 

@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "mcps": [
+    {
+      "name": "codegraph",
+      "kind": "codex-stdio",
+      "description": "CodeGraph code intelligence and dependency graph for navigating a repository.",
+      "command": ["codegraph", "serve", "--mcp"],
+      "fallback_command": ["npx", "--yes", "@colbymchenry/codegraph", "serve", "--mcp"],
+      "default": false
+    },
+    {
+      "name": "vibe-toolbelt",
+      "kind": "codex-plugin",
+      "description": "Optional Vibe Coding MCP toolbelt for documentation, browser automation, documents, and web research.",
+      "plugin": "vibe-toolbelt@vibe-global-toolbox",
+      "marketplace": "vibe-global-toolbox",
+      "default": false
+    }
+  ]
+}
