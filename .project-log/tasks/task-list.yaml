@@ -84,5 +84,4 @@ tasks:
         - .project-log/tasks/task-list.yaml
         - .project-log/current-session.md
       deviations: []
-      follow_ups:
-        - Push the source-only change to origin/main through 127.0.0.1:10808
+      follow_ups: []
