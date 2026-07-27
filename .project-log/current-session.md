@@ -7,4 +7,4 @@
 - Active decisions: keep the native Codex `/goal` and subagent orchestration model; do not track ZIP release artifacts in the source repository
 - Blocking items: pytest is not installed; the equivalent unittest suite passed
 - Recent evidence: ROUTE-001 through ROUTE-003
-- Next step: continue development from remote commit `02e252b` on `origin/main`
+- Next step: continue development from remote commit `06d0f0e` on `origin/main`
