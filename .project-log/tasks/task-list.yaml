@@ -42,3 +42,47 @@ tasks:
       limitations:
         - codex doctor reports a host npm/Zed package-path mismatch
         - MCP was intentionally not installed
+  - id: TASK-002
+    title: Expand Codex Skill routing and keep repository source-only
+    kind: task
+    phase: implementation
+    goal: Make high-value installed Skills discoverable through the global Agent route table and stop tracking release archives
+    status: done
+    authority: A
+    owner: agent
+    related_business_logic: []
+    depends_on:
+      - TASK-001
+    inputs:
+      - prompts/vibe-global-agent.md
+      - skills directory
+      - existing release archives
+    outputs:
+      - expanded Skill route table
+      - source-only Git repository configuration
+    done_when:
+      - orchestration, research, context, workflow-maintenance, extraction, Skill-authoring, plan-stress-test, and UX-audit routes are explicit
+      - every newly routed Skill has a local SKILL.md
+      - release archives are removed from Git tracking and ignored
+      - package validation and the standard-library test suite pass
+    verification:
+      status: passed
+      commands:
+        - py -3 runtime/scripts/validate_package.py --root .
+        - py -3 -m unittest discover -s tests -v
+      evidence:
+        - ROUTE-001
+        - ROUTE-002
+        - ROUTE-003
+      limitations:
+        - pytest is not installed in the current Python environment; unittest execution passed
+    result:
+      summary: Added nine explicit Skill routes, removed tracked ZIP artifacts, and added ZIP ignore rules
+      changed_files:
+        - prompts/vibe-global-agent.md
+        - .gitignore
+        - .project-log/tasks/task-list.yaml
+        - .project-log/current-session.md
+      deviations: []
+      follow_ups:
+        - Push the source-only change to origin/main through 127.0.0.1:10808

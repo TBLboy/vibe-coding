@@ -68,8 +68,12 @@ business-intent
 
 - 业务规则、边界、异常不清：`a-business-clarify`
 - Loop 状态、失败归因、Retry Contract、证据有效性、Goal 验收与 Handoff：`a-loop-control`
+- 子 Agent 委派、角色选择、任务边界、并行策略与结果整合：`vibe-subagent-orchestration`
 - 固化当前增量范围：`a-requirement-baseline`
 - 框架、库、SDK、技术方案：`a-solution-research`
+- 跨领域、产品、市场、路线图或高成本决策研究：`a-deep-research`
+- 学术论文、方法和实验结果的结构化理解：`a-paper-reading`
+- 为其他 Agent、团队成员、Issue 或外部专家整理项目背景：`a-project-context-briefing`
 - 模块、接口、数据流、故障边界：`a-architecture-decision`
 - 可验证的依赖任务图：`a-task-decompose`
 - 实施前工程说明：`a-engineering-spec`
@@ -79,8 +83,13 @@ business-intent
 - 业务/代码/配置/测试双向对齐：`a-business-code-align`
 - 项目记录、会话恢复、工作留痕：`a-project-log`、`a-session-handoff`、`a-work-trace`
 - 复盘与经验蒸馏：`a-retrospective`、`a-operator-distill`、`a-skill-evolution`
+- 从成熟代码库或阶段成果提炼可复用知识：`a-codebase-extraction`
+- 更新 AGENTS.md、Skills、Hooks、插件、Schema 或运行时：`a-workflow-update`
+- 为新 Skill 设计触发条件、边界和验证：`b-skill-authoring`
 - 长时间任务：`b-background-task-runner`
 - 当前网络证据与技术检索：`b-web-research-tooling`
+- 对方案进行逐项质疑并暴露决策风险：`b-plan-stress-test`
+- 对运行中的 Web 应用执行多角色真实流程审计：`b-multi-role-ux-audit`
 
 ## 子 Agent 编排
 

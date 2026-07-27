@@ -1,2 +1,41 @@
 version: "0.2"
-evidence: []
+evidence:
+  - id: ROUTE-001
+    task_id: TASK-002
+    business_logic: []
+    acceptance_criteria:
+      - Every newly routed Skill has a local SKILL.md
+    result: passed
+    level: 1
+    commands:
+      - PowerShell route existence check for nine newly routed Skills
+    limitations: []
+    artifacts:
+      - prompts/vibe-global-agent.md
+      - skills/
+  - id: ROUTE-002
+    task_id: TASK-002
+    business_logic: []
+    acceptance_criteria:
+      - Package validation passes
+    result: passed
+    level: 2
+    commands:
+      - py -3 runtime/scripts/validate_package.py --root .
+    limitations: []
+    artifacts:
+      - runtime/scripts/validate_package.py
+  - id: ROUTE-003
+    task_id: TASK-002
+    business_logic: []
+    acceptance_criteria:
+      - Existing standard-library tests pass
+    result: passed
+    level: 2
+    commands:
+      - py -3 -m unittest discover -s tests -v
+    limitations:
+      - pytest is not installed in the current Python environment
+    artifacts:
+      - tests/test_installer.py
+      - tests/test_loop_core.py
