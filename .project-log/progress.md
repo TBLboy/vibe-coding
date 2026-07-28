@@ -39,3 +39,10 @@
 - 修复：Windows 下安装器和回归测试统一使用 `shutil.which("codex")` 返回的可执行路径，避免 `.cmd` 包装器导致 `WinError 2`。
 - 验证：installer verify、package/project/workflow/Loop validate 全部通过；pytest `21 passed, 1 skipped, 4 subtests passed`；Codex MCP 和插件列表冒烟检查通过。
 - 边界：尚未在当前已运行 ACP 线程内直接调用 MCP/plugin 工具；需重启 Codex 或 Zed ACP Thread 使新能力加载。
+
+## 2026-07-28T11:00:00+08:00 project-log-archive 路由补齐
+
+- 状态：已完成源提示路由更新，待提交并推送。
+- 变更：在 `prompts/vibe-global-agent.md` 增加 `a-project-log-archive` 路由；在 `docs/skill-routing.md` 增加工程日志归档映射。
+- 验证：全局 `/home/tbl/.codex/AGENTS.md` 已包含同名路由；仓库中的 Skill 目录已存在。
+- 下一步：运行 diff 检查和脚本编译检查后提交并 push `main`。

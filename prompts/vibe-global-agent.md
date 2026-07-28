@@ -90,6 +90,7 @@ business-intent
 - 验收与证据：`a-verification`
 - 业务/代码/配置/测试双向对齐：`a-business-code-align`
 - 项目记录、会话恢复、工作留痕：`a-project-log`、`a-session-handoff`、`a-work-trace`
+- 项目日志归档至知识库：`a-project-log-archive`
 - 复盘与经验蒸馏：`a-retrospective`、`a-operator-distill`、`a-skill-evolution`
 - 从成熟代码库或阶段成果提炼可复用知识：`a-codebase-extraction`
 - 更新 AGENTS.md、Skills、Hooks、插件、Schema 或运行时：`a-workflow-update`

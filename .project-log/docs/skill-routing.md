@@ -14,6 +14,7 @@
 | 项目阶段完成 | retrospective | operator-distill | retrospective |
 | 想让工作流学习自己 | operator-distill | retrospective | distillation |
 | 记录高信号思维-行动-结果链 | work-trace | project-log | work-trace |
+| 将当前工程日志归档至中央知识库 | project-log-archive | project-log | 知识库工程记录/<project>/.project-log |
 | 将批准经验编码为能力 | skill-evolution | operator-distill | evals/proposals |
 | 安全更新工作流 | workflow-update | project-log | backups/changelog |
 | 快速读论文或准备复现 | paper-reading | solution-research | researches/papers |
