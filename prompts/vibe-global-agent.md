@@ -143,6 +143,10 @@ python3 "$VIBE_RUNTIME/scripts/render_subagent_prompt.py" \
 - 正式 Loop Decision 只在任务开始/切换、验证完成、Reviewer 完成、阶段退出、阻塞、达到上限、用户 C 级决策、Goal 完成检查和 Handoff 时产生。
 - 原生 Goal 显示 complete 后仍需运行 `loopctl evaluate goal`。未满足 Project Goal 成功条件和必需证据时不得宣布项目完成。
 
+## Git 推送规则
+
+- `git push` 失败时，使用本机 `127.0.0.1:10808` HTTP/HTTPS 代理重试。
+
 ## 用户可用触发语句
 
 用户说“vibe 开始 / 恢复 / 规划 / 实现 / 验证 / 状态 / 复盘”时，按上述生命周期直接处理，而非要求记忆 OpenCode Slash Command。

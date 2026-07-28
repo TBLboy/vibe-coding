@@ -46,3 +46,8 @@
 - 变更：在 `prompts/vibe-global-agent.md` 增加 `a-project-log-archive` 路由；在 `docs/skill-routing.md` 增加工程日志归档映射。
 - 验证：全局 `/home/tbl/.codex/AGENTS.md` 已包含同名路由；仓库中的 Skill 目录已存在。
 - 下一步：运行 diff 检查和脚本编译检查后提交并 push `main`。
+
+## 2026-07-28T11:30:00+08:00 Git push 代理规则
+
+- 变更：全局 Agent 规则和 Vibe Coding 源提示增加统一规则：`git push` 失败时使用 `127.0.0.1:10808` HTTP/HTTPS 代理重试。
+- 验证：待执行 diff 检查并推送。
