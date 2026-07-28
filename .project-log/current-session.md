@@ -1,10 +1,11 @@
 # Current Session
 
 - Current phase: verification
-- Current goal: install and verify the latest Codex Vibe Coding framework on Windows
-- Current task: TASK-005 — install optional MCP and plugin capabilities for Vibe Coding Core 0.4.1 (done)
-- Confirmed facts: Vibe Coding Core 0.4.1 is installed globally; the isolated Conda interpreter is D:\conda\envs\vibe-coding\python.exe; `codegraph` is enabled as a Codex stdio MCP; `vibe-toolbelt@vibe-global-toolbox` version 0.4.1 is installed and enabled; the latest backup is C:\Users\12187\.codex\backups\vibe-global-update-20260727-222855-802325.
-- Active decisions: DEC-001 — optional MCPs remain declarative and opt-in; this installation explicitly enables `codegraph` and `vibe-toolbelt`; access profile remains `keep-existing`.
-- Blocking items: none for installation or validation; Codex doctor retains a nonblocking duplicate npm/Zed installation diagnostic that was not changed.
-- Recent evidence: INSTALL-002; package, project, workflow, Loop, installer verification, MCP/plugin status checks, and pytest all passed.
-- Next step: restart Codex or the Zed ACP Thread so the updated global prompt, Skills, MCP, and plugin are loaded in a fresh session.
+- Current goal: keep the Vibe Coding workflow rules and centralized project-log archive synchronized.
+- Current task: update the `a-project-log-archive` routing and Git push proxy rule, then archive this project's latest `.project-log/`.
+- Confirmed facts: `a-project-log-archive` is present in the repository and local Skill tree; the source prompt and global `/home/tbl/.codex/AGENTS.md` contain the same routing; commit `f333be9` contains the Git push proxy rule.
+- Active decisions: archive replaces the existing `My_knowledge_base/工程记录/vibe-coding/.project-log/` with this project's latest copy, then commits and pushes the knowledge base.
+- Blocking items: none known.
+- Recent evidence: `git diff --check` passed; the Vibe Coding repository was pushed successfully through `127.0.0.1:10808`.
+- Recent result: `a-project-log-archive` copied 62 files to the knowledge base and pushed commit `99eb7da` on `work_record`.
+- Next step: none for this archive task.

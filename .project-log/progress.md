@@ -50,4 +50,11 @@
 ## 2026-07-28T11:30:00+08:00 Git push 代理规则
 
 - 变更：全局 Agent 规则和 Vibe Coding 源提示增加统一规则：`git push` 失败时使用 `127.0.0.1:10808` HTTP/HTTPS 代理重试。
-- 验证：待执行 diff 检查并推送。
+- 验证：`git diff --check` 通过；提交 `f333be9` 已通过 `127.0.0.1:10808` 推送到 `origin/main`。
+
+## 2026-07-28T12:00:00+08:00 归档 vibe-coding 工程记录
+
+- 目标：将当前工程最新 `.project-log/` 同步到 `My_knowledge_base/工程记录/vibe-coding/.project-log/`。
+- 动作：删除归档目标中的旧 `.project-log/`，复制当前版本，并提交推送知识库。
+- 状态：已完成。
+- 验证：归档目标包含 62 个文件；知识库提交 `99eb7da` 已推送到 `origin/work_record`。
