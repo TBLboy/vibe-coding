@@ -204,3 +204,38 @@ tasks:
     - 重启 Codex 或 Zed ACP Thread，使 CodeGraph MCP 工具在新会话加载。
   created_at: '2026-07-27T11:48:34+08:00'
   updated_at: '2026-07-27T11:54:48+08:00'
+- id: TASK-005
+  title: 将源码驱动代码讲解 Skill 同步到 Vibe Coding 源码包
+  kind: task
+  phase: distillation
+  goal: 将已经在项目中验证的源码深读方法纳入 Vibe Coding 源码包，供后续项目和 Codex 会话复用
+  status: done
+  authority: A
+  owner: agent
+  related_business_logic: []
+  depends_on: []
+  inputs:
+  - /home/tbl/.codex/skills/b-source-code-tutoring/SKILL.md
+  - /home/tbl/.codex/skills/b-source-code-tutoring/agents/openai.yaml
+  - /home/tbl/.codex/skills/b-source-code-tutoring/references/teaching-template.md
+  - 用户确认的源码讲解方法
+  outputs:
+  - skills/b-source-code-tutoring/SKILL.md
+  - skills/b-source-code-tutoring/agents/openai.yaml
+  - skills/b-source-code-tutoring/references/teaching-template.md
+  - .project-log/evals/source-code-tutoring.yaml
+  done_when:
+  - Skill 已放入源码包的 skills 目录并通过包校验
+  - Skill 保持显式触发，不改变主 Agent 的自动路由
+  - 项目日志记录同步内容、验证证据和后续边界
+  verification:
+    status: passed
+    commands:
+    - /home/tbl/miniforge3/envs/vibe-coding/bin/python runtime/scripts/validate_package.py --root .
+    - /home/tbl/miniforge3/envs/vibe-coding/bin/python -m unittest discover -s tests -v
+    - /home/tbl/miniforge3/envs/vibe-coding/bin/python runtime/scripts/validate_project.py --root .
+    evidence:
+    - skills/b-source-code-tutoring/SKILL.md
+    - .project-log/evals/source-code-tutoring.yaml
+    limitations:
+    - 未在新的独立代码库教学会话中完成端到端人工评测；已保留评测样例。

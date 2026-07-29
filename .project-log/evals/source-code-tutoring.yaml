@@ -1,0 +1,25 @@
+version: '0.2'
+skill: b-source-code-tutoring
+cases:
+- id: EVAL-SCT-001
+  type: normal
+  prompt: 带我读这个任务调度节点，从任务启动追到下游执行，并解释状态变量如何变化。
+  expected:
+  - 选择一条真实的窄调用链
+  - 指出源码锚点和边界对象
+  - 使用具体输入值给出运行时间线
+  - 给出状态变量生命周期表
+  - 在源码解释之后再命名工程模式
+- id: EVAL-SCT-002
+  type: line-by-line
+  prompt: 逐行解释这个回调函数，包括每个 early return 为什么存在。
+  expected:
+  - 按源代码顺序解释
+  - 指出调用者、输入状态、分支条件、写入字段和下游消费者
+  - 不用伪代码替代真实实现
+- id: EVAL-SCT-003
+  type: non-trigger
+  prompt: Python 里的单下划线是什么意思？
+  expected:
+  - 不自动启动完整源码教学流程
+  - 直接提供简短准确说明，除非用户要求结合具体仓库继续阅读

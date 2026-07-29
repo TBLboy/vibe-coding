@@ -1,2 +1,17 @@
 version: "0.2"
-candidates: []
+candidates:
+- id: DISTILL-001
+  statement: 以“具体运行时间线 → 状态变量生命周期 → 源码逐行实现 → 最后概念抽象”的顺序讲解代码，能比先给模块职责或拟人化类比更有效地帮助用户建立内部执行模型。
+  stage: encoded-asset
+  confidence: 1.0
+  context:
+  - 用户在阅读异步 ROS 2 任务调度代码时明确确认该方式最有效。
+  - 该方法适用于后续深入阅读不同工程的源码调用链。
+  evidence:
+  - /home/tbl/Project/boss_electrics/.project-log/docs/source-code-learning.md
+  - /home/tbl/Project/boss_electrics/.project-log/evals/source-code-tutoring.yaml
+  - skills/b-source-code-tutoring/SKILL.md
+  counterexamples:
+  - 简短术语问题不应自动展开为完整源码教程。
+  target: b-source-code-tutoring
+  approval_required: false

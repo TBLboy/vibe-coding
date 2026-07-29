@@ -79,3 +79,22 @@ entries:
   - MCP-006
   - MCP-007
   knowledge_candidate: false
+- id: TRACE-007
+  task_id: TASK-005
+  timestamp: '2026-07-29T00:00:00+08:00'
+  context: 用户要求将已经验证的源码讲解方法同步到 Vibe Coding 源码包，并更新该仓库的项目日志后推送。
+  hypothesis: 将 Skill 主文档、讲解模板、展示元数据和评测样例纳入源码包，可以让后续项目复用同一套源码驱动学习流程。
+  decision_ref: null
+  action: 读取源 Skill 和 Vibe Coding Skill/安装器规范，新增 `skills/b-source-code-tutoring/`，更新任务、进度、会话、蒸馏和评测记录；保持显式触发，不修改自动路由。
+  expected_result: Vibe Coding 包校验能发现并打包该 Skill，项目日志能恢复本次同步的变更、边界和验证证据。
+  observation: 安装器通过 `source_skills()` 自动收集 `skills/*` 目录；包校验要求 Skill frontmatter 合法，但没有要求额外的自动路由条目。
+  actual_result: Skill 文件和项目日志已写入；包校验、项目日志 schema 校验和 22 个 unittest 均通过，1 个历史 0.3.0 迁移测试因归档包不在当前源码工作区而跳过。
+  delta: 从用户级已安装 Skill 扩展为 Vibe Coding 源码包的受版本控制资源。
+  lesson: 显式触发的学习型 Skill 应随源码包发布，但不应因为存在 Skill 就扩大主 Agent 的自动触发范围。
+  next_adjustment: 审阅最终差异后提交并推送 `main`。
+  evidence:
+  - skills/b-source-code-tutoring/SKILL.md
+  - skills/b-source-code-tutoring/agents/openai.yaml
+  - skills/b-source-code-tutoring/references/teaching-template.md
+  - .project-log/evals/source-code-tutoring.yaml
+  knowledge_candidate: true
