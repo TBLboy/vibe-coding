@@ -283,3 +283,131 @@ evidence:
   - tests/test_installer.py
   - C:\Users\12187\.codex\.vibe-codex-installation-state.json
   - C:\Users\12187\.codex\backups\vibe-global-update-20260727-222855-802325
+- id: INSTALL-003
+  task_id: TASK-005
+  business_logic: []
+  acceptance_criteria:
+  - Global installer verify passes with hooks config block present
+  - codegraph MCP enabled and responds to MCP initialize
+  - vibe-toolbelt plugin installed, enabled, version 0.4.1
+  - User model provider config preserved
+  result: passed
+  level: 4
+  commands:
+  - D:\conda\envs\vibe-coding\python.exe scripts\global_installer.py verify
+  - D:\conda\envs\vibe-coding\python.exe C:\Users\12187\.codex\vibe-workflow\scripts\validate_project.py --root .
+  - D:\conda\envs\vibe-coding\python.exe C:\Users\12187\.codex\vibe-workflow\scripts\validate_workflow.py
+  - D:\conda\envs\vibe-coding\python.exe C:\Users\12187\.codex\vibe-workflow\scripts\loopctl.py --root . --json validate
+  - D:\conda\envs\vibe-coding\python.exe -m pytest -q
+  - codex mcp list
+  - codex plugin list
+  - npx --yes @colbymchenry/codegraph serve --mcp (MCP initialize smoke test)
+  results:
+  - installer verify: Global installation verification passed
+  - project/workflow/loop validation: all passed
+  - pytest: 21 passed, 1 skipped, 4 subtests passed
+  - codegraph: enabled, serverInfo 1.5.0 on initialize
+  - vibe-toolbelt: installed, enabled, 0.4.1
+  - model config: preserved (deepseek-v4-flash-free / 127.0.0.1:15721)
+  limitations:
+  - Actual MCP/plugin tool invocation in the current ACP thread remains unverified until the session is restarted.
+  artifacts:
+  - C:\Users\12187\.codex\config.toml
+  - C:\Users\12187\.codex\.vibe-codex-installation-state.json
+  - C:\Users\12187\.codex\backups\vibe-global-update-20260801-144717-992833
+
+- id: ROOTCAUSE-001
+  task_id: TASK-005
+  business_logic:
+  - 全局 Codex 配置应同时承载模型供应商配置与 Vibe 受管配置（hooks/MCP/插件），互不静默覆盖。
+  acceptance_criteria:
+  - 定位 MCP/hooks/插件安装后失效的具体外部写入方
+  - 证明失效事件与外部写入时间一一对应
+  - 说明安装器恢复机制为何无法防止复发
+  result: passed
+  level: 4
+  commands:
+  - 比对 C:\Users\12187\.codex\backups\ 内各备份 config.toml 的字节数与 mtime
+  - 检索 C:\Users\12187\.cc-switch\logs\cc-switch.log 的接管记录
+  - 检查 C:\Users\12187\.cc-switch\settings.json 与 cc-switch.db 的 proxy_live_backup 表
+  - tomllib 校验当前 config.toml 的 hooks/mcp_servers/marketplaces/plugins 存在
+  limitations:
+  - cc-switch 为闭源桌面应用，未审查其源码；行为由日志、备份内容与时间戳交叉验证。
+  artifacts:
+  - C:\Users\12187\.codex\backups\vibe-global-update-20260728-204228-172873\config.toml
+  - C:\Users\12187\.codex\backups\vibe-global-update-20260801-144717-992833\config.toml
+  - C:\Users\12187\.cc-switch\logs\cc-switch.log
+  - C:\Users\12187\.cc-switch\settings.json
+  - C:\Users\12187\.cc-switch\cc-switch.db
+
+- id: REPRO-001
+  task_id: TASK-005
+  business_logic:
+  - 全局 Codex 配置应同时承载模型供应商配置与 Vibe 受管配置（hooks/MCP/插件），互不静默覆盖。
+  acceptance_criteria:
+  - 用户使用 cc-switch 热切换模型后，检查 config.toml 是否仍含 Vibe 受管段
+  - 若被覆盖，通过安装器恢复并验证 MCP/插件/hooks 可用
+  result: passed
+  level: 4
+  commands:
+  - tomllib 检查热切换后 config.toml 的 hooks/mcp_servers/marketplaces/plugins
+  - codex mcp list / codex plugin list
+  - global_installer.py update --access-profile keep-existing --mcp codegraph --mcp vibe-toolbelt
+  - global_installer.py verify
+  limitations:
+  - cc-switch 自身管理 MCP servers，因此本次整写保留了 [mcp_servers] 段，codegraph 仍 enabled；hooks/marketplace/plugins 仍被删除，需安装器恢复。
+  artifacts:
+  - C:\Users\12187\.codex\config.toml
+  - C:\Users\12187\.codex\backups\vibe-global-update-20260801-150629-068198
+  - C:\Users\12187\.cc-switch\logs\cc-switch.log
+
+- id: COMMONCFG-001
+  task_id: TASK-005
+  business_logic:
+  - 全局 Codex 配置应同时承载模型供应商配置与 Vibe 受管配置（hooks/MCP/插件），互不静默覆盖。
+  acceptance_criteria:
+  - 验证 cc-switch“应用通用配置”选项能否透传完整 TOML 段（hooks/marketplace/plugins）
+  - 验证透传后 Codex MCP/插件/hooks 是否仍可用
+  - 验证透传结果与 Vibe 安装器 update 是否兼容
+  result: partial
+  level: 4
+  commands:
+  - 在 cc-switch 通用配置（settings.common_config_codex）加入带 VIBE-CODEX-GLOBAL 标记的完整 Vibe 块
+  - 用户手动切换模型后检查 config.toml 与 codex mcp list/plugin list
+  - 离线模拟安装器 strip_config_block/preserved_mcp_sections 剥离逻辑
+  limitations:
+  - cc-switch 为闭源应用，序列化行为由写入结果反推：其重排了 TOML 段顺序，并把 [model_providers]/[mcp_servers.codegraph] 插入 Vibe 标记块内部。
+  - cc-switch 序列化丢失了行尾注释 # VIBE-CODEX-GLOBAL:CONFIG:END，导致安装器 update 报 unterminated managed block。
+  artifacts:
+  - C:\Users\12187\.codex\config.toml
+  - C:\Users\12187\.cc-switch\cc-switch.db
+  - D:\Project\vibe-coding\cc-switch-common-config-codex.txt
+  - D:\Project\vibe-coding\scripts\global_installer.py
+
+- id: COMPATFIX-001
+  task_id: TASK-005
+  business_logic:
+  - 全局 Codex 配置应同时承载模型供应商配置与 Vibe 受管配置（hooks/MCP/插件），互不静默覆盖。
+  - 安装器应能安全修复第三方工具（cc-switch）重写后的 config.toml，而不是报错或误删用户配置。
+  acceptance_criteria:
+  - 安装器 update 在 BEGIN 存在、END 缺失的 config.toml 上不报错
+  - 剥离标记块时保留混入的 model_providers/mcp_servers 段
+  - 重建后 hooks/marketplace/plugins/END 标记完整，TOML 合法
+  - 卸载时同样保留 model_providers/mcp_servers
+  - 新增回归测试与全量测试通过
+  result: passed
+  level: 4
+  commands:
+  - 修改 global_installer.py：config_block_bounds 容忍缺失 END；_sections_in_block 抽出 model_providers/mcp_servers；install_config/remove_config 合并保留段
+  - pytest tests/test_installer.py -q（10 passed, 1 skipped）
+  - pytest -q（23 passed, 1 skipped, 4 subtests passed）
+  - validate_package.py --root .（passed）
+  - 真实环境 global_installer.py update --access-profile keep-existing --mcp codegraph --mcp vibe-toolbelt
+  - codex mcp list / codex plugin list
+  limitations:
+  - 端到端实测基于当前 cc-switch 写入格式；cc-switch 后续版本若改变序列化方式需重新验证。
+  artifacts:
+  - D:\Project\vibe-coding\scripts\global_installer.py
+  - D:\Project\vibe-coding\tests\test_installer.py
+  - C:\Users\12187\.codex\config.toml
+  - C:\Users\12187\.codex\backups\vibe-global-update-20260801-152623-806243

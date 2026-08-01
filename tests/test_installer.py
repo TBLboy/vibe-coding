@@ -312,6 +312,113 @@ class InstallerTests(unittest.TestCase):
             self.assertIn('sandbox_mode = "workspace-write"', config)
             self.assertNotIn("[[hooks.", config)
 
+    def test_update_repairs_cc_switch_rewritten_config(self) -> None:
+        # cc-switch rewrites config.toml on model hot-switch: it keeps the
+        # BEGIN marker but drops the END marker, interleaves its own
+        # [model_providers] tables with the managed hooks block, and drops
+        # marketplaces/plugins. An update must repair the block without losing
+        # the model provider or MCP configuration.
+        cc_switch_config = (
+            'model_provider = "custom"\n'
+            'model = "deepseek-v4-flash-free"\n'
+            'model_catalog_json = "cc-switch-model-catalog.json"\n'
+            "\n"
+            "[features]\n"
+            "goals = true\n"
+            "\n"
+            "# VIBE-CODEX-GLOBAL:CONFIG:BEGIN\n"
+            "[[hooks.SessionStart]]\n"
+            "[[hooks.SessionStart.hooks]]\n"
+            'type = "command"\n'
+            'command = "echo hi"\n'
+            "\n"
+            "[model_providers]\n"
+            "[[hooks.PostToolUse]]\n"
+            "[model_providers.custom]\n"
+            'name = "custom"\n'
+            'base_url = "http://127.0.0.1:15721/v1"\n'
+            "[[hooks.PostToolUse.hooks]]\n"
+            'type = "command"\n'
+            'command = "echo bye"\n'
+            "\n"
+            "[mcp_servers.codegraph]\n"
+            'command = "npx"\n'
+            'args = ["serve", "--mcp"]\n'
+            "\n"
+            "[marketplaces.vibe-global-toolbox]\n"
+            'source_type = "local"\n'
+            "source = 'D:\\\\Project\\\\vibe-coding'\n"
+            "\n"
+            '[plugins."vibe-toolbelt@vibe-global-toolbox"]\n'
+            "enabled = true\n"
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary) / "codex-home"
+            home.mkdir()
+            (home / "config.toml").write_text(cc_switch_config, encoding="utf-8")
+
+            update = run_installer(
+                "update",
+                "--codex-home",
+                str(home),
+                "--access-profile",
+                "keep-existing",
+                "--skip-preflight",
+            )
+            self.assertEqual(update.returncode, 0, update.stdout)
+
+            raw = (home / "config.toml").read_text(encoding="utf-8")
+            parsed = tomllib.loads(raw)
+            self.assertEqual(parsed["model_providers"]["custom"]["base_url"], "http://127.0.0.1:15721/v1")
+            self.assertEqual(parsed["mcp_servers"]["codegraph"]["command"], "npx")
+            self.assertIn("SessionStart", parsed["hooks"])
+            self.assertIn("# VIBE-CODEX-GLOBAL:CONFIG:BEGIN", raw)
+            self.assertIn("# VIBE-CODEX-GLOBAL:CONFIG:END", raw)
+
+    def test_uninstall_preserves_cc_switch_provider_config(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary) / "codex-home"
+            install = run_installer(
+                "install",
+                "--codex-home",
+                str(home),
+                "--skip-preflight",
+            )
+            self.assertEqual(install.returncode, 0, install.stdout)
+
+            # Simulate cc-switch rewriting the installed config (no END marker,
+            # model_providers/mcp_servers interleaved inside the managed block).
+            rewritten = (
+                'model_provider = "custom"\n'
+                "model = \"gpt-5.4\"\n"
+                "model_catalog_json = \"cc-switch-model-catalog.json\"\n"
+                "\n"
+                "# VIBE-CODEX-GLOBAL:CONFIG:BEGIN\n"
+                "[[hooks.SessionStart]]\n"
+                "[model_providers]\n"
+                "[model_providers.custom]\n"
+                'name = "custom"\n'
+                'base_url = "http://127.0.0.1:15721/v1"\n'
+                "[mcp_servers.codegraph]\n"
+                'command = "npx"\n'
+                'args = ["serve", "--mcp"]\n'
+            )
+            (home / "config.toml").write_text(rewritten, encoding="utf-8")
+
+            uninstall = run_installer(
+                "uninstall",
+                "--codex-home",
+                str(home),
+                "--skip-preflight",
+            )
+            self.assertEqual(uninstall.returncode, 0, uninstall.stdout)
+
+            raw = (home / "config.toml").read_text(encoding="utf-8")
+            self.assertNotIn("VIBE-CODEX-GLOBAL", raw)
+            parsed = tomllib.loads(raw)
+            self.assertEqual(parsed["model_providers"]["custom"]["base_url"], "http://127.0.0.1:15721/v1")
+            self.assertEqual(parsed["mcp_servers"]["codegraph"]["command"], "npx")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,0 +1,38 @@
+model_reasoning_effort = "high"
+disable_response_storage = true
+
+# VIBE-CODEX-GLOBAL:CONFIG:BEGIN
+[[hooks.SessionStart]]
+[[hooks.SessionStart.hooks]]
+type = "command"
+command = "\"D:/conda/envs/vibe-coding/python.exe\" \"C:/Users/12187/.codex/vibe-workflow/hooks/session_start.py\""
+commandWindows = "\"D:\\conda\\envs\\vibe-coding\\python.exe\" \"C:\\Users\\12187\\.codex\\vibe-workflow\\hooks\\session_start.py\""
+timeout = 15
+additionalContextLimit = 2500
+
+[[hooks.PostToolUse]]
+[[hooks.PostToolUse.hooks]]
+type = "command"
+command = "\"D:/conda/envs/vibe-coding/python.exe\" \"C:/Users/12187/.codex/vibe-workflow/hooks/post_tool_use.py\""
+commandWindows = "\"D:\\conda\\envs\\vibe-coding\\python.exe\" \"C:\\Users\\12187\\.codex\\vibe-workflow\\hooks\\post_tool_use.py\""
+timeout = 15
+additionalContextLimit = 2500
+async = true
+
+[[hooks.PreCompact]]
+[[hooks.PreCompact.hooks]]
+type = "command"
+command = "\"D:/conda/envs/vibe-coding/python.exe\" \"C:/Users/12187/.codex/vibe-workflow/hooks/pre_compact.py\""
+commandWindows = "\"D:\\conda\\envs\\vibe-coding\\python.exe\" \"C:\\Users\\12187\\.codex\\vibe-workflow\\hooks\\pre_compact.py\""
+timeout = 15
+additionalContextLimit = 2500
+
+[marketplaces.vibe-global-toolbox]
+last_updated = "2026-08-01T07:06:29Z"
+source_type = "local"
+source = '\\?\D:\Project\vibe-coding'
+
+[plugins."vibe-toolbelt@vibe-global-toolbox"]
+enabled = true
+
+# VIBE-CODEX-GLOBAL:CONFIG:END

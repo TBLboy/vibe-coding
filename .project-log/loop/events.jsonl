@@ -12,3 +12,8 @@
 {"schema_version":1,"event_id":"LE-000011","time":"2026-07-27T13:56:56Z","run_id":null,"type":"evidence-recorded","evidence_id":"MCP-007","status":"valid"}
 {"schema_version":1,"event_id":"LE-000012","time":"2026-07-27T13:58:34Z","run_id":null,"type":"evidence-recorded","evidence_id":"MCP-007","status":"valid"}
 {"schema_version":1,"event_id":"LE-000013","time":"2026-07-27T13:59:46Z","run_id":null,"type":"evidence-recorded","evidence_id":"MCP-006","status":"valid"}
+{"schema_version":1,"event_id":"LE-000014","time":"2026-08-01T06:50:26Z","run_id":null,"type":"handoff-generated","reason":"active"}
+{"schema_version":1,"event_id":"LE-000015","time":"2026-08-01T07:30:00Z","run_id":null,"type":"evidence-recorded","evidence_id":"ROOTCAUSE-001","status":"valid"}
+{"schema_version":1,"event_id":"LE-000016","time":"2026-08-01T07:10:00Z","run_id":null,"type":"evidence-recorded","evidence_id":"REPRO-001","status":"valid"}
+{"schema_version":1,"event_id":"LE-000017","time":"2026-08-01T07:20:00Z","run_id":null,"type":"evidence-recorded","evidence_id":"COMMONCFG-001","status":"partial"}
+{"schema_version":1,"event_id":"LE-000018","time":"2026-08-01T07:28:00Z","run_id":null,"type":"evidence-recorded","evidence_id":"COMPATFIX-001","status":"valid"}

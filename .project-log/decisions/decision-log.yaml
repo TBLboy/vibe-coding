@@ -58,3 +58,61 @@ decisions:
   supersedes: []
   created_at: '2026-07-27T11:48:34+08:00'
   updated_at: '2026-07-27T11:54:48+08:00'
+
+- id: DEC-002
+  title: MCP/hooks/插件失效根因确认为 cc-switch 整写 config.toml，防复发方案待用户选择
+  category: tooling
+  status: active
+  authority: B
+  user_approval: approved
+  related_tasks:
+  - TASK-005
+  related_business_logic: []
+  context: VibeCoding 安装后 MCP/hooks/插件多次失效，每次重装后短暂恢复。备份与 cc-switch 日志时间线比对显示，cc-switch 在启动/异常恢复/热切换时整写 C:\Users\12187\.codex\config.toml，仅保留其管理的模型字段，删除 Vibe 受管的 hooks/mcp_servers/marketplaces/plugins 段。
+  hypothesis: 失效由第三方配置接管工具 cc-switch 在每次“重新接管 Codex Live 配置”时覆盖 config.toml 造成；安装器只在运行时恢复，无守护机制。
+  options:
+  - name: 关闭 cc-switch 对 Codex 的接管与自动启动
+    benefits:
+    - 从源头消除覆盖源，最可靠
+    costs:
+    - 需要手动切换模型或改用其他方式
+    risks:
+    - 用户已依赖 cc-switch 的模型热切换体验
+  - name: 安装器增加配置守护/自愈校验
+    benefits:
+    - 即使外部工具覆盖也能自动恢复
+    costs:
+    - 属于框架功能改动，需要实现与测试
+    risks:
+    - 与 cc-switch 写入竞争，可能产生配置抖动
+  - name: cc-switch 支持合并保留其他配置段时开启
+    benefits:
+    - 双方配置可共存
+    costs:
+    - 依赖第三方功能是否支持
+    risks:
+    - 需验证每次接管后 Vibe 段仍完整
+  decision: 根因确认（cc-switch 整写覆盖）。防复发采用“方案 C（cc-switch 通用配置托管 Vibe 块）+ 安装器兼容增强”组合：用户在 cc-switch 通用配置中维护带标记的完整 Vibe 块，安装器修复 cc-switch 重写格式（容忍缺失 END、剥离时保留混入的 model_providers/mcp_servers）。
+  reason_summary:
+  - 7/28 20:37、7/29 20:55、8/1 08:33 的 config.toml 被裁为 394 字节，与 cc-switch 日志“重新接管”时间戳逐一吻合
+  - 394 字节配置含 cc-switch 专属字段 model_catalog_json 与 experimental_bearer_token = "PROXY_MANAGED"
+  - cc-switch 数据库 proxy_live_backup 中 codex 的 original_config 仅含模型字段，证明其“备份”不包含 Vibe 受管段
+  - 安装器 backup() 在写入前执行，其备份反映的正是被 cc-switch 裁后的状态
+  conditions:
+  - 用户确认采用哪个防复发方案后再实施
+  - 任何方案不得静默丢失用户模型供应商配置
+  action: 记录根因分析到项目日志；向用户输出结论与防复发选项；待用户选择后实施。
+  expected_result: 明确 MCP/hooks/插件失效的根因与可选防复发路径；热切换后 Vibe 配置保留且安装器 update 不再报错或误删用户配置。
+  reversal_plan: 不涉及代码改动，无需回滚。
+  observation: 当前 config.toml 已由安装器恢复为 1847 字节，hooks/MCP/marketplace/plugins 段完整，模型配置保留。
+  actual_result: 根因链闭环：cc-switch 每次启动/异常恢复/热切换整写 config.toml；方案 C 实测透传完整 TOML 段（热切换后 hooks/marketplace/plugins 保留）；安装器增强后 update 在真实 cc-switch 重写配置上成功修复（model_providers/mcp_servers 保留、END 恢复、marketplace/plugin 重建），codex mcp list 全 enabled，vibe-toolbelt 0.4.1 正常。
+  outcome_status: successful
+  lesson: 全局配置存在多个写入方时，应把“外部写入方审计”纳入配置失效排查第一步；恢复机制需要能安全修复第三方工具的整写结果（容忍其格式变化、保留其混入段），而不只是安装时一次性写入。
+  evidence:
+  - ROOTCAUSE-001
+  - REPRO-001
+  - COMMONCFG-001
+  - COMPATFIX-001
+  supersedes: []
+  created_at: '2026-08-01T15:30:00+08:00'
+  updated_at: '2026-08-01T15:30:00+08:00'

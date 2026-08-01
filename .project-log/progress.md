@@ -68,3 +68,65 @@
 - 评测：新增 `.project-log/evals/source-code-tutoring.yaml`，覆盖正常异步调用链、逐行回调和非触发短问答。
 - 验证：包校验通过；项目日志 schema 校验通过；22 个 unittest 通过，1 个历史 0.3.0 迁移测试跳过。
 - 下一步：审阅最终差异后提交并推送 `origin/main`。
+
+
+## 2026-08-01T15:20:00+08:00 ???? MCP ????hooks ??????
+
+- ????????????????
+- ???PATH ? `python` ? Conda base ? Python 2.7.14????????????????????? `config.toml` ??????????? hooks ????codegraph MCP ? marketplace?
+- ???? `D:\conda\envs\vibe-coding\python.exe`?3.11.15??? `global_installer.py update --access-profile keep-existing --mcp codegraph --mcp vibe-toolbelt`?hooks ???? `C:\Users\12187\.codex\config.toml`?SessionStart/PostToolUse/PreCompact ?? `C:\Users\12187\.codex\vibe-workflow\hooks\*.py`??
+- MCP?`codex mcp list` ?? codegraph?document-loader?github?playwright?web-search?context7 ? enabled?codegraph initialize ?????? serverInfo codegraph 1.5.0?
+- ???`codex plugin list` ?? `vibe-toolbelt@vibe-global-toolbox` installed, enabled, 0.4.1?
+- ???installer verify?validate_project?validate_workflow?loopctl validate ?????pytest `21 passed, 1 skipped, 4 subtests passed`?session_start hook ?????? Loop ???
+- ???????????? ACP ????????????? MCP/plugin ???
+- ???`INSTALL-003`?
+
+## 2026-08-01T15:30:00+08:00 根因分析：MCP/hooks/插件为何安装后又失效
+
+- 状态：根因已闭环，防复发方案待用户确认，暂不改代码。
+- 根因：`cc-switch`（桌面模型接管工具）在启动/异常恢复/热切换时整写 `C:\Users\12187\.codex\config.toml`，只保留其管理的模型字段（`model_provider/model/model_catalog_json/[model_providers.custom]`），删除 Vibe 受管的 hooks、MCP、marketplace、plugins 段。
+- 证据链：
+  - 备份时间线：7/27 07:58 首次抹除（636 字节旧格式，hooks 已丢、保留 projects/windows）；7/27 22:28 更新后配置完整 2027 字节（含 hooks+codegraph MCP+marketplace）；7/28 20:37、7/29 20:55、8/1 08:33 三次被裁为 394 字节，均与 cc-switch 日志“重新接管”时间戳吻合。
+  - 394 字节配置含 `model_catalog_json = "cc-switch-model-catalog.json"`、`experimental_bearer_token = "PROXY_MANAGED"`，为 cc-switch 接管产物。
+  - cc-switch 数据库 `proxy_live_backup` 表：codex 的 original_config 仅含模型字段，证明其“备份”不保留 Vibe 受管段。
+  - 安装器 `backup()` 在写入前执行，安装备份反映的正是被裁后的状态，不能用来还原完整配置。
+- 为什么装了又失效：安装器只在运行时恢复配置；cc-switch 开机自启（launchOnStartup + silentStartup），每次重启/接管即再次覆盖，Vibe 无守护。
+- 防复发候选（待用户选择）：A) 关闭 cc-switch 对 Codex 的接管/自启；B) 安装器增加配置自愈/校验（功能改动）；C) cc-switch 若支持合并保留其他段则开启。
+- 证据：`ROOTCAUSE-001`；决策：`DEC-002`。
+- 下一步：用户确认防复发方案后实施，并将结论归档到知识库。
+
+## 2026-08-01T15:10:00+08:00 实测复现：cc-switch 热切换再次删除 Vibe 配置段并已恢复
+
+- 状态：实测复现根因，配置已通过安装器恢复，防复发方案仍待用户确认。
+- 复现：用户用 cc-switch 热切换模型（15:05:16/15:05:27 两次热切换），`config.toml` 被整写为 497 字节，mtime 15:05:27 与日志吻合；hooks、marketplace、plugins 段丢失。
+- 细节：本次 cc-switch 保留了 `[mcp_servers]` 段（cc-switch 自身管理 MCP），因此 `codex mcp list` 中 codegraph 仍 enabled；但 `codex plugin list` 中 vibe-toolbelt 与 vibe-global-toolbox 已消失。
+- 恢复：`global_installer.py update --access-profile keep-existing --mcp codegraph --mcp vibe-toolbelt` 重新写入完整配置（1783 字节，hooks+codegraph MCP+marketplace+vibe-toolbelt），模型配置保留；installer verify 通过；备份 `vibe-global-update-20260801-150629-068198`（恢复前 433 字节，同样为被裁状态）。
+- 验证：`codex mcp list` 全 enabled（codegraph/document-loader/github/playwright/web-search/context7）；`codex plugin list` 显示 vibe-toolbelt@vibe-global-toolbox installed, enabled 0.4.1。
+- 证据：`REPRO-001`。
+- 下一步：用户确认防复发方案（A 关闭 cc-switch 接管/自启；B 安装器自愈守护；C 合并写）后实施，避免再次手动恢复。
+
+## 2026-08-01T15:20:00+08:00 实测：cc-switch“应用通用配置”可透传 Vibe 块，但与安装器不兼容
+
+- 状态：方案 C（通用配置托管）功能层面验证可行，但发现与安装器 update 的兼容缺陷，需安装器增强后才能真正落地。
+- 实验：用户把带 `VIBE-CODEX-GLOBAL:CONFIG:BEGIN/END` 标记的完整 Vibe 块写入 cc-switch 通用配置（`settings.common_config_codex`），热切换模型后：
+  - `config.toml`（1815 字节）仍含 `[[hooks.*]]`、`[marketplaces.vibe-global-toolbox]`、`[plugins."vibe-toolbelt@vibe-global-toolbox"]`，通用配置两行（model_reasoning_effort/disable_response_storage）也透传成功。
+  - `codex mcp list` 全 enabled；`codex plugin list` 显示 vibe-toolbelt installed/enabled 0.4.1。
+- 兼容缺陷（离线模拟安装器剥离逻辑确认）：
+  - cc-switch 序列化时把 `[model_providers]`、`[mcp_servers.codegraph]`、`[model_providers.custom]` 插入 Vibe 标记块内部，安装器 `strip_config_block` 剥离标记块时会误删这些段。
+  - cc-switch 序列化丢失了行尾注释 `# VIBE-CODEX-GLOBAL:CONFIG:END`，安装器会抛 `unterminated managed block`，update 无法运行。
+- 影响：Codex 运行不受影响（标记只是安装器专用）；但此后不能再跑 `global_installer.py update`，否则会报错。
+- 结论：通用配置托管方向可行（覆盖热切换与启动接管两个触发点），但需要安装器增强：容忍缺失 END、剥离标记块时抽出保留混入的 model_providers/mcp_servers 段。这属于方案 B 的功能改动，待用户确认后实施。
+- 证据：`COMMONCFG-001`；决策：`DEC-002`（更新）。
+- 下一步：用户确认是否实施安装器增强；临时状态下避免运行安装器 update。
+
+## 2026-08-01T15:28:00+08:00 安装器兼容增强已实施并端到端验证
+
+- 状态：已完成实现与验证。方案 C（cc-switch 通用配置托管）+ 安装器兼容增强落地。
+- 改动（`scripts/global_installer.py`）：
+  - 新增 `config_block_bounds`：BEGIN 存在但 END 缺失时把块范围扩展到 EOF，不再抛 `unterminated managed block`。
+  - 新增 `_sections_in_block`/`preserved_provider_sections`：剥离标记块前抽出混入的 `[model_providers]`/`[model_providers.*]` 表；`preserved_mcp_sections` 复用同一逻辑。
+  - `install_config`/`remove_config`：剥离后把保留段合并回配置，避免误删用户模型供应商与 MCP 配置。
+- 测试（`tests/test_installer.py`）：新增 `test_update_repairs_cc_switch_rewritten_config` 与 `test_uninstall_preserves_cc_switch_provider_config`。
+- 验证：pytest `23 passed, 1 skipped, 4 subtests passed`；validate_package 通过；compileall 通过；真实环境 `update --access-profile keep-existing --mcp codegraph --mcp vibe-toolbelt` 成功修复 cc-switch 重写后的 `config.toml`（1848 字节：model_providers 保留、END 恢复、hooks/marketplace/vibe-toolbelt 完整），`codex mcp list` 全 enabled，vibe-toolbelt 0.4.1 正常。
+- 证据：`COMPATFIX-001`；决策：`DEC-002` 更新为 approved。
+- 下一步：用户可将 cc-switch 通用配置（模板 `cc-switch-common-config-codex.txt`）保持现状；如需提交代码，先 review diff 后 commit/push。

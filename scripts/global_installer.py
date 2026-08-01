@@ -176,15 +176,54 @@ def remove_agents_block(home: Path) -> None:
         agents.unlink()
 
 
-def strip_config_block(text: str) -> str:
+def config_block_bounds(text: str) -> tuple[int, int]:
+    """Return (start, end) of the managed block; end is -1 when the END marker is missing.
+
+    Third-party config managers (e.g. cc-switch) may rewrite config.toml and
+    drop the trailing ``# VIBE-CODEX-GLOBAL:CONFIG:END`` comment while keeping
+    the BEGIN marker. Treat everything from BEGIN to EOF as the managed block
+    so updates and uninstalls still work instead of failing hard.
+    """
     start = text.find(CONFIG_BEGIN)
     if start < 0:
-        return text
+        return -1, -1
     end = text.find(CONFIG_END, start)
     if end < 0:
-        raise RuntimeError("config.toml contains an unterminated Vibe managed block.")
-    end += len(CONFIG_END)
+        return start, -1
+    return start, end + len(CONFIG_END)
+
+
+def strip_config_block(text: str) -> str:
+    start, end = config_block_bounds(text)
+    if start < 0:
+        return text
+    if end < 0:
+        end = len(text)
     return (text[:start].rstrip() + "\n\n" + text[end:].lstrip()).strip() + "\n"
+
+
+def _sections_in_block(text: str, prefix: str) -> str:
+    """Extract ``[prefix...]`` tables inside the managed block for preservation."""
+    start, end = config_block_bounds(text)
+    if start < 0:
+        return ""
+    block = text[start : (end if end >= 0 else len(text))]
+    matches = re.findall(
+        rf"(?ms)^\[\[?{re.escape(prefix)}(?:\.[^\]]+)?\]\]?\n.*?(?=^\[|\Z)",
+        block,
+    )
+    return "\n\n".join(match.rstrip() for match in matches).strip()
+
+
+def preserved_provider_sections(text: str) -> str:
+    """Keep model_providers tables that third-party tools placed inside the block.
+
+    cc-switch serializes config.toml by interleaving its own ``[model_providers]``
+    tables with the managed hooks block. Stripping the block would delete the
+    user's model provider configuration, so those tables are extracted first
+    and merged back after the block is removed.
+    """
+    return _sections_in_block(text, "model_providers")
 
 
 def preserved_mcp_sections(text: str) -> str:
@@ -194,18 +233,7 @@ def preserved_mcp_sections(text: str) -> str:
     block marker. Moving those tables outside the regenerated block prevents a
     later ``--without-mcp`` update from silently deleting an existing server.
     """
-    start = text.find(CONFIG_BEGIN)
-    if start < 0:
-        return ""
-    end = text.find(CONFIG_END, start)
-    if end < 0:
-        raise RuntimeError("config.toml contains an unterminated Vibe managed block.")
-    block = text[start:end]
-    matches = re.findall(
-        r"(?ms)^\[\[?mcp_servers(?:\.[^\]]+)?\]\]?\n.*?(?=^\[|\Z)",
-        block,
-    )
-    return "\n\n".join(match.rstrip() for match in matches).strip()
+    return _sections_in_block(text, "mcp_servers")
 
 
 def toml_string(value: str) -> str:
@@ -286,6 +314,7 @@ def install_config(home: Path, *, without_hooks: bool, access_profile: str) -> N
     path = home / "config.toml"
     old = path.read_text(encoding="utf-8") if path.exists() else ""
     preserved_mcp = preserved_mcp_sections(old)
+    preserved_providers = preserved_provider_sections(old)
     base = strip_config_block(old) if CONFIG_BEGIN in old else old
     try:
         parsed = tomllib.loads(base) if base.strip() else {}
@@ -302,12 +331,17 @@ def install_config(home: Path, *, without_hooks: bool, access_profile: str) -> N
     if without_hooks and access_profile == "keep-existing":
         if CONFIG_BEGIN in old:
             merged = base.rstrip()
+            if preserved_providers:
+                merged += ("\n\n" if merged else "") + preserved_providers
             if preserved_mcp:
                 merged += ("\n\n" if merged else "") + preserved_mcp
             path.write_text((merged + "\n") if merged else "", encoding="utf-8", newline="\n")
         return
     block = managed_config_block(home, access_profile, include_hooks=not without_hooks)
-    merged = base.rstrip() + ("\n\n" if base.rstrip() else "") + block + "\n"
+    merged = base.rstrip() + ("\n\n" if base.rstrip() else "")
+    if preserved_providers:
+        merged += preserved_providers + "\n\n"
+    merged += block + "\n"
     if preserved_mcp:
         merged += "\n" + preserved_mcp + "\n"
     try:
@@ -324,7 +358,15 @@ def remove_config(home: Path) -> None:
     old = path.read_text(encoding="utf-8")
     if CONFIG_BEGIN not in old:
         return
+    preserved = _sections_in_block(old, "model_providers")
+    mcp = preserved_mcp_sections(old)
+    if preserved:
+        preserved += "\n\n" + mcp if mcp else ""
+    elif mcp:
+        preserved = mcp
     cleaned = strip_config_block(old)
+    if preserved:
+        cleaned = (cleaned.rstrip() + "\n\n" + preserved).strip() + "\n"
     if cleaned.strip():
         path.write_text(cleaned, encoding="utf-8", newline="\n")
     else:
