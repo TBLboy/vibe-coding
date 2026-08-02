@@ -17,3 +17,5 @@
 {"schema_version":1,"event_id":"LE-000016","time":"2026-08-01T07:10:00Z","run_id":null,"type":"evidence-recorded","evidence_id":"REPRO-001","status":"valid"}
 {"schema_version":1,"event_id":"LE-000017","time":"2026-08-01T07:20:00Z","run_id":null,"type":"evidence-recorded","evidence_id":"COMMONCFG-001","status":"partial"}
 {"schema_version":1,"event_id":"LE-000018","time":"2026-08-01T07:28:00Z","run_id":null,"type":"evidence-recorded","evidence_id":"COMPATFIX-001","status":"valid"}
+{"schema_version":1,"event_id":"LE-000019","time":"2026-08-02T00:44:41Z","run_id":null,"type":"handoff-generated","reason":"active"}
+{"schema_version":1,"event_id":"LE-000020","time":"2026-08-02T01:05:02Z","run_id":null,"type":"handoff-generated","reason":"active"}

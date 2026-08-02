@@ -1,11 +1,24 @@
 # Current Session
 
-- Current phase: 防复发方案已落地（方案 C + 安装器兼容增强），验证完成
-- Current goal: 定位 VibeCoding 安装后 MCP/hooks/插件失效的根因并给出防复发方案
-- Current task: 安装器增强已实现并端到端验证：cc-switch 重写后的真实 config.toml 被成功修复，MCP/插件正常
-- Confirmed facts: cc-switch 通用配置透传完整 TOML 段（热切换后 Vibe 配置保留）；安装器现在容忍缺失 END 并在剥离时保留混入的 model_providers/mcp_servers；真实 update 成功修复 config.toml（1848B）。
-- Active decisions: DEC-002（approved：方案 C + 安装器增强）
-- Blocking items: 无
-- Recent evidence: COMPATFIX-001、COMMONCFG-001、REPRO-001、ROOTCAUSE-001
-- Recent result: pytest 23 passed, 1 skipped, 4 subtests；validate_package 通过；codex mcp list 全 enabled；vibe-toolbelt 0.4.1 installed/enabled
-- Next step: 用户决定是否 review diff 后 commit/push 源码改动
+## 2026-08-02 Push closeout
+
+- User paused the current MCP/Codex terminal investigation after the fixes and validations were completed.
+- Closeout scope: record progress, commit the current vibe-coding source changes, and push to origin/main through 127.0.0.1:10808 if required.
+- Pending evidence: commit hash, remote push result, and clean post-push worktree.
+
+- Current phase: MCP/hooks/plugin ???????
+- Current goal: ?? cc-switch ????? `document-loader` MCP ?????????? Codex ???? Hook ????
+- Current task: ??????????????????????
+- Confirmed facts: `document-loader` ?? `vibe-toolbelt/.mcp.json`?`@latest` ???????? `1.0.17`??? MCP initialize ??? Codex exec ???
+- Changes: ?? `awslabs.document-loader-mcp-server@1.0.17`??? `HTTP_PROXY`/`HTTPS_PROXY=http://127.0.0.1:10808`??? `PostToolUse.async` ? `PreCompact.additionalContextLimit`
+- Validation: `pytest tests\test_installer.py -q` -> `10 passed, 1 skipped`?`codex exec --ephemeral --json` -> `OK`, exit `0`?`codex mcp list` ?? enabled
+- Blocking items: ?
+- Next step: ?????? Codex ??????? MCP ?????????????? commit/push ??
+
+## 2026-08-02 MCP 终端复核
+
+- 已确认安装器和插件缓存更新成功。
+- 根因证据：Codex 日志记录 `Failed to read MCP server stderr (uvx): stream did not contain valid UTF-8`；不是 MCP 包未安装。
+- 修复：`document-loader` 增加 `PYTHONUTF8=1`、`PYTHONIOENCODING=utf-8`，并保留固定版本 `1.0.17` 与 `127.0.0.1:10808` 代理。
+- 验证：直接 MCP initialize、普通 Codex exec、SessionStart Hook 均通过。
+- 环境差异：当前进程 `codex` 命中 Zed 注入的 `0.145.0`；用户级 npm 路径有 `0.146.0`。需重启终端后确认实际版本。

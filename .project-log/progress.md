@@ -1,5 +1,12 @@
 # Progress
 
+## 2026-08-02T09:30:00+08:00 Push closeout
+
+- User requested a temporary stop to the MCP/Codex terminal investigation and asked to preserve the current work.
+- Recorded the completed MCP encoding/proxy compatibility fixes, Codex hook compatibility fixes, and their validation evidence.
+- Prepared the current tracked changes for commit and push to origin/main; push fallback is http://127.0.0.1:10808.
+- Final evidence still pending: commit, push, and post-push worktree status.
+
 ## 2026-07-27T11:48:34+08:00 可选 MCP catalog 与 CodeGraph
 
 - 状态：已完成实现、验证和全局安装。
@@ -130,3 +137,11 @@
 - 验证：pytest `23 passed, 1 skipped, 4 subtests passed`；validate_package 通过；compileall 通过；真实环境 `update --access-profile keep-existing --mcp codegraph --mcp vibe-toolbelt` 成功修复 cc-switch 重写后的 `config.toml`（1848 字节：model_providers 保留、END 恢复、hooks/marketplace/vibe-toolbelt 完整），`codex mcp list` 全 enabled，vibe-toolbelt 0.4.1 正常。
 - 证据：`COMPATFIX-001`；决策：`DEC-002` 更新为 approved。
 - 下一步：用户可将 cc-switch 通用配置（模板 `cc-switch-common-config-codex.txt`）保持现状；如需提交代码，先 review diff 后 commit/push。
+
+## 2026-08-02T08:40:00+08:00 document-loader MCP ????
+
+- ????? `.mcp.json` ?? `awslabs.document-loader-mcp-server@latest`?cc-switch/Codex ?????????? `127.0.0.1:10808`?????/??????? MCP `initialize`???? `connection closed: initialize response`?
+- ??????????? `awslabs.document-loader-mcp-server@1.0.17`??? MCP ?? `HTTP_PROXY`/`HTTPS_PROXY`?????? Codex 0.145.0 ???? `PostToolUse.async` ? `PreCompact.additionalContextLimit`?
+- ???`pytest tests\test_installer.py -q` ? `10 passed, 1 skipped`??? MCP `initialize` ?? `Document Loader 3.4.5`??? `codex exec --ephemeral --json '??? OK'` ?? `OK`???? `0`???????????
+- ???????? `global_installer.py update --access-profile keep-existing --skip-preflight`?????? `C:\Users\12187\.codex\config.toml` ????
+- ????? `config.toml` ?? `SessionStart`/`PostToolUse` ? `additionalContextLimit`?? `PreCompact` ??????????? Codex ???????????

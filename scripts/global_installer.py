@@ -284,7 +284,7 @@ def managed_config_block(home: Path, access_profile: str, include_hooks: bool) -
 
     python = configured_python(home)
 
-    def add_hook(event: str, script: Path, *, asynchronous: bool = False) -> None:
+    def add_hook(event: str, script: Path) -> None:
         unix_command = f'"{python.as_posix()}" "{script.as_posix()}"'
         windows_command = f'"{python}" "{script}"'
         lines.extend(
@@ -295,16 +295,15 @@ def managed_config_block(home: Path, access_profile: str, include_hooks: bool) -
                 f"command = {toml_string(unix_command)}",
                 f"commandWindows = {toml_string(windows_command)}",
                 "timeout = 15",
-                "additionalContextLimit = 2500",
             ]
         )
-        if asynchronous:
-            lines.append("async = true")
+        if event != "PreCompact":
+            lines.append("additionalContextLimit = 2500")
         lines.append("")
 
     if include_hooks:
         add_hook("SessionStart", session)
-        add_hook("PostToolUse", post_tool, asynchronous=True)
+        add_hook("PostToolUse", post_tool)
         add_hook("PreCompact", compact)
     lines.append(CONFIG_END)
     return "\n".join(lines)

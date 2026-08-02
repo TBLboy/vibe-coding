@@ -27,10 +27,14 @@
       "type": "stdio",
       "command": "uvx",
       "args": [
-        "awslabs.document-loader-mcp-server@latest"
+        "awslabs.document-loader-mcp-server@1.0.17"
       ],
       "env": {
-        "FASTMCP_LOG_LEVEL": "ERROR"
+        "FASTMCP_LOG_LEVEL": "ERROR",
+        "PYTHONUTF8": "1",
+        "PYTHONIOENCODING": "utf-8",
+        "HTTP_PROXY": "http://127.0.0.1:10808",
+        "HTTPS_PROXY": "http://127.0.0.1:10808"
       }
     },
     "web-search": {

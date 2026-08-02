@@ -411,3 +411,51 @@ evidence:
   - D:\Project\vibe-coding\tests\test_installer.py
   - C:\Users\12187\.codex\config.toml
   - C:\Users\12187\.codex\backups\vibe-global-update-20260801-152623-806243
+
+- id: MCP-008
+  task_id: TASK-006
+  business_logic:
+  - cc-switch ??????Codex ??????????? MCP??????????????
+  acceptance_criteria:
+  - document-loader ????????????????????
+  - Codex 0.145.0 ???????? async hook ? PreCompact additionalContextLimit
+  - ?????? MCP ?????
+  result: passed
+  level: 4
+  commands:
+  - `pytest tests\test_installer.py -q` -> 10 passed, 1 skipped
+  - `uvx awslabs.document-loader-mcp-server@1.0.17` + MCP initialize -> serverInfo Document Loader 3.4.5
+  - `codex mcp list` -> codegraph/document-loader/github/playwright/web-search/context7 enabled
+  - `codex exec --ephemeral --json '??? OK'` -> OK, exit 0, no MCP/hook startup warnings
+  artifacts:
+  - `plugins/vibe-toolbelt/.mcp.json`
+  - `scripts/global_installer.py`
+  - `cc-switch-common-config-codex.txt`
+  - `C:\Users\12187\.codex\config.toml`
+  - `C:\Users\12187\.codex\plugins\cache\vibe-global-toolbox\vibe-toolbelt\0.4.1\.mcp.json`
+  limitations:
+  - ???? Codex ????????????????????????????
+
+- id: MCP-009
+  task_id: TASK-006
+  business_logic:
+  - document-loader 在 Codex 终端新会话中应完成 MCP initialize，不因 Windows 输出编码失败而被标记为 unavailable
+  acceptance_criteria:
+  - 插件缓存包含固定版本 1.0.17、代理和 UTF-8 Python 环境变量
+  - 直接 MCP initialize 返回 Document Loader 3.4.5
+  - 普通 Codex CLI exec 返回 OK 且退出码为 0
+  - SessionStart Hook 返回 additionalContext 且退出码为 0
+  result: passed
+  level: 4
+  commands:
+  - global_installer.py update --access-profile keep-existing --skip-preflight
+  - codex mcp get document-loader
+  - uvx awslabs.document-loader-mcp-server@1.0.17 + MCP initialize
+  - codex exec --ephemeral --skip-git-repo-check --json '只回复 OK'
+  - session_start.py with SessionStart payload
+  artifacts:
+  - plugins/vibe-toolbelt/.mcp.json
+  - C:\Users\12187\.codex\plugins\cache\vibe-global-toolbox\vibe-toolbelt\0.4.1\.mcp.json
+  - C:\Users\12187\.codex\config.toml
+  limitations:
+  - 终端交互 TUI 需要用户重启当前旧进程后手动确认；当前 PATH 优先命中 Zed 注入的 Codex 0.145.0，用户级 npm 另有 0.146.0

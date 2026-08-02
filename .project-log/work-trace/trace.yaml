@@ -1,5 +1,19 @@
 version: '0.2'
 entries:
+- id: TRACE-20260802-PUSH-001
+  task_id: TASK-006
+  timestamp: 2026-08-02T09:30:00+08:00
+  context: User requested a temporary stop to the investigation and synchronization of the current vibe-coding source.
+  hypothesis: The current worktree contains the MCP encoding/proxy fixes, Codex hook compatibility fixes, and their validation records as one coherent change set.
+  decision: Check worktree and remote state, commit all related changes, and retry push through 127.0.0.1:10808 if the direct push fails.
+  actions:
+  - Checked main branch, origin remote, and modified files.
+  - Added closeout records to the current session and progress logs.
+  - Ran diff and configuration validation.
+  - Committed and pushed to origin/main.
+  observation: Commit and push output, commit log, and post-push worktree status are the completion evidence.
+  result: pending
+  next_step: Complete the commit, proxy push, and remote verification.
 - id: TRACE-003
   task_id: TASK-003
   timestamp: '2026-07-27T10:09:55+08:00'
@@ -98,3 +112,30 @@ entries:
   - skills/b-source-code-tutoring/references/teaching-template.md
   - .project-log/evals/source-code-tutoring.yaml
   knowledge_candidate: true
+
+- id: TRACE-20260802-MCP-008
+  context: cc-switch ????? document-loader MCP ???????
+  hypothesis: uvx latest ????/????? 10808 ??????????????? Codex ? initialize ???
+  decision: ?? awslabs document-loader 1.0.17?????? HTTP/HTTPS ?????? Codex 0.145.0 ???? Hook ??
+  actions:
+  - ???? MCP initialize
+  - ????????????
+  - ????????? config.toml
+  - ?????????? Codex exec
+  observation: ?? initialize ?? Document Loader 3.4.5?Codex exec ?? OK ??????
+  result: passed
+  next_step: ?????????????????
+
+- id: TRACE-20260802-MCP-009
+  task_id: TASK-006
+  timestamp: '2026-08-02T09:05:00+08:00'
+  context: 用户反馈终端 Codex 仍报告 document-loader 握手失败和 SessionStart hook failed
+  hypothesis: document-loader 在 Windows 下输出非 UTF-8 stderr，Codex MCP launcher 读取 stderr 时失败；同时终端 PATH 可能使用旧版 Codex
+  decision: 为 document-loader 注入 PYTHONUTF8=1 和 PYTHONIOENCODING=utf-8，保留固定版本与 10808 代理；不删除旧 Codex，记录路径冲突
+  actions:
+  - 从 Codex logs_2.sqlite 确认 stream did not contain valid UTF-8
+  - 更新插件 MCP 配置并重新运行 global_installer.py update
+  - 验证缓存、MCP initialize、Codex exec 和 SessionStart Hook
+  observation: 缓存配置正确；initialize 返回 Document Loader 3.4.5；Codex exec 返回 OK；Hook 返回 additionalContext；active codex 仍为 Zed cache 0.145.0，Roaming npm 为 0.146.0
+  result: passed
+  next_step: 重启终端会话；若仍报错，使用 C:\Users\12187\AppData\Roaming\npm\codex.cmd 验证并处理 PATH 优先级
