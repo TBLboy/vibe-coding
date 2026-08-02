@@ -4,7 +4,7 @@
 
 - User paused the current MCP/Codex terminal investigation after the fixes and validations were completed.
 - Closeout scope: record progress, commit the current vibe-coding source changes, and push to origin/main through 127.0.0.1:10808 if required.
-- Pending evidence: commit hash, remote push result, and clean post-push worktree.
+- Push evidence: commit `cf2b80b` was pushed successfully to `origin/main` through `127.0.0.1:10808`; final worktree verification is pending.
 
 - Current phase: MCP/hooks/plugin ???????
 - Current goal: ?? cc-switch ????? `document-loader` MCP ?????????? Codex ???? Hook ????

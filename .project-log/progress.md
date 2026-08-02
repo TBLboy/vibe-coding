@@ -5,7 +5,7 @@
 - User requested a temporary stop to the MCP/Codex terminal investigation and asked to preserve the current work.
 - Recorded the completed MCP encoding/proxy compatibility fixes, Codex hook compatibility fixes, and their validation evidence.
 - Prepared the current tracked changes for commit and push to origin/main; push fallback is http://127.0.0.1:10808.
-- Final evidence still pending: commit, push, and post-push worktree status.
+- Commit `cf2b80b` was created and pushed successfully to `origin/main` through `127.0.0.1:10808`; final worktree verification is pending.
 
 ## 2026-07-27T11:48:34+08:00 可选 MCP catalog 与 CodeGraph
 
