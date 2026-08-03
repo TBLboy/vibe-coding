@@ -116,3 +116,33 @@ decisions:
   supersedes: []
   created_at: '2026-08-01T15:30:00+08:00'
   updated_at: '2026-08-01T15:30:00+08:00'
+
+- id: DEC-003
+  title: cc-switch 通用配置必须按宿主机动态生成
+  category: tooling
+  status: active
+  authority: B
+  user_approval: approved
+  related_tasks: []
+  related_business_logic: []
+  context: cc-switch 通用配置模板曾把 Windows 的 Conda、用户目录和源码仓库路径写死，用户当前实际运行环境为 Ubuntu，直接粘贴会导致 Hook 与本地 marketplace 无法加载。
+  decision: 新增生成脚本，从 CODEX_HOME、VIBE_PYTHON 或 CODEX_HOME/vibe-python 以及当前源码根目录解析绝对路径；模板文件只保存当前宿主生成结果，并明确禁止跨机器直接复制。
+  reason_summary:
+  - 安装器已有同源的宿主路径解析逻辑，生成脚本应复用同一事实来源
+  - cc-switch 配置中的 Hook 和本地 marketplace 都依赖绝对路径
+  - Linux 与 Windows 的 command/commandWindows 字段需要按宿主机分别生成
+  conditions:
+  - 目标宿主机必须存在 CODEX_HOME/vibe-python，或显式提供 VIBE_PYTHON
+  - 目标宿主机必须从实际源码根目录运行生成脚本
+  action: 新增 scripts/generate_cc_switch_config.py；更新 cc-switch-common-config-codex.txt；补充项目日志和宿主路径验证。
+  expected_result: 当前宿主机可直接粘贴生成结果；更换宿主机时重新运行脚本即可，不需要手工修改路径。
+  reversal_plan: 删除生成脚本并恢复上一版本模板；不影响 Codex 当前运行配置。
+  observation: Ubuntu 当前生成结果使用 /home/tbl/miniforge3/envs/vibe-coding/bin/python3.11、/home/tbl/.codex/vibe-workflow/hooks 和 /home/tbl/Project/vibe-coding；TOML、路径和回归检查均通过。
+  actual_result: implemented-unverified
+  outcome_status: successful
+  lesson: 机器相关的配置示例不能作为跨平台常量提交，应由安装器同源逻辑在目标宿主机生成并验证。
+  evidence:
+  - HOSTCFG-001
+  supersedes: []
+  created_at: '2026-08-03T10:20:00+08:00'
+  updated_at: '2026-08-03T10:20:00+08:00'

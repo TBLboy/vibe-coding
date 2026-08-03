@@ -145,3 +145,13 @@
 - ???`pytest tests\test_installer.py -q` ? `10 passed, 1 skipped`??? MCP `initialize` ?? `Document Loader 3.4.5`??? `codex exec --ephemeral --json '??? OK'` ?? `OK`???? `0`???????????
 - ???????? `global_installer.py update --access-profile keep-existing --skip-preflight`?????? `C:\Users\12187\.codex\config.toml` ????
 - ????? `config.toml` ?? `SessionStart`/`PostToolUse` ? `additionalContextLimit`?? `PreCompact` ??????????? Codex ???????????
+
+## 2026-08-03 宿主机配置动态化
+
+- 状态：已完成实现与验证，待提交并推送 `origin/main`。
+- 根因：`cc-switch-common-config-codex.txt` 仍包含 Windows 用户路径和 Windows 仓库路径，不能直接用于当前 Ubuntu 宿主机，也不能安全跨机器复制。
+- 改动：新增 `scripts/generate_cc_switch_config.py`，从 `CODEX_HOME`、`VIBE_PYTHON`/`CODEX_HOME/vibe-python`、当前源码根目录动态生成 cc-switch Codex 通用配置；Ubuntu 的 `command` 与 `commandWindows` 使用当前实际路径，Windows 宿主机分别生成对应字段。
+- 改动：将 `cc-switch-common-config-codex.txt` 更新为当前 Ubuntu 实际配置，并注明必须在目标宿主机重新生成，禁止跨机器直接复制绝对路径。
+- 宿主证据：`CODEX_HOME=/home/tbl/.codex`，Vibe Python=`/home/tbl/miniforge3/envs/vibe-coding/bin/python`，源码根=`/home/tbl/Project/vibe-coding`。
+- 验证：生成结果与 canonical 配置正文一致；TOML 解析和宿主路径断言通过；Windows 硬编码扫描通过；安装器测试 `10 passed, 1 skipped`；包校验通过。
+- 下一步：提交动态配置生成器、Ubuntu 配置示例和本次项目记录，推送 `main`。

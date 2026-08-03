@@ -22,3 +22,12 @@
 - 修复：`document-loader` 增加 `PYTHONUTF8=1`、`PYTHONIOENCODING=utf-8`，并保留固定版本 `1.0.17` 与 `127.0.0.1:10808` 代理。
 - 验证：直接 MCP initialize、普通 Codex exec、SessionStart Hook 均通过。
 - 环境差异：当前进程 `codex` 命中 Zed 注入的 `0.145.0`；用户级 npm 路径有 `0.146.0`。需重启终端后确认实际版本。
+
+## 2026-08-03 宿主机配置动态化
+
+- 用户指出 cc-switch 配置示例错误保留 Windows 路径；当前宿主机为 Ubuntu。
+- 已确认仓库残留点为 `cc-switch-common-config-codex.txt`；安装器 `managed_config_block()` 本身已从宿主 `CODEX_HOME` 和 `vibe-python` 动态生成 Hook 路径。
+- 新增 `scripts/generate_cc_switch_config.py`，将 cc-switch 配置生成职责从人工复制改为宿主机动态解析。
+- 当前生成结果：`/home/tbl/miniforge3/envs/vibe-coding/bin/python3.11`、`/home/tbl/.codex/vibe-workflow/hooks/*`、`/home/tbl/Project/vibe-coding`。
+- 验证通过：生成器与 canonical 文件一致、TOML 合法、无 Windows 硬编码、安装器测试 `10 passed, 1 skipped`、包校验通过。
+- 精确下一步：提交并推送本次配置动态化改动。

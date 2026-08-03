@@ -139,3 +139,17 @@ entries:
   observation: 缓存配置正确；initialize 返回 Document Loader 3.4.5；Codex exec 返回 OK；Hook 返回 additionalContext；active codex 仍为 Zed cache 0.145.0，Roaming npm 为 0.146.0
   result: passed
   next_step: 重启终端会话；若仍报错，使用 C:\Users\12187\AppData\Roaming\npm\codex.cmd 验证并处理 PATH 优先级
+
+- id: TRACE-20260803-HOSTCFG-001
+  context: 用户发现 cc-switch 配置示例仍使用 Windows 路径，而当前宿主机为 Ubuntu，并要求改为按宿主实际配置生成后记录并推送。
+  hypothesis: 安装器已有正确的 CODEX_HOME/Vibe Python/源码根路径解析；将同一事实来源封装成生成脚本，可以消除手工模板跨机器复制造成的路径漂移。
+  decision_ref: DEC-003
+  action: 新增 scripts/generate_cc_switch_config.py，读取 CODEX_HOME、VIBE_PYTHON 或 CODEX_HOME/vibe-python 和当前源码根；更新 canonical 配置为当前 Ubuntu 生成结果。
+  expected_result: 当前宿主机可直接粘贴生成结果，更换宿主机时重新运行脚本即可。
+  observation: 当前宿主为 /home/tbl，CODEX_HOME=/home/tbl/.codex，Vibe Python=/home/tbl/miniforge3/envs/vibe-coding/bin/python，源码根=/home/tbl/Project/vibe-coding；生成一致性、TOML、路径扫描、安装器测试和包校验均通过。
+  actual_result: implemented-unverified
+  delta: 从静态 Windows 配置模板改为宿主机动态生成；canonical 文件不再包含 D:/conda、C:/Users 或 D:/Project。
+  lesson: 路径相关配置必须由目标宿主机生成，仓库只能提供生成机制和当前宿主的示例，不能把某台机器的绝对路径当作通用值。
+  next_adjustment: 提交并推送变更；用户在其他宿主机运行生成脚本后再粘贴到 cc-switch。
+  evidence:
+  - HOSTCFG-001
