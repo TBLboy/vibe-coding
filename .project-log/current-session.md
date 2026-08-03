@@ -31,3 +31,13 @@
 - 当前生成结果：`/home/tbl/miniforge3/envs/vibe-coding/bin/python3.11`、`/home/tbl/.codex/vibe-workflow/hooks/*`、`/home/tbl/Project/vibe-coding`。
 - 验证通过：生成器与 canonical 文件一致、TOML 合法、无 Windows 硬编码、安装器测试 `10 passed, 1 skipped`、包校验通过。
 - 精确下一步：提交并推送本次配置动态化改动。
+
+## 2026-08-03 SessionStart Hook 协议修复
+
+- 用户反馈新对话仍提示 `SessionStart hook (failed): hook returned invalid session start JSON output`，但 MCP 正常。
+- 复现与代码检查确认：Hook 能正常退出并输出合法 JSON，但使用旧式顶层 `additionalContext`，未声明 `hookSpecificOutput.hookEventName`。
+- 已修复 `runtime/hooks/session_start.py` 和 `runtime/hooks/pre_compact.py`，分别返回 `SessionStart`、`PreCompact` 事件专用输出。
+- 已更新 `tests/test_loop_core.py`，验证输出结构、事件名和 additionalContext。
+- 已安装到 `/home/tbl/.codex/vibe-workflow/hooks/`；源码与已安装文件哈希一致。
+- 验证：13 个 Loop/Hook 测试通过；11 个安装器测试中 10 通过、1 跳过；包校验通过；Codex ephemeral 返回 `OK`。
+- 精确下一步：用户重新开启一个新对话确认实际 TUI 提示；当前修复尚未提交推送。

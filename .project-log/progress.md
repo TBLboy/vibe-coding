@@ -155,3 +155,13 @@
 - 宿主证据：`CODEX_HOME=/home/tbl/.codex`，Vibe Python=`/home/tbl/miniforge3/envs/vibe-coding/bin/python`，源码根=`/home/tbl/Project/vibe-coding`。
 - 验证：生成结果与 canonical 配置正文一致；TOML 解析和宿主路径断言通过；Windows 硬编码扫描通过；安装器测试 `10 passed, 1 skipped`；包校验通过。
 - 下一步：提交动态配置生成器、Ubuntu 配置示例和本次项目记录，推送 `main`。
+
+## 2026-08-03 SessionStart Hook 协议修复
+
+- 状态：已完成实现、安装和验证；本地工作区存在待提交修改，未自动推送。
+- 根因：`session_start.py` 和 `pre_compact.py` 返回旧式顶层 `{"additionalContext": ...}`；当前 Codex SessionStart Hook 要求使用 `hookSpecificOutput.hookEventName` 声明事件名，否则提示 `hook returned invalid session start JSON output`。
+- 改动：SessionStart 返回 `hookSpecificOutput = {hookEventName: "SessionStart", additionalContext: ...}`；PreCompact 使用对应的 `PreCompact` 事件名。
+- 改动：更新 `tests/test_loop_core.py`，严格验证事件专用输出结构和事件名。
+- 验证：Hook 专项测试 `13 passed`；安装器测试 `10 passed, 1 skipped`；包校验通过；本机受管 Hook 哈希与源码一致；直接 SessionStart 协议校验通过；Codex ephemeral 冒烟返回 `OK`，退出码 `0`。
+- 本机安装：已运行 `global_installer.py update --mcp codegraph --mcp vibe-toolbelt --access-profile keep-existing`，安装器校验通过。
+- 下一步：用户重新开启一个 Codex 对话确认 TUI 层提示消失；如需纳入远端，再提交并推送。

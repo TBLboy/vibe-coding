@@ -19,3 +19,9 @@
 {"schema_version":1,"event_id":"LE-000018","time":"2026-08-01T07:28:00Z","run_id":null,"type":"evidence-recorded","evidence_id":"COMPATFIX-001","status":"valid"}
 {"schema_version":1,"event_id":"LE-000019","time":"2026-08-02T00:44:41Z","run_id":null,"type":"handoff-generated","reason":"active"}
 {"schema_version":1,"event_id":"LE-000020","time":"2026-08-02T01:05:02Z","run_id":null,"type":"handoff-generated","reason":"active"}
+{"schema_version":1,"event_id":"LE-000021","time":"2026-08-03T02:56:32Z","run_id":null,"type":"handoff-generated","reason":"active"}
+{"schema_version":1,"event_id":"LE-000022","time":"2026-08-03T02:56:32Z","run_id":null,"type":"handoff-generated","reason":"active"}
+{"schema_version":1,"event_id":"LE-000023","time":"2026-08-03T02:57:50Z","run_id":null,"type":"handoff-generated","reason":"active"}
+{"schema_version":1,"event_id":"LE-000024","time":"2026-08-03T03:02:51Z","run_id":null,"type":"handoff-generated","reason":"active"}
+{"schema_version":1,"event_id":"LE-000025","time":"2026-08-03T03:02:51Z","run_id":null,"type":"handoff-generated","reason":"active"}
+{"schema_version":1,"event_id":"LE-000026","time":"2026-08-03T03:03:21Z","run_id":null,"type":"handoff-generated","reason":"active"}

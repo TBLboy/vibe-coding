@@ -11,7 +11,17 @@ def main() -> int:
     payload = read_input()
     root = ensure_project(payload)
     maybe_probe(root, "PreCompact", payload)
-    print(json.dumps({"additionalContext": compact_context(root)}, ensure_ascii=False))
+    print(
+        json.dumps(
+            {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreCompact",
+                    "additionalContext": compact_context(root),
+                }
+            },
+            ensure_ascii=False,
+        )
+    )
     return 0
 
 

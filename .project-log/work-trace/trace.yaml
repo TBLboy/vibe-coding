@@ -153,3 +153,17 @@ entries:
   next_adjustment: 提交并推送变更；用户在其他宿主机运行生成脚本后再粘贴到 cc-switch。
   evidence:
   - HOSTCFG-001
+
+- id: TRACE-20260803-HOOK-SESSION-001
+  context: 用户反馈 MCP 正常但每次新对话提示 SessionStart Hook 返回无效 JSON。
+  hypothesis: Hook 使用旧式顶层 additionalContext，当前 Codex 需要 hookSpecificOutput 并声明 hookEventName。
+  decision_ref: null
+  action: 检查 Codex Hook 源码调用链和本机实际输出；修复 SessionStart/PreCompact 输出结构；补充严格回归测试；更新本机受管 Hook。
+  expected_result: 新会话能接受 SessionStart 输出并注入 additionalContext，不再报告 invalid session start JSON output。
+  observation: 修复前输出 JSON 合法但缺少 hookSpecificOutput；修复后输出事件专用结构，源码与安装文件哈希一致；Codex ephemeral 返回 OK。
+  actual_result: passed
+  delta: 从顶层 additionalContext 迁移为 hookSpecificOutput.hookEventName + additionalContext。
+  lesson: Hook 的 JSON 语法合法不等于事件协议合法，必须同时验证事件专用字段和真实宿主调用结果。
+  next_adjustment: 用户重启/新建交互式 Codex 对话观察 TUI 提示；确认后提交推送。
+  evidence:
+  - HOOK-SESSION-001

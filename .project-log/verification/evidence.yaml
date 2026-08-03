@@ -483,3 +483,30 @@ evidence:
   - cc-switch-common-config-codex.txt
   - /home/tbl/.codex/vibe-python
   - /home/tbl/.codex/config.toml
+
+- id: HOOK-SESSION-001
+  task_id: null
+  business_logic:
+  - SessionStart Hook 应返回当前 Codex 接受的事件专用 JSON，并注入项目恢复上下文。
+  acceptance_criteria:
+  - 输出顶层包含 hookSpecificOutput。
+  - hookSpecificOutput.hookEventName 等于 SessionStart。
+  - hookSpecificOutput.additionalContext 为字符串。
+  - PreCompact 使用对应的 PreCompact 事件名。
+  - 新会话冒烟不再报告 invalid session start JSON output。
+  result: passed
+  level: 4
+  commands:
+  - python -m unittest tests.test_loop_core -> 13 passed
+  - python -m unittest discover -s tests -p test_installer.py -> 10 passed, 1 skipped
+  - python runtime/scripts/validate_package.py --root . -> Package validation passed
+  - 直接运行已安装 session_start.py 并解析 hookSpecificOutput
+  - codex exec --ephemeral --json -> OK, exit 0
+  limitations:
+  - 当前使用 Codex CLI ephemeral 冒烟验证；用户交互式 TUI 仍需重新开启对话做最终观察。
+  artifacts:
+  - runtime/hooks/session_start.py
+  - runtime/hooks/pre_compact.py
+  - tests/test_loop_core.py
+  - /home/tbl/.codex/vibe-workflow/hooks/session_start.py
+  - /home/tbl/.codex/config.toml

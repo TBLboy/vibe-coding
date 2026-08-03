@@ -300,7 +300,10 @@ class HookTests(unittest.TestCase):
                     check=False,
                 )
                 self.assertEqual(result.returncode, 0, result.stderr)
-                self.assertIn("additionalContext", json.loads(result.stdout))
+                output = json.loads(result.stdout)
+                specific = output["hookSpecificOutput"]
+                self.assertEqual(specific["hookEventName"], "SessionStart" if script == "session_start.py" else "PreCompact")
+                self.assertIn("additionalContext", specific)
             self.assertTrue((project / ".project-log/loop/handoff.md").is_file())
 
 
