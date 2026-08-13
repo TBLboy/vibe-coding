@@ -14,6 +14,7 @@ import subprocess
 import tempfile
 import time
 from typing import Any, Iterator
+import uuid
 
 import yaml
 
@@ -253,6 +254,22 @@ def repair_bad_event_tail(root: Path) -> list[str]:
 
 def default_active_run() -> dict[str, Any]:
     return load_yaml(runtime_template() / "loop/active-run.yaml")
+
+
+def start_run(root: Path, phase: str = "business-intent", task_id: str | None = None) -> dict[str, Any]:
+    if phase not in PHASES:
+        raise ValueError(f"unsupported phase: {phase}")
+    state = default_active_run()
+    state["run_id"] = f"RUN-{utc_now().replace('-', '').replace(':', '').replace('T', '-').replace('Z', '')}-{uuid.uuid4().hex[:8]}"
+    state["phase"] = phase
+    state["task_id"] = task_id
+    save_active_run(root, state)
+    event = append_event(
+        root,
+        "run-started",
+        {"phase": phase, "task_id": task_id},
+    )
+    return {"state": load_active_run(root), "event": event}
 
 
 def restore_active_run(root: Path, force: bool = False) -> tuple[dict[str, Any], list[str]]:

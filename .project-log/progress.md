@@ -1,5 +1,14 @@
 # Progress
 
+## 2026-08-13T11:30:00+08:00 Loop recovery and new-run repair
+
+- Status: implementation and current-Codex installation complete; source commit pending.
+- Fixed SessionStart state contamination: context rendering is read-only, completed and empty runs are not restored as active work, and `PreCompact` is the lifecycle point that persists a durable handoff.
+- Added `loopctl start-run --task-id <id>` to reset old task, next action, counters, and native Goal binding while retaining prior evidence and event history.
+- Fixed hook project root selection so an explicit workspace root wins and a newly created child directory does not inherit a parent `.project-log`.
+- Verification: 31 unit tests passed with 1 expected historical skip; package validation passed; source and installed runtime hashes match; installed SessionStart/PreCompact and `start-run` smoke tests passed; global installer verification passed.
+- Limitation: full source project-log schema validation remains blocked by pre-existing malformed historical records; the framework code tests and package validation are clean.
+
 ## 2026-08-02T09:30:00+08:00 Push closeout
 
 - User requested a temporary stop to the MCP/Codex terminal investigation and asked to preserve the current work.

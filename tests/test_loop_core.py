@@ -27,6 +27,7 @@ from loop_state import (
     restore_active_run,
     save_active_run,
     save_yaml,
+    start_run,
     sync_native_goal,
 )
 from validate_project import validate
@@ -284,6 +285,26 @@ class LoopCoreTests(unittest.TestCase):
         self.assertEqual(result["state"]["status"], "complete")
         self.assertEqual(load_yaml(self.root / ".project-log/goals/active-goal.yaml")["goal"]["status"], "complete")
 
+    def test_start_run_resets_completed_run_state(self) -> None:
+        state = load_active_run(self.root)
+        state["status"] = "complete"
+        state["task_id"] = "TASK-OLD"
+        state["next_action"] = {"statement": "obsolete"}
+        state["counters"]["task_attempts"] = 2
+        state["native_goal"]["binding_status"] = "bound"
+        save_active_run(self.root, state)
+
+        result = start_run(self.root, task_id="TASK-NEW")
+
+        state = result["state"]
+        self.assertTrue(state["run_id"].startswith("RUN-"))
+        self.assertEqual(state["status"], "active")
+        self.assertEqual(state["task_id"], "TASK-NEW")
+        self.assertIsNone(state["next_action"])
+        self.assertEqual(state["counters"]["task_attempts"], 0)
+        self.assertEqual(state["native_goal"]["binding_status"], "unbound")
+        self.assertEqual(result["event"]["type"], "run-started")
+
 
 class HookTests(unittest.TestCase):
     def test_session_and_compact_hooks_emit_context(self) -> None:
@@ -305,6 +326,112 @@ class HookTests(unittest.TestCase):
                 self.assertEqual(specific["hookEventName"], "SessionStart" if script == "session_start.py" else "PreCompact")
                 self.assertIn("additionalContext", specific)
             self.assertTrue((project / ".project-log/loop/handoff.md").is_file())
+
+    def test_fresh_project_is_rendered_as_idle(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            project = Path(temporary)
+            result = subprocess.run(
+                [sys.executable, str(ROOT / "runtime/hooks/session_start.py")],
+                input=json.dumps({"cwd": str(project)}),
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            context = json.loads(result.stdout)["hookSpecificOutput"]["additionalContext"]
+            self.assertIn("Run status: idle", context)
+            self.assertIn("No active Vibe work is restored", context)
+
+    def test_session_start_does_not_append_handoff_event(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            project = Path(temporary)
+            initialize_project(project)
+            events = project / ".project-log/loop/events.jsonl"
+            before = events.read_text(encoding="utf-8")
+            result = subprocess.run(
+                [sys.executable, str(ROOT / "runtime/hooks/session_start.py")],
+                input=json.dumps({"cwd": str(project)}),
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(events.read_text(encoding="utf-8"), before)
+
+    def test_pre_compact_persists_handoff(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            project = Path(temporary)
+            initialize_project(project)
+            events = project / ".project-log/loop/events.jsonl"
+            result = subprocess.run(
+                [sys.executable, str(ROOT / "runtime/hooks/pre_compact.py")],
+                input=json.dumps({"cwd": str(project)}),
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('"type":"handoff-generated"', events.read_text(encoding="utf-8"))
+
+    def test_completed_run_is_not_restored_as_active_work(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            project = Path(temporary)
+            initialize_project(project)
+            state = load_active_run(project)
+            state["status"] = "complete"
+            state["task_id"] = "TASK-OLD"
+            save_active_run(project, state)
+            result = subprocess.run(
+                [sys.executable, str(ROOT / "runtime/hooks/session_start.py")],
+                input=json.dumps({"cwd": str(project)}),
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+            context = json.loads(result.stdout)["hookSpecificOutput"]["additionalContext"]
+            self.assertIn("No active Vibe work is restored", context)
+            self.assertIn("Active task: -", context)
+
+    def test_new_directory_does_not_inherit_parent_project_log(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = Path(temporary)
+            initialize_project(workspace)
+            new_project = workspace / "new-project"
+            new_project.mkdir()
+            result = subprocess.run(
+                [sys.executable, str(ROOT / "runtime/hooks/session_start.py")],
+                input=json.dumps({"cwd": str(new_project)}),
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            context = json.loads(result.stdout)["hookSpecificOutput"]["additionalContext"]
+            self.assertIn(f"Project root: {new_project}", context)
+            self.assertTrue((new_project / ".project-log").is_dir())
+
+    def test_explicit_workspace_root_wins_over_cwd(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = Path(temporary) / "workspace"
+            child = workspace / "src"
+            child.mkdir(parents=True)
+            result = subprocess.run(
+                [sys.executable, str(ROOT / "runtime/hooks/session_start.py")],
+                input=json.dumps({"cwd": str(child), "workspace_root": str(workspace)}),
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            context = json.loads(result.stdout)["hookSpecificOutput"]["additionalContext"]
+            self.assertIn(f"Project root: {workspace}", context)
+            self.assertTrue((workspace / ".project-log").is_dir())
 
 
 if __name__ == "__main__":

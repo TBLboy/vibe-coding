@@ -16,12 +16,14 @@ from loop_state import (
     invalidate_evidence,
     load_active_run,
     load_yaml,
+    PHASES,
     project_goal_summary,
     project_log,
     read_events,
     record_evidence,
     restore_active_run,
     save_active_run,
+    start_run,
     sync_native_goal,
     validate_loop,
 )
@@ -56,6 +58,10 @@ def main() -> int:
     commands.add_parser("status")
     commands.add_parser("validate")
     commands.add_parser("handoff")
+
+    start = commands.add_parser("start-run")
+    start.add_argument("--phase", choices=sorted(PHASES), default="business-intent")
+    start.add_argument("--task-id")
 
     bind = commands.add_parser("goal-bind")
     bind.add_argument("--native-id")
@@ -162,6 +168,9 @@ def main() -> int:
             output(apply_decision(root, parse_json(args.decision_json)), args.json)
         elif args.command == "handoff":
             output(generate_handoff(root), args.json)
+        elif args.command == "start-run":
+            initialize_loop(root)
+            output(start_run(root, args.phase, args.task_id), args.json)
         elif args.command == "validate":
             errors = validate_loop(root)
             output({"passed": not errors, "errors": errors}, args.json)

@@ -16,7 +16,7 @@ def main() -> int:
             {
                 "hookSpecificOutput": {
                     "hookEventName": "PreCompact",
-                    "additionalContext": compact_context(root),
+                    "additionalContext": compact_context(root, refresh_handoff=True),
                 }
             },
             ensure_ascii=False,

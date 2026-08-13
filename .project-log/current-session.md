@@ -1,5 +1,15 @@
 # Current Session
 
+## 2026-08-13 Loop recovery and new-run repair
+
+- User reported that a normal task could stop after a state-restoration response without completing the requested work.
+- Root causes fixed in source: SessionStart appended handoff events while rendering context; completed or empty runs were rendered as active work; a nested new directory could inherit an ancestor Project Log; no explicit new-run reset command existed.
+- Changes: SessionStart now renders read-only context; PreCompact persists handoff; `loopctl start-run` resets stale run state with a unique run ID; workspace roots take precedence and an ancestor `.project-log` is not adopted by a new directory; global agent protocol explicitly forbids restoration-only completion.
+- Verification: 31 unit tests passed (1 historical test skipped); package validation passed; `start-run` and installed Hook smoke tests passed; `global_installer.py verify` passed; installed runtime hashes match source.
+- Installation: `global_installer.py update --skip-doctor` synced the repair into `/home/tbl/.codex/vibe-workflow`.
+- Known unrelated limitation: `runtime/scripts/validate_project.py --root .` still reports pre-existing malformed historical records in `.project-log/verification/evidence.yaml`, `decisions/decision-log.yaml`, and `work-trace/trace.yaml`; no project-log records were altered as part of this code repair.
+- Next step: commit the source repair on `main`.
+
 ## 2026-08-02 Push closeout
 
 - User paused the current MCP/Codex terminal investigation after the fixes and validations were completed.

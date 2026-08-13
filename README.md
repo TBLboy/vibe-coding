@@ -155,6 +155,7 @@ py -3 "$env:CODEX_HOME\vibe-workflow\scripts\validate_project.py" --root C:\path
 loopctl init
 loopctl restore
 loopctl status
+loopctl start-run --task-id TASK-NEW
 loopctl goal-bind
 loopctl goal-sync
 loopctl record-event

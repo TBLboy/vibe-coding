@@ -14,7 +14,7 @@ if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
 from init_project import initialize_project
-from loop_state import append_event, generate_handoff, initialize_loop, load_active_run, project_log
+from loop_state import append_event, generate_handoff, initialize_loop, load_active_run, load_yaml, project_log
 
 
 PATH_KEYS = {"path", "file", "file_path", "filepath", "target", "destination"}
@@ -37,16 +37,29 @@ def candidate_cwd(payload: dict[str, Any]) -> Path:
     return Path.cwd().resolve()
 
 
+def explicit_project_root(payload: dict[str, Any]) -> Path | None:
+    for key in ("project_root", "workspace_root"):
+        value = payload.get(key)
+        if isinstance(value, str) and value:
+            return Path(value).expanduser().resolve()
+    return None
+
+
 def find_project_root(start: Path) -> Path:
     current = start if start.is_dir() else start.parent
+    git_root: Path | None = None
     for candidate in (current, *current.parents):
-        if (candidate / ".project-log").is_dir() or (candidate / ".git").exists():
+        if candidate == current and (candidate / ".project-log").is_dir():
             return candidate
+        if git_root is None and (candidate / ".git").exists():
+            git_root = candidate
+    if git_root is not None:
+        return git_root
     return current
 
 
 def ensure_project(payload: dict[str, Any]) -> Path:
-    root = find_project_root(candidate_cwd(payload))
+    root = explicit_project_root(payload) or find_project_root(candidate_cwd(payload))
     if not project_log(root).is_dir():
         initialize_project(root)
     initialize_loop(root)
@@ -96,15 +109,38 @@ def maybe_probe(root: Path, hook_name: str, payload: dict[str, Any]) -> None:
         stream.write(json.dumps({"hook": hook_name, "payload": payload}, ensure_ascii=False) + "\n")
 
 
-def compact_context(root: Path) -> str:
+def compact_context(root: Path, refresh_handoff: bool = False) -> str:
     state = load_active_run(root)
-    handoff = generate_handoff(root)
+    if refresh_handoff:
+        generate_handoff(root)
+    goal = load_yaml(project_log(root) / "goals/active-goal.yaml").get("goal")
+    status = state.get("status")
+    has_active_work = bool(state.get("task_id") or state.get("next_action") or goal)
+    if status == "active" and has_active_work:
+        instruction = (
+            "An unfinished Vibe run is active. Continue its concrete next action when it is relevant to "
+            "the user's request; do not stop after reporting restored state."
+        )
+        display_status = status
+    elif status == "handed-off" and has_active_work:
+        instruction = (
+            "A Vibe run is handed off. Read the recorded next action when it is relevant to the user's "
+            "request; do not stop after reporting restored state."
+        )
+        display_status = status
+    else:
+        instruction = (
+            "No active Vibe work is restored. The user's newest request is authoritative. For a substantive "
+            "new task, create a new run before working. Do not reply with a restoration summary only."
+        )
+        display_status = "idle" if status == "active" else status
     return (
-        "Vibe Loop state restored.\n"
+        "Vibe Loop context.\n"
         f"Project root: {root}\n"
         f"Phase: {state.get('phase')}\n"
-        f"Task: {state.get('task_id') or '-'}\n"
-        f"Run status: {state.get('status')}\n"
+        f"Active task: {state.get('task_id') if status in {'active', 'handed-off'} and has_active_work else '-'}\n"
+        f"Run status: {display_status}\n"
+        f"Project goal: {goal.get('id') if goal else '-'}\n"
         f"Native Goal: {state.get('native_goal', {}).get('last_known_status') or state.get('native_goal', {}).get('binding_status')}\n\n"
-        f"{handoff}"
+        f"{instruction}\n"
     )
