@@ -87,6 +87,8 @@ Windows：
 .\install.ps1
 ```
 
+Windows 部署完成后，如启动 Codex 报 Hook 失败，按 [AI_INSTALL.md](AI_INSTALL.md) 中“Windows Hook 命令适配（Codex 0.147.0+）”一节处理；Linux/macOS 无需适配。
+
 Linux/macOS：
 
 ```bash

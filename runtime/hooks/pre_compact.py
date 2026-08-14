@@ -8,15 +8,19 @@ from hook_common import compact_context, ensure_project, maybe_probe, read_input
 
 
 def main() -> int:
-    payload = read_input()
-    root = ensure_project(payload)
-    maybe_probe(root, "PreCompact", payload)
+    try:
+        payload = read_input()
+        root = ensure_project(payload)
+        maybe_probe(root, "PreCompact", payload)
+        context = compact_context(root, refresh_handoff=True)
+    except Exception as exc:
+        context = f"Vibe state unavailable: {type(exc).__name__}: {exc}"
     print(
         json.dumps(
             {
                 "hookSpecificOutput": {
                     "hookEventName": "PreCompact",
-                    "additionalContext": compact_context(root, refresh_handoff=True),
+                    "additionalContext": context,
                 }
             },
             ensure_ascii=False,

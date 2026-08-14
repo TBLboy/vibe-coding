@@ -1,5 +1,14 @@
 # Progress
 
+## 2026-08-14T22:17:00+08:00 Stop-after-status-update root cause
+
+- Status: root cause confirmed from local rollout and log evidence; no framework code changed.
+- Symptom: after the user sent "继续", the model checked Hook hashes, then returned only a status message and stopped.
+- Evidence: `rollout-2026-07-27T21-26-37-019fa3c1-74a0-7693-97de-209b5b918788.jsonl` shows `task_complete` immediately after the assistant message at `22:11:18.554Z`.
+- Turn evidence: no ERROR; `full_context_window_limit_reached=false`; `token_limit_reached=false`; `model_needs_follow_up=false`.
+- Conclusion: primarily model behavior; Codex ends the turn when no follow-up tool call is emitted. Vibe Hooks did not fail in that turn.
+- Next step: if it recurs, retry with an explicit "continue and execute the next commands" prompt, or add a framework guard for active-run status-only completion.
+
 ## 2026-08-13T11:30:00+08:00 Loop recovery and new-run repair
 
 - Status: implementation and current-Codex installation complete; source commit pending.
@@ -15,6 +24,34 @@
 - Recorded the completed MCP encoding/proxy compatibility fixes, Codex hook compatibility fixes, and their validation evidence.
 - Prepared the current tracked changes for commit and push to origin/main; push fallback is http://127.0.0.1:10808.
 - Commit `cf2b80b` was created and pushed successfully to `origin/main` through `127.0.0.1:10808`; final worktree verification is pending.
+
+## 2026-08-05T21:30:00+08:00 Windows host cc-switch config and hook sync
+
+- Status: completed on this Windows host; repository changes are not yet committed.
+- Regenerated `cc-switch-common-config-codex.txt` for the local host with the configured Python, hooks, and marketplace paths.
+- Updated `scripts/generate_cc_switch_config.py` to emit the host header comment, matching the tracked template intent.
+- Re-ran the global installer update with `--access-profile keep-existing --mcp codegraph --mcp vibe-toolbelt --skip-preflight`; installed hook hashes match `runtime/hooks/` and verification passed.
+- Validation: TOML parses; generator output is identical to the tracked file; `pytest tests\test_loop_core.py -q` -> `13 passed`; `pytest tests\test_installer.py -q` -> `10 passed, 1 skipped`.
+- Next step: commit and push if the Windows template is to be kept as the tracked example.
+
+## 2026-08-14T22:10:00+08:00 Pull, merge, and framework install
+
+- Status: completed; changes are not committed per user request.
+- Pulled remote `53d611d` which adds loop run lifecycle fixes (`start-run`, stale-state prevention) and hook context improvements.
+- Merged local hook fixes (UTF-8 streams, graceful degradation, cc-switch generator header) with the remote update; conflicts resolved.
+- Installed the merged update into `C:\Users\12187\.codex` via `global_installer.py update --access-profile keep-existing --mcp codegraph --mcp vibe-toolbelt`.
+- Validation: installed hooks/scripts hashes match source; `loopctl validate` passed; hook tests `21 passed, 4 subtests`; installer tests `10 passed, 1 skipped`.
+- Next step: user decides whether to commit and push the merged changes.
+
+## 2026-08-05T22:00:00+08:00 SessionStart hook exit code 1 fix
+
+- Status: implemented and verified on this Windows host.
+- Symptom: interactive Codex reported `SessionStart hook (failed): hook exited with code 1` after the protocol fix.
+- Root cause: the hook process crashed while initializing project-log state for a non-ASCII/invalid payload path (PermissionError), and stdin was decoded with the console codepage instead of UTF-8.
+- Changes: `runtime/hooks/hook_common.py` reconfigures stdin/stdout to UTF-8; `session_start.py` and `pre_compact.py` catch project-state failures and return fallback context with exit code 0.
+- Changes: added `test_hooks_tolerate_non_ascii_payloads` regression coverage.
+- Validation: failing payload repro now exits 0 and returns valid JSON; `pytest tests\test_loop_core.py -q` -> `14 passed, 4 subtests`; `pytest tests\test_installer.py -q` -> `10 passed, 1 skipped`; `codex exec --ephemeral --json` returns OK.
+- Next step: user restarts the Codex terminal and confirms the TUI no longer shows the hook error.
 
 ## 2026-07-27T11:48:34+08:00 可选 MCP catalog 与 CodeGraph
 
@@ -174,3 +211,20 @@
 - 验证：Hook 专项测试 `13 passed`；安装器测试 `10 passed, 1 skipped`；包校验通过；本机受管 Hook 哈希与源码一致；直接 SessionStart 协议校验通过；Codex ephemeral 冒烟返回 `OK`，退出码 `0`。
 - 本机安装：已运行 `global_installer.py update --mcp codegraph --mcp vibe-toolbelt --access-profile keep-existing`，安装器校验通过。
 - 下一步：用户重新开启一个 Codex 对话确认 TUI 层提示消失；如需纳入远端，再提交并推送。
+
+
+## 2026-08-14 SessionStart Hook 根因修复
+
+- 状态：已修复并验证。
+- 根因：Codex 0.147.0 对 Hook command 不再做 shell 引号解析，带引号命令行无法启动进程。
+- 改动：本地 `~/.codex/config.toml` 三个 Hook 命令去引号；清除旧 trusted_hash。
+- 验证：`codex exec` 输出 `SessionStart Completed`；Hook 直连 exit 0；哈希与源码一致。
+- 下一步：用户在终端实际开新会话确认无 hook 报错；如安装器重装则需同步无引号命令格式。
+
+
+## 2026-08-14 部署文档补充 Windows Hook 适配
+
+- 状态：已完成并验证。
+- 改动：AI_INSTALL.md / AI_UPGRADE.md / README.md 新增 Windows 专属 Hook 命令适配说明；框架源码未改。
+- 验证：validate_package 通过。
+- 下一步：按需提交并推送这些文档改动。

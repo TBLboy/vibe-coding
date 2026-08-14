@@ -432,6 +432,21 @@ class HookTests(unittest.TestCase):
             context = json.loads(result.stdout)["hookSpecificOutput"]["additionalContext"]
             self.assertIn(f"Project root: {workspace}", context)
             self.assertTrue((workspace / ".project-log").is_dir())
+    def test_hooks_tolerate_non_ascii_payloads(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            project = Path(temporary)
+            payload = json.dumps({"cwd": str(project), "user": "\u7528\u6237\u6d4b\u8bd5"}, ensure_ascii=False)
+            for script in ("session_start.py", "pre_compact.py"):
+                result = subprocess.run(
+                    [sys.executable, str(ROOT / "runtime/hooks" / script)],
+                    input=payload.encode("utf-8"),
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    check=False,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                output = json.loads(result.stdout.decode("utf-8"))
+                self.assertIn("hookSpecificOutput", output)
 
 
 if __name__ == "__main__":

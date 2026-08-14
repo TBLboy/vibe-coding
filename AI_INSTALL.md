@@ -49,6 +49,31 @@ py -3 scripts\global_installer.py verify
 
 如用户明确要启用 CodeGraph，可改为 `./install.sh --mcp codegraph`（Windows 使用 `--mcp codegraph`）；默认不启用可选 MCP。
 
+## Windows Hook 命令适配（Codex 0.147.0+）
+
+在 Windows 上，Codex 0.147.0 及以上版本不再通过 shell 解析 Hook 命令中的引号。安装器默认生成的 `commandWindows` 形如：
+
+```toml
+commandWindows = "\"D:\\conda\\envs\\vibe-coding\\python.exe\" \"...\\session_start.py\""
+```
+
+这种带引号形式在 Windows 上会导致 Hook 进程无法启动，终端报 `SessionStart hook (failed) / hook exited with code 1`（Hook 脚本本身直连执行正常）。Linux/macOS 使用 `command` 字段，走 shell 解析，不受影响，无需任何修改。
+
+Windows 适配步骤（仅 Windows 需要）：
+
+1. 打开 `$env:CODEX_HOME\config.toml`（默认 `C:\Users\<用户>\.codex\config.toml`）。
+2. 将 `[[hooks.SessionStart]]`、`[[hooks.PostToolUse]]`、`[[hooks.PreCompact]]` 三个 Hook 的 `commandWindows` 改为不带引号的路径形式（本机路径无空格时）：
+
+```toml
+commandWindows = "D:\\conda\\envs\\vibe-coding\\python.exe C:\\Users\\<用户>\\.codex\\vibe-workflow\\hooks\\session_start.py"
+```
+
+3. 保持 `command` 字段不变（带引号形式，供 Linux/macOS 使用）。
+4. 删除 `[hooks.state]` 下对应的 `trusted_hash` 条目，或在下一次启动时重新信任 Hook。
+5. 验证：运行 `codex exec "say OK"`，终端输出 `hook: SessionStart Completed` 即适配成功。
+
+> 注意：`commandWindows` 路径若包含空格，则需要保留引号或用短路径/环境变量替代；当前 Vibe 默认路径不含空格。
+
 ## Linux/macOS 执行步骤
 
 ```bash

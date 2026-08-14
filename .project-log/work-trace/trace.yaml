@@ -167,3 +167,76 @@ entries:
   next_adjustment: 用户重启/新建交互式 Codex 对话观察 TUI 提示；确认后提交推送。
   evidence:
   - HOOK-SESSION-001
+
+- id: TRACE-20260805-WIN-SYNC-001
+  task_id: TASK-006
+  timestamp: '2026-08-05T21:30:00+08:00'
+  context: User asked to regenerate the cc-switch common config for this Windows host and re-sync the installed hooks after pulling the remote updates.
+  hypothesis: The new host-aware generator can produce a correct Windows template, and the installer can sync the new SessionStart/PreCompact hook protocol locally.
+  decision: Patch the generator to emit the host header, regenerate the tracked template, and run the global installer update with the existing MCP/plugin selection.
+  actions:
+  - Verified CODEX_HOME/vibe-python and installed hook state.
+  - Regenerated cc-switch-common-config-codex.txt and validated TOML.
+  - Ran global_installer.py update and verified installed hooks against runtime/hooks.
+  - Ran hook and installer test suites.
+  observation: TOML parses; generator output equals the tracked file; installed hook hashes match source; hook tests 13 passed; installer tests 10 passed, 1 skipped.
+  result: passed
+  next_step: Commit and push the regenerated template and generator header change if the user confirms.
+
+- id: TRACE-20260805-HOOK-EXIT1-001
+  task_id: TASK-006
+  timestamp: '2026-08-05T22:00:00+08:00'
+  context: User reported the SessionStart hook still failed with exit code 1 after the hookSpecificOutput protocol fix.
+  hypothesis: The hook process crashes on non-ASCII payloads or unavailable project-log paths, and stdin/stdout encoding is locale-dependent on Windows.
+  decision: Read/write hooks as UTF-8 and make SessionStart/PreCompact degrade gracefully so they always return valid JSON with exit code 0.
+  actions:
+  - Reproduced the crash with a non-ASCII payload and captured the PermissionError traceback.
+  - Patched hook_common.py for UTF-8 streams and both hooks for graceful degradation.
+  - Added a non-ASCII payload regression test and re-synced installed hooks.
+  - Ran hook, installer, and codex exec smoke validations.
+  observation: Non-ASCII payload now exits 0 with valid JSON; hook tests 14 passed, 4 subtests; installer tests 10 passed, 1 skipped; codex exec returns OK.
+  result: passed
+  next_step: User restarts the terminal and confirms the interactive session no longer shows the hook error.
+
+- id: TRACE-20260814-UPDATE-001
+  task_id: TASK-006
+  timestamp: '2026-08-14T22:10:00+08:00'
+  context: User asked to pull the updated remote code, review it, and install it into the local framework without committing.
+  hypothesis: The remote update (stale loop state fix) can be merged with the local hook fixes and installed cleanly by the global installer.
+  decision: Fast-forward pull, merge local changes, resolve conflicts, run the installer update, and verify installed files.
+  actions:
+  - Reviewed remote commit 53d611d and merged local changes.
+  - Resolved conflicts in pre_compact.py and tests/test_loop_core.py.
+  - Ran global_installer.py update and loopctl validate.
+  - Compared installed runtime hashes with source.
+  observation: Installer verification passed; installed hashes match source; hook tests 21 passed, 4 subtests; installer tests 10 passed, 1 skipped.
+  result: passed
+  next_step: User decides whether to commit and push the merged changes.
+
+- id: TRACE-20260814-HOOK-QUOTE-001
+  task_id: TASK-STOP-ROOTCAUSE-001
+  timestamp: 2026-08-14T22:45:00+08:00
+  context: 用户终端启动 Codex 报 SessionStart hook failed exit 1；Hook 脚本直连正常。
+  hypothesis: Codex 0.147.0 变更了 Hook 命令执行方式，不再通过 shell 解析引号，导致带引号命令无法 spawn 进程。
+  decision: 用一次性诊断 runner/诊断版 Hook 抓真实调用证据，确认进程未启动；再将命令改为无引号形式修复。
+  actions:
+  - 复现：`codex exec` 输出 `hook: SessionStart Failed`；诊断版 Hook 无任何日志，证明进程未启动。
+  - 对照：命令改为 `python.exe -c ...` 后 `SessionStart Completed`；无引号路径形式同样 Completed。
+  - 修复：config.toml 三个 Hook command/commandWindows 去引号，清除 trusted_hash。
+  observation: `codex exec --dangerously-bypass-hook-trust` 输出 `hook: SessionStart Completed`；三 Hook 直连 exit 0。
+  result: passed
+  next_step: 用户在终端新会话确认；框架安装器模板需同步无引号命令格式（未改源码）。
+
+- id: TRACE-20260814-DOC-WINHOOK-001
+  task_id: TASK-STOP-ROOTCAUSE-001
+  timestamp: 2026-08-14T23:05:00+08:00
+  context: 用户确认 Windows 上需去引号修复、Linux 上原配置正常，要求不改框架源码，只在部署文档写明 Windows 适配。
+  hypothesis: 文档补充 Windows 专属适配步骤即可同时满足两端：Linux 正常安装，Windows 按文档修改 commandWindows。
+  decision: 仅修改 AI_INSTALL.md、AI_UPGRADE.md、README.md；不改 runtime/安装器/行为代码。
+  actions:
+  - AI_INSTALL.md 新增 Windows Hook 命令适配章节。
+  - AI_UPGRADE.md、README.md 补充指引。
+  - 运行 validate_package.py 校验。
+  observation: validate_package 输出 Package validation passed；git diff 仅涉及三个文档。
+  result: passed
+  next_step: 提交并推送文档改动（需用户确认）。

@@ -46,6 +46,15 @@ def generate(root: Path, home: Path) -> str:
     python = configured_python(home)
     hooks = home / "vibe-workflow" / "hooks"
     lines = [
+        "# Generated for the current host by:",
+        "#",
+        "#   python3 scripts/generate_cc_switch_config.py \\",
+        "#     --output cc-switch-common-config-codex.txt",
+        "#",
+        "# Do not copy this file between machines without regenerating it. It contains",
+        "# host-specific absolute paths for CODEX_HOME, Vibe Python, hooks, and the",
+        "# local vibe-coding marketplace.",
+        "",
         'model_reasoning_effort = "high"',
         "disable_response_storage = true",
         "",

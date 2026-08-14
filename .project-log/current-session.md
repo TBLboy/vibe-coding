@@ -1,5 +1,16 @@
 # Current Session
 
+## 2026-08-14 Stop-after-status-update root cause
+
+- User sent "继续" in thread `019fa3c1-74a0-7693-97de-209b5b918788`; the model performed one Hook config/hash check, then returned only a status message and made no follow-up tool call.
+- Codex logged a normal `task_complete` immediately after that message. The turn had no ERROR, no Hook failure, and no context-limit trigger.
+- Evidence: `sessions\2026\07\27\rollout-2026-07-27T21-26-37-019fa3c1-74a0-7693-97de-209b5b918788.jsonl` records the assistant message at `22:11:18.549Z` and `task_complete` at `22:11:18.554Z`.
+- Log evidence: turn `01a0009c-a5be-7ac1-9e6a-676c86f3c15c` had `full_context_window_limit_reached=false`, `token_limit_reached=false`, and `model_needs_follow_up=false`.
+- Attribution: primarily model-side premature stop. Codex closes a turn when the model stops emitting tool calls; the Vibe Hooks did not fail during that turn.
+- Related context: two stale `Function call output is missing` warnings existed from an earlier aborted turn, but they did not directly cause this stop.
+- Status: root cause diagnosed; the original SessionStart Hook investigation remains unfinished.
+- Next step: continue that Hook investigation or add a framework guard against status-only completion while a Vibe run is active.
+
 ## 2026-08-13 Loop recovery and new-run repair
 
 - User reported that a normal task could stop after a state-restoration response without completing the requested work.
@@ -15,6 +26,32 @@
 - User paused the current MCP/Codex terminal investigation after the fixes and validations were completed.
 - Closeout scope: record progress, commit the current vibe-coding source changes, and push to origin/main through 127.0.0.1:10808 if required.
 - Push evidence: commit `cf2b80b` was pushed successfully to `origin/main` through `127.0.0.1:10808`; final worktree verification is pending.
+
+## 2026-08-05 Windows host config sync
+
+- User requested the cc-switch common config be regenerated for this Windows host and the installed hooks re-synced.
+- Regenerated `cc-switch-common-config-codex.txt` with `scripts/generate_cc_switch_config.py` using the configured Vibe Python (`D:\conda\envs\vibe-coding\python.exe`).
+- Patched the generator to emit the host header comment so the tracked template stays reproducible from the generator.
+- Re-ran `global_installer.py update --access-profile keep-existing --mcp codegraph --mcp vibe-toolbelt --skip-preflight`; verification passed.
+- Evidence: TOML parses; installed hook hashes match source; generator output equals the tracked file; hook tests `13 passed`; installer tests `10 passed, 1 skipped`.
+- Next step: user decides whether to commit and push the local config regeneration.
+
+## 2026-08-14 Pull, merge, and framework install
+
+- User asked to pull the updated remote code, review it, and install it into the local framework without committing yet.
+- Pulled `53d611d fix: prevent stale loop state from ending new tasks` (fast-forward from `b138bc0`).
+- Merged local hook resilience/UTF-8 changes with the remote update; resolved conflicts in `pre_compact.py` and `tests/test_loop_core.py`.
+- Installed the merged framework with `global_installer.py update`; installer verification passed.
+- Evidence: hook tests `21 passed, 4 subtests`; installer tests `10 passed, 1 skipped`; `loopctl validate` passed; installed runtime hashes match source.
+
+## 2026-08-05 SessionStart hook resilience fix
+
+- User still saw `SessionStart hook (failed): hook exited with code 1` after the hook protocol fix.
+- Reproduced with a non-ASCII UTF-8 payload: the hook crashed while initializing `.project-log` (PermissionError on Windows), forcing exit code 1.
+- Root cause: stdin/stdout decoding used the console codepage instead of UTF-8, and project-state initialization failures were uncaught.
+- Fix: hooks read/write UTF-8 streams; SessionStart and PreCompact catch project-state failures, return fallback context, and always exit 0 with valid JSON.
+- Validation: non-ASCII payload repro exits 0; hook tests `14 passed, 4 subtests`; installer tests `10 passed, 1 skipped`; `codex exec` smoke returns OK.
+- Next step: user restarts the terminal and opens a new session to confirm the hook error is gone.
 
 - Current phase: MCP/hooks/plugin ???????
 - Current goal: ?? cc-switch ????? `document-loader` MCP ?????????? Codex ???? Hook ????
@@ -51,3 +88,24 @@
 - 已安装到 `/home/tbl/.codex/vibe-workflow/hooks/`；源码与已安装文件哈希一致。
 - 验证：13 个 Loop/Hook 测试通过；11 个安装器测试中 10 通过、1 跳过；包校验通过；Codex ephemeral 返回 `OK`。
 - 精确下一步：用户重新开启一个新对话确认实际 TUI 提示；当前修复尚未提交推送。
+
+
+## 2026-08-14 SessionStart Hook 根因修复（Codex 0.147.0 命令解析变更）
+
+- 现象：终端启动 Codex 时 `SessionStart hook (failed) / hook exited with code 1`；同一 Hook 脚本直连执行 exit 0。
+- 根因：Codex 0.147.0 不再通过 shell 解析 Hook 命令中的引号。原配置 `"D:/conda/.../python.exe" ".../session_start.py"` 的带引号命令行无法启动进程（进程从未运行，连模块加载日志都没有），被 Codex 报告为 exit 1。
+- 证据：将命令临时改为 `python.exe -c ...` 后 `hook: SessionStart Completed`；改回无引号路径形式同样 Completed，且 Hook 内部日志显示 Python 进程正常启动、import 与 main 全流程通过。
+- 修复：`C:\Users\12187\.codex\config.toml` 三个 Hook（SessionStart/PostToolUse/PreCompact）命令与 commandWindows 全部去掉引号（路径无空格），并清除旧 trusted_hash 以便重新信任。
+- 验证：`codex exec --dangerously-bypass-hook-trust` 输出 `hook: SessionStart Completed`；三个 Hook 直连均 exit 0 且输出合法 JSON；已安装 Hook 文件哈希与仓库源码一致；诊断残留文件已清理。
+- 注意：当前修复只改本地 config.toml，未改 `D:\Project\vibe-coding` 源码；若重新运行安装器覆盖 config，需再次应用无引号形式（建议后续在框架安装器模板中同步此变更）。
+
+
+## 2026-08-14 部署文档补充 Windows Hook 适配说明
+
+- 决策：框架运行时源码不动（Linux/macOS 部署不受影响），只在部署文档中写明 Windows 专属适配。
+- 改动：
+  - `AI_INSTALL.md`：新增 “Windows Hook 命令适配（Codex 0.147.0+）” 章节，说明根因、修改 `commandWindows` 去掉引号的步骤、trusted_hash 处理和验证方法。
+  - `AI_UPGRADE.md`：Windows 升级章节补充遇到 Hook 失败时的处理指引，指向 AI_INSTALL.md。
+  - `README.md`：Windows 安装命令后加一行指引。
+- 验证：`validate_package.py --root .` 输出 `Package validation passed.`。
+- 约束遵守：未修改 runtime 脚本/安装器模板/任何框架行为代码；Linux/macOS 安装路径不变。

@@ -1,8 +1,8 @@
 # Loop Handoff
 
 - Goal: not set
-- Phase: business-intent
-- Task: none
+- Phase: verification
+- Task: TASK-STOP-ROOTCAUSE-001
 - Run status: active
 - Native Goal: unbound
 - Valid evidence: AUDIT-001, AUDIT-002, AUDIT-003, AUDIT-004, AUDIT-005, AUDIT-006, AUDIT-007, AUDIT-008, PYTHON-001, PYTHON-002, PYTHON-003, PYTHON-004, MCP-006, MCP-007

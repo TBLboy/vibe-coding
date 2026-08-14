@@ -1,9 +1,9 @@
 schema_version: 1
-run_id: null
+run_id: RUN-20260814-141701-70cb23f5
 goal_id: null
-phase: business-intent
+phase: verification
 clarification_domain: null
-task_id: null
+task_id: TASK-STOP-ROOTCAUSE-001
 status: active
 next_action: null
 counters:
@@ -21,5 +21,5 @@ native_goal:
   thread_goal_id: null
   last_known_status: null
   last_synced_at: null
-last_event_id: LE-000026
-updated_at: '2026-08-03T03:03:21Z'
+last_event_id: LE-000031
+updated_at: '2026-08-14T14:40:02Z'

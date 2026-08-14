@@ -25,3 +25,8 @@
 {"schema_version":1,"event_id":"LE-000024","time":"2026-08-03T03:02:51Z","run_id":null,"type":"handoff-generated","reason":"active"}
 {"schema_version":1,"event_id":"LE-000025","time":"2026-08-03T03:02:51Z","run_id":null,"type":"handoff-generated","reason":"active"}
 {"schema_version":1,"event_id":"LE-000026","time":"2026-08-03T03:03:21Z","run_id":null,"type":"handoff-generated","reason":"active"}
+{"schema_version":1,"event_id":"LE-000027","time":"2026-08-05T13:36:36Z","run_id":null,"type":"handoff-generated","reason":"active"}
+{"schema_version":1,"event_id":"LE-000028","time":"2026-08-05T13:36:36Z","run_id":null,"type":"handoff-generated","reason":"active"}
+{"schema_version":1,"event_id":"LE-000029","time":"2026-08-14T14:17:01Z","run_id":"RUN-20260814-141701-70cb23f5","type":"run-started","phase":"verification","task_id":"TASK-STOP-ROOTCAUSE-001"}
+{"schema_version":1,"event_id":"LE-000030","time":"2026-08-14T14:40:02Z","run_id":"RUN-20260814-141701-70cb23f5","type":"work-unit-finished","tool_name":"unknown","changed_paths":[],"invalidated_evidence":[]}
+{"schema_version":1,"event_id":"LE-000031","time":"2026-08-14T14:40:02Z","run_id":"RUN-20260814-141701-70cb23f5","type":"handoff-generated","reason":"active"}

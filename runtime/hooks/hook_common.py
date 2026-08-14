@@ -17,6 +17,14 @@ from init_project import initialize_project
 from loop_state import append_event, generate_handoff, initialize_loop, load_active_run, load_yaml, project_log
 
 
+for _stream in (sys.stdin, sys.stdout):
+    if _stream is not None:
+        try:
+            _stream.reconfigure(encoding="utf-8")
+        except (AttributeError, ValueError):
+            pass
+
+
 PATH_KEYS = {"path", "file", "file_path", "filepath", "target", "destination"}
 PATCH_PATH_RE = re.compile(r"^\*\*\* (?:Add|Update|Delete) File: (.+)$", re.MULTILINE)
 

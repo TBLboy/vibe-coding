@@ -39,6 +39,8 @@ py -3 scripts\global_installer.py preflight
 py -3 scripts\global_installer.py verify
 ```
 
+升级后若在 Windows 上启动 Codex 报 `SessionStart hook (failed) / hook exited with code 1`，原因是 Codex 0.147.0+ 在 Windows 上不再通过 shell 解析 Hook 命令中的引号。按 `AI_INSTALL.md` 中“Windows Hook 命令适配（Codex 0.147.0+）”一节，将 `config.toml` 三个 Hook 的 `commandWindows` 改为不带引号的路径形式即可；`command` 字段保持不变，Linux/macOS 无需任何修改。
+
 ## Linux/macOS 升级
 
 ```bash
