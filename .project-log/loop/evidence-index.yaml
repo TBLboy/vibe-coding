@@ -288,3 +288,57 @@ evidence:
   recorded_at: '2026-07-27T13:58:34Z'
   invalidated_at: null
   invalidation_reason: null
+- id: LOG-REPAIR-001
+  kind: validation
+  subject: 项目日志 schema、Loop 状态与 SessionStart 恢复视图修复
+  status: valid
+  command: validate_project.py --root .; loopctl validate; validate_package.py --root
+    .; python -m unittest discover -s tests -p test_*.py -q; session_start.py smoke
+  result_ref: 2026-08-15 repair verification
+  covers:
+    files:
+    - .project-log/decisions/decision-log.yaml
+    - .project-log/verification/evidence.yaml
+    - .project-log/work-trace/trace.yaml
+    - .project-log/loop/active-run.yaml
+    - .project-log/tasks/task-list.yaml
+    requirements: []
+    tasks:
+    - TASK-007
+  version_binding:
+    git_commit: 19b91e6656109c3cb7273b14f082198f9eafd6f2
+    diff_hash: 5ca2ef8b10db93ebf6d2feeaacff08016e311c0d4d445252b71fc5e108140a81
+    file_hashes:
+      .project-log/decisions/decision-log.yaml: b63a628ed03a66795a654e00bcf41d2e3e52892f81f4d657154989d764d644b4
+      .project-log/verification/evidence.yaml: 51e65346df8966bc92cc2c5ea29fd763aa829479878bdd997d153b9f2993dc91
+      .project-log/work-trace/trace.yaml: 6f45a26f1c4b3536512b05046d1e930ef61c388285785beb89299e8146035f03
+      .project-log/loop/active-run.yaml: aaf288ef7fc4ec4c61f702190d446dd3a49aea5098c44158c2b98f981f739a76
+      .project-log/tasks/task-list.yaml: 8e7d77719358d5d04a9774d686de4155ce995f9d7d12f94d14770e46f1ab48cf
+  recorded_at: '2026-08-15T11:44:33Z'
+  invalidated_at: null
+  invalidation_reason: null
+- id: DOC-USAGE-001
+  kind: validation
+  subject: docs/USAGE.md 完整用户指南扩充
+  status: valid
+  command: validate_package.py --root .; validate_project.py --root .; loopctl validate;
+    python -m unittest discover -s tests -p test_*.py -q; markdown structural check
+  result_ref: docs/USAGE.md 767 lines; 38 tests passed, 1 skipped
+  covers:
+    files:
+    - docs/USAGE.md
+    - .project-log/tasks/task-list.yaml
+    - .project-log/work-trace/trace.yaml
+    requirements: []
+    tasks:
+    - TASK-008
+  version_binding:
+    git_commit: 19b91e6656109c3cb7273b14f082198f9eafd6f2
+    diff_hash: 1357df29d8e3e7afe5ba2330ff22ae3cd82d3be0253b3eee41e5dd48a991516f
+    file_hashes:
+      docs/USAGE.md: b103001db6c86fe2bed32250b0a3fe3bc36fc603b657da7ee9a34dd6aa01d8af
+      .project-log/tasks/task-list.yaml: 553cf08449237716e293a26a3f47648b30c2349259342066f5c7cef4b600a454
+      .project-log/work-trace/trace.yaml: 0ce0603c8ec64673ff816cfac2d98d14469ff52a7fc7a9af06703ff04ad41ab2
+  recorded_at: '2026-08-15T11:54:14Z'
+  invalidated_at: null
+  invalidation_reason: null

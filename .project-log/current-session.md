@@ -1,5 +1,20 @@
 # Current Session
 
+## 2026-08-15 充实 docs/USAGE.md 用户使用指南（TASK-008）
+
+- 用户确认目标文件为 `docs/USAGE.md`，要求把简略文档写得更丰满。
+- 已将文档扩展为完整用户手册：增加全局/项目/对话三层模型、安装准备、项目初始化、端到端工作流、状态模型、失败重试、A/B/C 决策、多客户端、cc-switch/MCP、常用提示、排障、安全边界、恢复和完成标准。
+- 验证：包校验、项目日志校验、Loop 校验和 38 个 unittest（1 个跳过）通过；Markdown 代码围栏平衡，文档引用目标存在。
+- 记录时间：2026-08-15T12:05:00+08:00。
+
+
+## 2026-08-15 修复项目日志校验问题（TASK-007）
+
+- 用户要求修复快速检查发现的四个问题：DEC-003 缺少 `hypothesis/options`、verification/evidence.yaml 与 work-trace/trace.yaml 的反引号导致 YAML 解析失败、以及无目标无下一步的残留 active run。
+- 已补全 DEC-003 的假设与备选方案；移除导致 YAML 词法错误的 Markdown 反引号；将残留 run 标记为 `complete` 并写入 run-completed/handoff 事件。
+- 记录时间：2026-08-15T19:40:03+08:00。
+- 验证：validate_project、loopctl validate、validate_package、38 个 unittest（1 个跳过）和 SessionStart smoke 全部通过；恢复视图显示无 active task，Run status 为 complete。
+
 ## 2026-08-15 项目初始化 a-project-init skill
 
 - User asked to optimize the framework and entered business clarification: project initialization should also establish/update root `AGENTS.md`, not just `.project-log`.

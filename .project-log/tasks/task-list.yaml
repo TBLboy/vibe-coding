@@ -46,7 +46,8 @@ tasks:
   title: Expand Codex Skill routing and keep repository source-only
   kind: task
   phase: implementation
-  goal: Make high-value installed Skills discoverable through the global Agent route table and stop tracking release archives
+  goal: Make high-value installed Skills discoverable through the global Agent route
+    table and stop tracking release archives
   status: done
   authority: A
   owner: agent
@@ -61,8 +62,8 @@ tasks:
   - expanded Skill route table
   - source-only Git repository configuration
   done_when:
-  - orchestration, research, context, workflow-maintenance, extraction, Skill-authoring, plan-stress-test, and UX-audit routes
-    are explicit
+  - orchestration, research, context, workflow-maintenance, extraction, Skill-authoring,
+    plan-stress-test, and UX-audit routes are explicit
   - every newly routed Skill has a local SKILL.md
   - release archives are removed from Git tracking and ignored
   - package validation and the standard-library test suite pass
@@ -76,9 +77,11 @@ tasks:
     - ROUTE-002
     - ROUTE-003
     limitations:
-    - pytest is not installed in the current Python environment; unittest execution passed
+    - pytest is not installed in the current Python environment; unittest execution
+      passed
   result:
-    summary: Added nine explicit Skill routes, removed tracked ZIP artifacts, and added ZIP ignore rules
+    summary: Added nine explicit Skill routes, removed tracked ZIP artifacts, and
+      added ZIP ignore rules
     changed_files:
     - prompts/vibe-global-agent.md
     - .gitignore
@@ -90,7 +93,8 @@ tasks:
   title: 配置全局 Vibe Python 解释器并绑定 Hooks
   kind: task
   phase: implementation
-  goal: 让安装器在缺少全局配置时自动创建或修复 Conda/Miniforge/Miniconda 的 vibe-coding Python 3.11 环境，并让所有跨项目 Vibe Python 功能使用它。
+  goal: 让安装器在缺少全局配置时自动创建或修复 Conda/Miniforge/Miniconda 的 vibe-coding Python 3.11 环境，并让所有跨项目
+    Vibe Python 功能使用它。
   status: done
   authority: A
   owner: agent
@@ -117,9 +121,12 @@ tasks:
     status: passed
     commands:
     - /home/tbl/Project/vibe-coding/install.sh or update.sh bootstrap_vibe_python.py
-    - /home/tbl/miniforge3/envs/vibe-coding/bin/python runtime/scripts/validate_package.py --root .
-    - /home/tbl/miniforge3/envs/vibe-coding/bin/python -m unittest discover -s tests -p test_*.py -q
-    - /home/tbl/miniforge3/envs/vibe-coding/bin/python scripts/global_installer.py verify --codex-home /home/tbl/.codex --without-mcp
+    - /home/tbl/miniforge3/envs/vibe-coding/bin/python runtime/scripts/validate_package.py
+      --root .
+    - /home/tbl/miniforge3/envs/vibe-coding/bin/python -m unittest discover -s tests
+      -p test_*.py -q
+    - /home/tbl/miniforge3/envs/vibe-coding/bin/python scripts/global_installer.py
+      verify --codex-home /home/tbl/.codex --without-mcp
     - fresh project init/validate/restore and SessionStart/PreCompact hook smoke test
     evidence:
     - PYTHON-001
@@ -129,8 +136,8 @@ tasks:
     limitations:
     - PostToolUse 未单独执行真实写入工具回调；其脚本已包含在安装包测试和配置注册中。
   result:
-    summary: 新增用户级 CODEX_HOME/vibe-python 与 VIBE_PYTHON 临时覆盖；安装/升级包装脚本会自动创建或修复 Conda 环境 vibe-coding、安装 runtime 依赖，并将全局 Hooks
-      绑定到 /home/tbl/miniforge3/envs/vibe-coding/bin/python3.11。
+    summary: 新增用户级 CODEX_HOME/vibe-python 与 VIBE_PYTHON 临时覆盖；安装/升级包装脚本会自动创建或修复 Conda
+      环境 vibe-coding、安装 runtime 依赖，并将全局 Hooks 绑定到 /home/tbl/miniforge3/envs/vibe-coding/bin/python3.11。
     changed_files:
     - scripts/global_installer.py
     - tests/test_installer.py
@@ -174,8 +181,10 @@ tasks:
   verification:
     status: passed
     commands:
-    - /home/tbl/miniforge3/envs/vibe-coding/bin/python runtime/scripts/validate_package.py --root .
-    - /home/tbl/miniforge3/envs/vibe-coding/bin/python -m unittest discover -s tests -p test_*.py -q
+    - /home/tbl/miniforge3/envs/vibe-coding/bin/python runtime/scripts/validate_package.py
+      --root .
+    - /home/tbl/miniforge3/envs/vibe-coding/bin/python -m unittest discover -s tests
+      -p test_*.py -q
     - /home/tbl/miniforge3/envs/vibe-coding/bin/python build_release.py
     - scripts/global_installer.py update --mcp codegraph --skip-doctor
     - scripts/global_installer.py verify
@@ -189,7 +198,8 @@ tasks:
     limitations:
     - 当前 Codex ACP 线程需要重启后才会在工具列表中暴露新 MCP；命令行配置和服务状态已验证。
   result:
-    summary: 新增声明式可选 MCP catalog，默认核心安装；支持 --mcp 重复选择，CodeGraph 已安装并配置到当前 Codex；Vibe Coding 升级为 0.4.1。
+    summary: 新增声明式可选 MCP catalog，默认核心安装；支持 --mcp 重复选择，CodeGraph 已安装并配置到当前 Codex；Vibe
+      Coding 升级为 0.4.1。
     changed_files:
     - runtime/mcp/optional-mcps.json
     - scripts/global_installer.py
@@ -231,14 +241,108 @@ tasks:
   verification:
     status: passed
     commands:
-    - /home/tbl/miniforge3/envs/vibe-coding/bin/python runtime/scripts/validate_package.py --root .
-    - /home/tbl/miniforge3/envs/vibe-coding/bin/python -m unittest discover -s tests -v
-    - /home/tbl/miniforge3/envs/vibe-coding/bin/python runtime/scripts/validate_project.py --root .
+    - /home/tbl/miniforge3/envs/vibe-coding/bin/python runtime/scripts/validate_package.py
+      --root .
+    - /home/tbl/miniforge3/envs/vibe-coding/bin/python -m unittest discover -s tests
+      -v
+    - /home/tbl/miniforge3/envs/vibe-coding/bin/python runtime/scripts/validate_project.py
+      --root .
     evidence:
     - skills/b-source-code-tutoring/SKILL.md
     - .project-log/evals/source-code-tutoring.yaml
     limitations:
     - 未在新的独立代码库教学会话中完成端到端人工评测；已保留评测样例。
+- id: TASK-007
+  title: 修复项目日志结构与残留 Loop active run
+  kind: repair
+  phase: verification
+  goal: 恢复项目日志 YAML 可解析性，并清理没有对应项目目标的残留 active run
+  status: done
+  authority: A
+  owner: agent
+  related_business_logic: []
+  depends_on: []
+  inputs:
+  - .project-log/decisions/decision-log.yaml
+  - .project-log/verification/evidence.yaml
+  - .project-log/work-trace/trace.yaml
+  - .project-log/loop/active-run.yaml
+  outputs:
+  - DEC-003 补全 hypothesis/options
+  - 两个 YAML 文件恢复可解析
+  - 残留 active run 标记为 complete
+  done_when:
+  - validate_project.py --root . 通过
+  - loopctl validate 通过
+  - 单元测试与包校验保持通过
+  verification:
+    status: passed
+    commands:
+    - '.../runtime/scripts/validate_project.py --root .'
+    - '.../vibe-workflow/scripts/loopctl.py --root . validate'
+    - '.../runtime/scripts/validate_package.py --root .'
+    - '.../bin/python -m unittest discover -s tests -p test_*.py -q'
+    - runtime/hooks/session_start.py smoke with /home/tbl/Project/vibe-coding
+    evidence:
+    - LOG-REPAIR-001
+    limitations: []
+  result:
+    summary: 项目日志 schema、Loop 状态和 SessionStart 恢复视图均已修复并验证通过。
+    changed_files:
+    - .project-log/decisions/decision-log.yaml
+    - .project-log/verification/evidence.yaml
+    - .project-log/work-trace/trace.yaml
+    - .project-log/loop/active-run.yaml
+    - .project-log/loop/events.jsonl
+    - .project-log/loop/handoff.md
+    - .project-log/tasks/task-list.yaml
+    - .project-log/tasks/task-list.md
+    - .project-log/current-session.md
+    deviations: []
+    follow_ups: []
+  created_at: '2026-08-15T00:00:00+08:00'
+  updated_at: '2026-08-15T11:43:32+08:00'
+- id: TASK-008
+  title: 充实 docs/USAGE.md 用户使用指南
+  kind: task
+  phase: implementation
+  goal: 将现有简略使用指南扩展为覆盖安装、日常工作流、Loop 状态、验证、故障排查和归档的完整用户手册
+  status: done
+  authority: A
+  owner: agent
+  related_business_logic: []
+  depends_on: []
+  inputs:
+  - README.md
+  - AI_INSTALL.md
+  - AI_UPGRADE.md
+  - docs/USAGE.md
+  - prompts/vibe-global-agent.md
+  outputs:
+  - docs/USAGE.md
+  done_when:
+  - 用户可根据文档完成从安装到归档的完整流程
+  - 文档中的命令、状态和目录说明与当前实现一致
+  - 文档校验、包校验和测试通过
+  verification:
+    status: passed
+    commands:
+    - runtime/scripts/validate_package.py --root .
+    - runtime/scripts/validate_project.py --root .
+    - vibe-workflow/scripts/loopctl.py --root . validate
+    - python -m unittest discover -s tests -p test_*.py -q
+    - 'markdown structural check: fenced blocks balanced and referenced docs exist'
+    evidence:
+    - DOC-USAGE-001
+    limitations: []
+  result:
+    summary: 将 docs/USAGE.md 从简略流程说明扩展为完整用户手册，覆盖安装、项目初始化、端到端工作流、三套状态、决策权限、多客户端、MCP/cc-switch、常见操作、排障、安全边界和完成标准。
+    changed_files:
+    - docs/USAGE.md
+    deviations: []
+    follow_ups: []
+  created_at: '2026-08-15T20:00:00+08:00'
+  updated_at: '2026-08-15T12:05:00+08:00'
 - id: TASK-006
   title: 固化项目初始化 a-project-init skill 与路由
   kind: task
@@ -278,9 +382,9 @@ tasks:
     - python3 runtime/scripts/validate_package.py --root .
     - python3 runtime/scripts/validate_project.py --root .
     evidence:
-    - "UNIT-PI-001: test_project_init.py 6 passed"
-    - "SMOKE-PI-001: CLI 初始化创建 .project-log(62) + AGENTS.md，重跑幂等"
-    - "VALID-PI-001: validate_package passed；validate_project 仅剩 4 个历史存量问题"
+    - 'UNIT-PI-001: test_project_init.py 6 passed'
+    - 'SMOKE-PI-001: CLI 初始化创建 .project-log(62) + AGENTS.md，重跑幂等'
+    - 'VALID-PI-001: validate_package passed；validate_project 仅剩 4 个历史存量问题'
     limitations:
     - validate_project 仍有 4 个历史遗留问题（DEC-003 缺字段、evidence.yaml/trace.yaml YAML 解析），与本任务新增记录无关
   created_at: '2026-08-15T10:20:00+08:00'

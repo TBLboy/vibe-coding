@@ -31,3 +31,11 @@
 {"schema_version":1,"event_id":"LE-000030","time":"2026-08-14T14:40:02Z","run_id":"RUN-20260814-141701-70cb23f5","type":"work-unit-finished","tool_name":"unknown","changed_paths":[],"invalidated_evidence":[]}
 {"schema_version":1,"event_id":"LE-000031","time":"2026-08-14T14:40:02Z","run_id":"RUN-20260814-141701-70cb23f5","type":"handoff-generated","reason":"active"}
 {"schema_version":1,"event_id":"LE-000032","time":"2026-08-15T01:59:45Z","run_id":"RUN-20260815-015945-d28edcdc","type":"run-started","phase":"business-clarification","task_id":"TASK-CLARIFY-FRAMEWORK-001"}
+{"schema_version":1,"event_id":"LE-000033","time":"2026-08-15T11:40:03Z","run_id":"RUN-20260815-015945-d28edcdc","type":"run-completed","reason":"stale active run cleanup; no project goal or next action existed"}
+{"schema_version":1,"event_id":"LE-000034","time":"2026-08-15T11:40:03Z","run_id":"RUN-20260815-015945-d28edcdc","type":"handoff-generated","reason":"complete"}
+{"schema_version":1,"event_id":"LE-000035","time":"2026-08-15T11:43:32Z","run_id":"RUN-20260815-015945-d28edcdc","type":"evidence-recorded","evidence_id":"LOG-REPAIR-001","status":"valid"}
+{"schema_version":1,"event_id":"LE-000036","time":"2026-08-15T11:44:33Z","run_id":"RUN-20260815-015945-d28edcdc","type":"evidence-recorded","evidence_id":"LOG-REPAIR-001","status":"valid"}
+{"schema_version":1,"event_id":"LE-000037","time":"2026-08-15T11:50:12Z","run_id":"RUN-20260815-115012-c88e595d","type":"run-started","phase":"implementation","task_id":"TASK-008"}
+{"schema_version":1,"event_id":"LE-000038","time":"2026-08-15T11:54:14Z","run_id":"RUN-20260815-115012-c88e595d","type":"evidence-recorded","evidence_id":"DOC-USAGE-001","status":"valid"}
+{"schema_version":1,"event_id":"LE-000039","time":"2026-08-15T11:54:36Z","run_id":"RUN-20260815-115012-c88e595d","type":"run-completed","reason":"TASK-008 documentation work verified"}
+{"schema_version":1,"event_id":"LE-000040","time":"2026-08-15T11:54:36Z","run_id":"RUN-20260815-115012-c88e595d","type":"handoff-generated","reason":"complete"}

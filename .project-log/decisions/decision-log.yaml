@@ -126,6 +126,23 @@ decisions:
   related_tasks: []
   related_business_logic: []
   context: cc-switch 通用配置模板曾把 Windows 的 Conda、用户目录和源码仓库路径写死，用户当前实际运行环境为 Ubuntu，直接粘贴会导致 Hook 与本地 marketplace 无法加载。
+  hypothesis: 将宿主机相关绝对路径写死在通用配置模板中，会导致跨机器复制后 Hook 与本地 marketplace 无法加载；按目标宿主机动态生成可消除该漂移。
+  options:
+  - name: 继续维护固定模板
+    benefits:
+    - 修改成本低
+    costs:
+    - 更换宿主机时需要手工修改路径
+    risks:
+    - 容易因路径漂移导致配置失效
+  - name: 按宿主机动态生成（选择）
+    benefits:
+    - 从当前宿主机事实来源生成可直接使用的配置
+    costs:
+    - 更换宿主机时需要重新运行生成脚本
+    risks:
+    - 生成脚本必须正确解析目标宿主机环境
+
   decision: 新增生成脚本，从 CODEX_HOME、VIBE_PYTHON 或 CODEX_HOME/vibe-python 以及当前源码根目录解析绝对路径；模板文件只保存当前宿主生成结果，并明确禁止跨机器直接复制。
   reason_summary:
   - 安装器已有同源的宿主路径解析逻辑，生成脚本应复用同一事实来源
