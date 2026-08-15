@@ -165,3 +165,12 @@
   - 同步到本机 `~/.codex/skills/a-project-init/`（SKILL.md、templates/general-rules.md）。
 - 验证：`validate_package.py --root .` 输出 `Package validation passed.`；临时目录真实初始化验证 AGENTS.md 含第 7 条规则与「仓库类型：团队协作仓库」项目级记录。
 - 未改动：`init_project_agents.py` 确定性链路保持原样；已有 AGENTS.md 的注入语义不变。
+
+## 2026-08-15 新增使用指南文档与四端适用说明
+
+- 需求：README 明确框架适用 Codex CLI、VS Code 插件、桌面端、ACP 外部协议连接端；docs 新增以真实任务为例的使用指南。
+- 改动：
+  - `README.md`：标题下定位改为面向四类 Codex 客户端的全局 Vibe Coding 工作流；新增「使用指南」章节，指向 `docs/USAGE.md`。
+  - `docs/USAGE.md`：新增完整使用指南。以团队协作机器人项目（ROS 2 主线仓库 + 独立执行器仓库、同一分支多人开发）新增「设备状态采集」为例，贯穿六个环节：初始化工程（生成 .project-log 与 AGENTS.md、Git 仓库检查与类型询问）→ 业务逻辑澄清（功能/技术/双向对齐）→ 技术选型（接口、架构、兼容约束）→ 代码落地（写代码-测试-收集证据-判断）→ 非线性回退（BUG 回到澄清）→ 归档工程（a-project-log-archive 推送至个人知识库）。并介绍 Skills a/b 分级与自动路由、内外双循环等框架特点。
+- 验证：`validate_package.py --root .` 输出 `Package validation passed.`。
+- 说明：示例场景为通用描述，未引用任何真实项目内部规则或代码内容。

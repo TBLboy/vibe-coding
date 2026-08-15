@@ -1,6 +1,10 @@
 # Vibe Coding - Codex Global Core 0.4.1
 
-面向最新稳定版 OpenAI Codex CLI / Desktop 的用户级全局 Vibe Coding 工作流。
+面向 Codex CLI、VS Code 插件、桌面端与 ACP 外部协议连接端等 Codex 客户端的用户级全局 Vibe Coding 工作流。
+
+## 使用指南
+
+以真实开发任务讲解完整使用流程（初始化工程 → 业务逻辑澄清 → 技术选型 → 代码落地 → 归档留痕），见 [docs/USAGE.md](docs/USAGE.md)。
 
 ## 核心能力
 
