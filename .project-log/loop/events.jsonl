@@ -30,3 +30,4 @@
 {"schema_version":1,"event_id":"LE-000029","time":"2026-08-14T14:17:01Z","run_id":"RUN-20260814-141701-70cb23f5","type":"run-started","phase":"verification","task_id":"TASK-STOP-ROOTCAUSE-001"}
 {"schema_version":1,"event_id":"LE-000030","time":"2026-08-14T14:40:02Z","run_id":"RUN-20260814-141701-70cb23f5","type":"work-unit-finished","tool_name":"unknown","changed_paths":[],"invalidated_evidence":[]}
 {"schema_version":1,"event_id":"LE-000031","time":"2026-08-14T14:40:02Z","run_id":"RUN-20260814-141701-70cb23f5","type":"handoff-generated","reason":"active"}
+{"schema_version":1,"event_id":"LE-000032","time":"2026-08-15T01:59:45Z","run_id":"RUN-20260815-015945-d28edcdc","type":"run-started","phase":"business-clarification","task_id":"TASK-CLARIFY-FRAMEWORK-001"}

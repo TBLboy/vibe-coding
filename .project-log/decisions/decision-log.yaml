@@ -146,3 +146,65 @@ decisions:
   supersedes: []
   created_at: '2026-08-03T10:20:00+08:00'
   updated_at: '2026-08-03T10:20:00+08:00'
+- id: DEC-004
+  title: 项目初始化流程固化为 a-project-init skill
+  category: process
+  status: active
+  authority: B
+  user_approval: approved
+  related_tasks:
+  - TASK-006
+  related_business_logic:
+  - BL-PROJECTINIT-001
+  - BL-PROJECTINIT-002
+  - BL-PROJECTINIT-003
+  - BL-PROJECTINIT-004
+  context: 项目初始化目前只创建 .project-log，AGENTS.md 依赖手工维护；需要将初始化流程统一并固化。
+  hypothesis: 将 .project-log 现有链路与 AGENTS.md 建立/安全注入包装为 a-project-init skill，通用规则模板资产化到 skill 内部，可安全幂等初始化项目。
+  options:
+  - name: 纯 prompt skill（不写脚本）
+    benefits:
+    - 实现成本最低
+    costs:
+    - 幂等注入依赖模型每次正确执行，不可测试
+    risks:
+    - 重复初始化可能叠加或破坏已有 AGENTS.md
+  - name: skill 内带确定性脚本（选择）
+    benefits:
+    - 幂等注入、标记检测可自动化测试
+    - 通用规则模板可随 skill 同步并保持唯一来源
+    costs:
+    - 需要维护一个脚本与模板
+    risks:
+    - 脚本路径需兼容源码与安装后两种布局
+  - name: 扩展 init_project.py 合并两条链路
+    benefits:
+    - 单一入口
+    costs:
+    - 违反用户明确要求：.project-log 现有链路不改动
+    risks:
+    - 改动既有稳定链路，回归风险高
+  decision: 新建 a-project-init skill，包含 SKILL.md、templates/general-rules.md 与 scripts/init_project_agents.py；脚本内部调用现有 init_project.py；AGENTS.md 用 VIBE-PROJECT-GENERAL 标记幂等注入；路由加入 prompts/vibe-global-agent.md。
+  reason_summary:
+  - 不修改 .project-log 现有创建链路
+  - 确定性脚本保证注入幂等并可测试
+  - 通用规则模板资产化，避免规则在项目间复制失真
+  - 已有 AGENTS.md 保留原内容，降低覆盖风险
+  conditions:
+  - 已有 AGENTS.md 原内容一字不动保留，仅最前注入通用区块
+  - 重复初始化幂等：已有 BEGIN 标记则跳过
+  - 只维护项目根目录 AGENTS.md，不处理子文件夹
+  action: 创建 skills/a-project-init（SKILL.md、templates/general-rules.md、scripts/init_project_agents.py）、tests/test_project_init.py，更新 prompts/vibe-global-agent.md 路由与 .project-log 记录。
+  expected_result: 用户说“初始化项目”时，.project-log 与 AGENTS.md 一并就绪；已有 AGENTS.md 安全注入不覆盖。
+  reversal_plan: 删除 skills/a-project-init 与路由条目，回滚 .project-log 相关记录；不影响 .project-log 现有链路。
+  observation: skill、模板、脚本、测试与路由已创建；test_project_init.py 6 项单测通过，validate_package 通过，CLI 冒烟（创建 + 幂等重跑）通过；validate_project 仅剩 4 个历史存量问题。
+  actual_result: implemented and verified in source repo
+  outcome_status: successful
+  lesson: 需要幂等写文件的初始化流程应配套确定性脚本，避免依赖模型每次手工执行。
+  evidence:
+  - UNIT-PI-001
+  - SMOKE-PI-001
+  - VALID-PI-001
+  supersedes: []
+  created_at: '2026-08-15T10:20:00+08:00'
+  updated_at: '2026-08-15T10:40:00+08:00'

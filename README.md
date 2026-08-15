@@ -39,6 +39,7 @@
 - 安装时最新稳定版 Codex。
 - Python 3.11 或更高版本。
 - Windows 使用 `py -3`，不要假设 `python` 指向 Python 3。
+- 代理：部分功能（如拉取可选 MCP、GitHub 远端同步等）需要访问外网，本机需运行代理客户端，默认监听 `127.0.0.1:10808`；可通过 `HTTP_PROXY`/`HTTPS_PROXY` 环境变量调整。
 - Python 依赖：
 
 ```powershell
@@ -112,6 +113,27 @@ chmod +x install.sh update.sh uninstall.sh
 ```
 
 只有显式指定时才修改访问配置；若用户已有权限设置，安装器拒绝覆盖。
+
+## cc-switch 通用配置
+
+使用 cc-switch 切换 Codex 供应商时，需要把本框架生成的 TOML 段覆盖到 cc-switch 的“通用配置”中：
+
+1. 按当前宿主机生成配置（生成结果含本机绝对路径，**不要跨机器复制**）：
+
+   ```bash
+   python scripts/generate_cc_switch_config.py --output cc-switch-common-config-codex.txt
+   ```
+
+2. 打开 cc-switch 的通用配置，用生成文件的内容（`# VIBE-CODEX-GLOBAL:CONFIG:BEGIN` 到 `# VIBE-CODEX-GLOBAL:CONFIG:END` 之间的 TOML 段）覆盖原对应段。
+3. 切换供应商后，重新启动 Codex 会话，使 Hooks、marketplace 与插件配置生效。
+
+生成内容包含：
+
+- `model_reasoning_effort` 与 `disable_response_storage`。
+- 三个 Hooks：`SessionStart`、`PostToolUse`、`PreCompact`（路径按宿主机解析）。
+- 本地 `vibe-global-toolbox` marketplace 与 `vibe-toolbelt` 插件启用配置。
+
+仓库内 `cc-switch-common-config-codex.txt` 仅为当前宿主机的生成结果快照，换机器后请重新生成。
 
 ## 升级
 

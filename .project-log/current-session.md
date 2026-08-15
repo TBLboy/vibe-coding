@@ -1,5 +1,31 @@
 # Current Session
 
+## 2026-08-15 项目初始化 a-project-init skill
+
+- User asked to optimize the framework and entered business clarification: project initialization should also establish/update root `AGENTS.md`, not just `.project-log`.
+- Confirmed decisions: keep the existing `init_project.py` chain untouched; new `a-project-init` skill wraps `.project-log` init + `AGENTS.md` creation; existing `AGENTS.md` content is preserved and general rules are injected once via `VIBE-PROJECT-GENERAL` markers (idempotent); general rules template lives inside the skill as the single source; project-specific rules are extracted from root README/docs or left blank with a hint.
+- Implemented: `skills/a-project-init/SKILL.md`, `templates/general-rules.md`, `scripts/init_project_agents.py`, `tests/test_project_init.py`; routing added to `prompts/vibe-global-agent.md`; atoms `BL-PROJECT-INIT-001..004`, clarification, requirements, decision `DEC-004`, task `TASK-006` recorded.
+- Verification: `test_project_init.py` 6 passed; `validate_package.py` passed; CLI smoke created `.project-log` (62 files) + `AGENTS.md` and second run was idempotent (both skipped); `validate_project.py` clean for new records, only 4 pre-existing issues remain (DEC-003 missing fields, evidence.yaml/trace.yaml YAML parse).
+- Status: implementation complete and verified in source repo; `TASK-006` done, `DEC-004` successful.
+- Next step: user decides whether to sync the skill to the installed runtime (`global_installer.py update`) and whether to commit/push.
+- Installation (user approved): `global_installer.py update --access-profile keep-existing --skip-doctor` succeeded; `verify` passed; `a-project-init` synced to `~/.codex/skills/a-project-init/` (SKILL.md, templates/general-rules.md, scripts/init_project_agents.py); global AGENTS.md routing includes `a-project-init`; installed-layout smoke passed (first run created `.project-log` + `AGENTS.md`, second run idempotent).
+- Remaining: commit and push the source changes when the user confirms.
+
+## 2026-08-15 AI_INSTALL/AI_UPGRADE 文档与安装器一致性核对
+
+- User asked to verify AI-assisted install docs against `scripts/global_installer.py`.
+- Verified consistent: package version `0.4.1`; default `--access-profile keep-existing`; core-only default install with `--mcp`/`--without-mcp` and mutual-exclusion error; update preserves previously enabled optional MCPs; preflight runs by default (`--skip-preflight` opt-out, checks codex version/features/doctor); timestamped backup before write; upgrade conflicts abort before any write (`Upgrade conflicts detected before writing`); installation-state.json read/write with legacy migration; `.project-log` never part of global install/uninstall/rollback; three hooks (SessionStart/PostToolUse/PreCompact); install.sh/update.sh bootstrap vibe-python env; requirements.txt (PyYAML, jsonschema).
+- Noted: `managed_config_block()` still generates quoted `commandWindows` (Windows Codex 0.147+ hook startup issue), and `AI_INSTALL.md` documents this accurately with manual fix instructions; no doc/code contradiction found.
+
+## 2026-08-15 README 补充代理与 cc-switch 使用说明
+
+- User asked to add two details to `README.md`: proxy requirement (default `127.0.0.1:10808`, adjustable via `HTTP_PROXY`/`HTTPS_PROXY`) and cc-switch common-config usage.
+- Added proxy bullet under `## 环境要求`; added `## cc-switch 通用配置` section describing regenerating via `scripts/generate_cc_switch_config.py`, overwriting the `VIBE-CODEX-GLOBAL:CONFIG` TOML segment in cc-switch common config, and not copying generated host-specific paths across machines.
+- User then asked to add the same two rules to `AI_INSTALL.md`: added `## 代理要求` (default `127.0.0.1:10808`, `HTTP_PROXY`/`HTTPS_PROXY` adjustment, `--without-mcp` fallback) and appended instruction 14 to the AI prompt block; added `## cc-switch 通用配置` section identical in content to README.
+- Check: does `AI_INSTALL.md` document the full "create vibe-coding env -> install with it -> configure env path -> run Vibe features in it" flow? Result: not fully. It only implicitly mentions the wrapper script reusing/creating the env (instruction 4); manual Windows/Linux steps install requirements into the default Python instead. Verified actual behavior in `bootstrap_vibe_python.py` (reuse `vibe-python`, else Conda create `vibe-coding` python=3.11, install PyYAML/jsonschema, write `CODEX_HOME/vibe-python`, run installer with it) and `global_installer.py configured_python()` (Hooks use that interpreter). Recommended adding a "## Vibe Python 环境与安装流程" section; awaiting user confirmation before editing.
+- User approved: added `## Vibe Python 环境与安装流程` to `AI_INSTALL.md` (create env -> activate -> install requirements -> wrapper install -> write `vibe-python` -> Hooks bound -> all Vibe features run in env; adapts to existing env / existing vibe-python / no Conda / `VIBE_PYTHON` / `VIBE_CONDA_ENV`). Corrected environment targeting in `AI_INSTALL.md` (recommended-instruction 3, Windows/Linux manual steps, temp-project acceptance) and `AI_UPGRADE.md` (instruction 4, Windows/Linux upgrade steps, `update.sh` env note); changed `python3` to `python` for `generate_cc_switch_config.py` in README and AI_INSTALL.
+- Full doc/code consistency check passed: version 0.4.1, proxy guidance, cc-switch flow, Windows Hook adapter description, upgrade guarantees (timestamp backup, installation-state.json, legacy tree->per-file migration, preserved local changes, pre-write conflict abort), conflict semantics, rollback (only vibe-workflow + skills), 8 subagent roles, three hooks only (no Stop Hook). No remaining doc/code contradictions found.
+
 ## 2026-08-14 Stop-after-status-update root cause
 
 - User sent "继续" in thread `019fa3c1-74a0-7693-97de-209b5b918788`; the model performed one Hook config/hash check, then returned only a status message and made no follow-up tool call.

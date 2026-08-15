@@ -1,26 +1,77 @@
 version: "0.4"
-status: draft
+status: passed
 functional_business_logic:
-  actors: []
-  scenarios: []
-  rules: []
-  state_transitions: []
-  exceptions: []
-  boundaries: []
+  actors:
+  - user：触发项目初始化，提供目标项目根与项目级规则输入
+  - agent：执行初始化编排与报告
+  scenarios:
+  - 新建项目：无 .project-log 且无 AGENTS.md，初始化创建两者
+  - 已有项目无 AGENTS.md：创建 .project-log（跳过已存在部分）并新建 AGENTS.md
+  - 已有 AGENTS.md：保留原内容，最前注入通用规则区块
+  - 已注入过通用区块：跳过注入，幂等
+  - 无 README/docs：项目级规则留占位提示
+  rules:
+  - .project-log 走现有 init_project.py 链路，不改动
+  - AGENTS.md = 通用规则区（VIBE-PROJECT-GENERAL 标记包裹）+ 项目级规则区
+  - 通用规则模板固定 6 条，存于 skill 内部为唯一来源
+  - 项目级规则从根目录 README/docs 凝炼；无则留空并提示
+  - 已有 AGENTS.md 只注入不覆盖；有标记则跳过
+  state_transitions:
+  - 未初始化 -> 已初始化（.project-log 与 AGENTS.md 就绪）
+  - 已有 AGENTS.md（无标记） -> 已注入通用区
+  - 已有 AGENTS.md（有标记） -> 保持不变
+  exceptions:
+  - 模板缺失或文件不可读时初始化失败并报告，不写入
+  boundaries:
+  - 只维护项目根目录 AGENTS.md，不处理子文件夹（Codex 原生优先级更高）
+  - 不修改 .project-log 创建逻辑与模板
+  - 不自动改写已有 AGENTS.md 内容
 technical_business_logic:
-  current_implementation_facts: []
-  interface_contracts: []
-  data_and_state_rules: []
-  consistency_and_concurrency: []
-  external_constraints: []
-  compatibility_constraints: []
+  current_implementation_facts:
+  - init_project.py 仅复制 runtime/project-log-template 到 .project-log，不生成 AGENTS.md
+  - 项目级 AGENTS.md 目前为手工维护（如 boss_electrics），通用与项目规则混排
+  - skills 通过 global_installer 同步到 ~/.codex/skills，SKILL.md 使用 frontmatter + metadata.stage
+  - 路由表位于 prompts/vibe-global-agent.md 的 Skill 路由
+  interface_contracts:
+  - AGENTS.md 通用区块标记：<!-- VIBE-PROJECT-GENERAL:BEGIN --> ... <!-- VIBE-PROJECT-GENERAL:END -->
+  - init_project_agents.py --target <root> [--project-rules <text>] [--dry-run] [--json]
+  data_and_state_rules:
+  - .project-log 已存在则 skipped，不覆盖
+  - AGENTS.md 已含 BEGIN 标记则 skipped，不重复注入
+  consistency_and_concurrency:
+  - 重复初始化幂等
+  - 脚本以 UTF-8 读写文件
+  external_constraints:
+  - Codex 原生读取子文件夹 AGENTS.md 且优先级更高，本 skill 不干预
+  compatibility_constraints:
+  - 脚本定位 init_project.py：VIBE_RUNTIME 环境变量、~/.codex/vibe-workflow/scripts、仓库 runtime/scripts 三级回退
 alignment:
-  confirmed_matches: []
+  confirmed_matches:
+  - id: ALIGN-PI-001
+    type: confirmed-match
+    summary: 用户要求初始化流程包装为 a- 级 skill 并路由
+    status: resolved
+    authority: B
+  - id: ALIGN-PI-002
+    type: confirmed-match
+    summary: .project-log 链路保持现有 init_project.py 不变
+    status: resolved
+    authority: B
+  - id: ALIGN-PI-003
+    type: confirmed-match
+    summary: 通用规则模板资产化到 skill 内部
+    status: resolved
+    authority: B
+  - id: ALIGN-PI-004
+    type: confirmed-match
+    summary: 已有 AGENTS.md 保留原内容只注入通用区且幂等
+    status: resolved
+    authority: B
   conflicts: []
   unknowns: []
   decisions_required: []
 gate:
-  status: open
+  status: passed
   blocking_unknowns: []
-  notes: null
-updated_at: null
+  notes: 澄清完成，4 条原子业务逻辑已确认，进入实现与验证
+updated_at: '2026-08-15T10:20:00+08:00'

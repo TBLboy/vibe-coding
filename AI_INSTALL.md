@@ -13,6 +13,46 @@ AI 必须完成：
 5. 在临时项目中初始化并验证 `.project-log`。
 6. 输出安装路径、备份路径、保留的本地修改和未安装的可选能力。
 
+## 代理要求
+
+框架部分功能（如拉取可选 MCP、GitHub 远端同步等）需要访问外网，安装前确认本机代理客户端已运行：
+
+- 默认监听 `127.0.0.1:10808`。
+- 可通过 `HTTP_PROXY` / `HTTPS_PROXY` 环境变量调整；本仓库 `git fetch`/`git push` 失败时也使用该代理重试。
+- 代理不可用时，可选 MCP 拉取会失败；核心安装可使用 `--without-mcp` 完成，不要阻塞安装。
+
+## Vibe Python 环境与安装流程
+
+Vibe Coding 的所有控制层（安装器、Hooks、`loopctl`、项目/包校验）默认运行在统一的 `vibe-coding` Python 3.11 虚拟环境中。完整流程如下：
+
+1. 创建虚拟环境（若还没有 Conda，先安装 Miniforge/Miniconda）：
+
+   ```bash
+   conda create -y -n vibe-coding python=3.11
+   ```
+
+   Windows PowerShell 相同。
+
+2. 激活环境并安装 Vibe 依赖：
+
+   ```bash
+   conda activate vibe-coding
+   python -m pip install -r runtime/scripts/requirements.txt
+   ```
+
+3. 在激活的环境中运行安装器。也可以直接运行包装脚本 `install.sh` / `install.ps1`——包装脚本会先解析或创建 `vibe-coding` 环境，并用该环境的 Python 执行安装器，无需手动激活。
+
+4. 安装器会把该解释器绝对路径写入 `CODEX_HOME/vibe-python`（默认 `~/.codex/vibe-python`），作为框架全局配置；生成的 Hook `command` / `commandWindows` 也绑定该解释器。
+
+5. 后续 Vibe 功能（Hooks、`loopctl`、`validate_project.py`、`validate_package.py` 等）都运行在该环境中，不要用系统 Python 运行它们。
+
+适配不同用户的场景：
+
+- 已存在可用的 `vibe-coding` 环境：安装器直接复用，跳过创建。
+- 已有 `CODEX_HOME/vibe-python` 配置：优先复用该解释器，仅在其不可用时才尝试 Conda 修复。
+- 没有 Conda/Miniforge/Miniconda：安装器不会静默下载发行版，会明确报错；先安装 Miniforge，或显式设置 `VIBE_PYTHON`。
+- 临时覆盖：`export VIBE_PYTHON=/absolute/path/to/python`（优先级最高）；`VIBE_CONDA_ENV` 可覆盖环境名（默认 `vibe-coding`）。
+
 ## 推荐给 AI 的指令
 
 ```text
@@ -21,7 +61,7 @@ AI 必须完成：
 要求：
 1. 先阅读 README.md、AI_INSTALL.md 和 scripts/global_installer.py 的参数。
 2. 确认 Codex 是当前可升级到的最新稳定版；运行 codex --version、codex doctor 和 codex features list。
-3. 确认 Python 3.11+。Windows 必须使用 py -3，不要使用可能指向 Python 2 的 python。
+3. 确认 Python 3.11+。Vibe 功能统一在 `vibe-coding` 环境中运行；Windows 检查系统解释器时可用 `py -3`，不要使用可能指向 Python 2 的 `python`。
 4. 运行安装包装脚本；它会优先复用 `${CODEX_HOME:-$HOME/.codex}/vibe-python`，否则使用 Conda/Miniforge/Miniconda 创建 `vibe-coding` Python 3.11 环境并安装 `runtime/scripts/requirements.txt`；也可用 `VIBE_PYTHON` 临时覆盖。
 5. 安装 runtime/scripts/requirements.txt。
 6. 默认使用 --access-profile keep-existing，不修改我现有权限配置。
@@ -32,22 +72,47 @@ AI 必须完成：
 11. 创建临时项目，运行已安装的 init_project.py、validate_project.py、loopctl.py restore 和 loopctl.py validate。
 12. 不修改或删除任何真实项目的 .project-log。
 13. 最后报告版本、CODEX_HOME、Skill 路径、Hook 状态、已选 MCP、备份路径、验证结果和任何限制。
+14. 安装前确认本机代理可用（默认 127.0.0.1:10808，可用 HTTP_PROXY/HTTPS_PROXY 调整）；可选 MCP 拉取与远端同步依赖外网。
 ```
 
 ## Windows 执行步骤
 
 ```powershell
-py -3 --version
+conda activate vibe-coding
+python --version
 codex --version
 codex doctor
 codex features list
-py -3 -m pip install -r runtime\scripts\requirements.txt
-py -3 scripts\global_installer.py preflight
+python -m pip install -r runtime\scripts\requirements.txt
+python scripts\global_installer.py preflight
 .\install.ps1
-py -3 scripts\global_installer.py verify
+python scripts\global_installer.py verify
 ```
 
 如用户明确要启用 CodeGraph，可改为 `./install.sh --mcp codegraph`（Windows 使用 `--mcp codegraph`）；默认不启用可选 MCP。
+
+> 以上手动步骤假定已激活 `vibe-coding` 环境；也可以直接运行 `install.sh` / `install.ps1`，包装脚本会自动解析或创建环境并完成依赖安装。
+
+## cc-switch 通用配置
+
+使用 cc-switch 切换 Codex 供应商时，需要把本框架生成的 TOML 段覆盖到 cc-switch 的“通用配置”中：
+
+1. 按当前宿主机生成配置（生成结果含本机绝对路径，**不要跨机器复制**）：
+
+   ```bash
+   python scripts/generate_cc_switch_config.py --output cc-switch-common-config-codex.txt
+   ```
+
+2. 打开 cc-switch 的通用配置，用生成文件的内容（`# VIBE-CODEX-GLOBAL:CONFIG:BEGIN` 到 `# VIBE-CODEX-GLOBAL:CONFIG:END` 之间的 TOML 段）覆盖原对应段。
+3. 切换供应商后，重新启动 Codex 会话，使 Hooks、marketplace 与插件配置生效。
+
+生成内容包含：
+
+- `model_reasoning_effort` 与 `disable_response_storage`。
+- 三个 Hooks：`SessionStart`、`PostToolUse`、`PreCompact`（路径按宿主机解析）。
+- 本地 `vibe-global-toolbox` marketplace 与 `vibe-toolbelt` 插件启用配置。
+
+仓库内 `cc-switch-common-config-codex.txt` 仅为当前宿主机的生成结果快照，换机器后请重新生成。
 
 ## Windows Hook 命令适配（Codex 0.147.0+）
 
@@ -77,14 +142,15 @@ commandWindows = "D:\\conda\\envs\\vibe-coding\\python.exe C:\\Users\\<用户>\\
 ## Linux/macOS 执行步骤
 
 ```bash
-python3 --version
+conda activate vibe-coding
+python --version
 codex --version
 codex doctor
 codex features list
-python3 -m pip install -r runtime/scripts/requirements.txt
-python3 scripts/global_installer.py preflight
+python -m pip install -r runtime/scripts/requirements.txt
+python scripts/global_installer.py preflight
 ./install.sh
-python3 scripts/global_installer.py verify
+python scripts/global_installer.py verify
 ```
 
 ## 临时项目验收
@@ -94,10 +160,10 @@ Windows：
 ```powershell
 $TestProject = Join-Path $env:TEMP "vibe-codex-smoke"
 New-Item -ItemType Directory -Force -Path $TestProject | Out-Null
-py -3 "$env:CODEX_HOME\vibe-workflow\scripts\init_project.py" --target $TestProject
-py -3 "$env:CODEX_HOME\vibe-workflow\scripts\validate_project.py" --root $TestProject
-py -3 "$env:CODEX_HOME\vibe-workflow\scripts\loopctl.py" --root $TestProject --json restore
-py -3 "$env:CODEX_HOME\vibe-workflow\scripts\loopctl.py" --root $TestProject --json validate
+python "$env:CODEX_HOME\vibe-workflow\scripts\init_project.py" --target $TestProject
+python "$env:CODEX_HOME\vibe-workflow\scripts\validate_project.py" --root $TestProject
+python "$env:CODEX_HOME\vibe-workflow\scripts\loopctl.py" --root $TestProject --json restore
+python "$env:CODEX_HOME\vibe-workflow\scripts\loopctl.py" --root $TestProject --json validate
 ```
 
 若未设置 `CODEX_HOME`，默认使用 `$HOME/.codex`。

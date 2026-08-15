@@ -19,7 +19,7 @@
 1. 阅读 README.md、AI_UPGRADE.md 和新的 v0.11 执行基线。
 2. 检查 CODEX_HOME、现有 AGENTS.md、config.toml、vibe-workflow 和 Skill 根目录。
 3. 运行 codex update（仅当公司策略允许），然后运行 codex --version、codex doctor、codex features list。
-4. Windows 使用 py -3，安装 Python 依赖。
+4. 复用或修复 `vibe-coding` Python 3.11 环境（见 `AI_INSTALL.md` 的“Vibe Python 环境与安装流程”），在该环境中安装 Python 依赖；Windows 不要使用可能指向 Python 2 的 `python`。
 5. 先运行 global_installer.py preflight，再运行 update。
 6. 默认 --access-profile keep-existing。
 7. 默认保留此前已启用的可选 MCP；如需新增 CodeGraph，使用 `--mcp codegraph`；公司网络受限时使用 --without-mcp。
@@ -33,10 +33,11 @@
 在新安装包目录运行：
 
 ```powershell
-py -3 -m pip install -r runtime\scripts\requirements.txt
-py -3 scripts\global_installer.py preflight
+conda activate vibe-coding
+python -m pip install -r runtime\scripts\requirements.txt
+python scripts\global_installer.py preflight
 .\update.ps1
-py -3 scripts\global_installer.py verify
+python scripts\global_installer.py verify
 ```
 
 升级后若在 Windows 上启动 Codex 报 `SessionStart hook (failed) / hook exited with code 1`，原因是 Codex 0.147.0+ 在 Windows 上不再通过 shell 解析 Hook 命令中的引号。按 `AI_INSTALL.md` 中“Windows Hook 命令适配（Codex 0.147.0+）”一节，将 `config.toml` 三个 Hook 的 `commandWindows` 改为不带引号的路径形式即可；`command` 字段保持不变，Linux/macOS 无需任何修改。
@@ -44,11 +45,14 @@ py -3 scripts\global_installer.py verify
 ## Linux/macOS 升级
 
 ```bash
-python3 -m pip install -r runtime/scripts/requirements.txt
-python3 scripts/global_installer.py preflight
+conda activate vibe-coding
+python -m pip install -r runtime/scripts/requirements.txt
+python scripts/global_installer.py preflight
 ./update.sh
-python3 scripts/global_installer.py verify
+python scripts/global_installer.py verify
 ```
+
+`update.sh` / `update.ps1` 会先通过 `bootstrap_vibe_python.py` 复用或修复 `vibe-coding` 环境，再用该环境的 Python 执行升级器；若已激活环境或已配置 `VIBE_PYTHON`，可跳过手动安装依赖步骤。
 
 ## 冲突含义
 

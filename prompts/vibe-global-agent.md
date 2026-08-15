@@ -74,6 +74,7 @@ business-intent
 
 ## Skill 路由
 
+- 项目初始化（创建 .project-log 并建立/更新根目录 AGENTS.md）：`a-project-init`
 - 业务规则、边界、异常不清：`a-business-clarify`
 - Loop 状态、失败归因、Retry Contract、证据有效性、Goal 验收与 Handoff：`a-loop-control`
 - 子 Agent 委派、角色选择、任务边界、并行策略与结果整合：`vibe-subagent-orchestration`

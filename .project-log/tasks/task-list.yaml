@@ -239,3 +239,49 @@ tasks:
     - .project-log/evals/source-code-tutoring.yaml
     limitations:
     - 未在新的独立代码库教学会话中完成端到端人工评测；已保留评测样例。
+- id: TASK-006
+  title: 固化项目初始化 a-project-init skill 与路由
+  kind: task
+  phase: implementation
+  goal: 将项目初始化流程（.project-log 现有链路 + AGENTS.md 建立/安全注入）固化为 a-project-init skill 并路由
+  status: done
+  authority: B
+  owner: agent
+  related_business_logic:
+  - BL-PROJECTINIT-001
+  - BL-PROJECTINIT-002
+  - BL-PROJECTINIT-003
+  - BL-PROJECTINIT-004
+  depends_on: []
+  inputs:
+  - 2026-08-15 项目初始化 skill 澄清结论
+  - runtime/scripts/init_project.py
+  - skills/ 目录与 SKILL.md 规范
+  - prompts/vibe-global-agent.md 路由表
+  outputs:
+  - skills/a-project-init/SKILL.md
+  - skills/a-project-init/templates/general-rules.md
+  - skills/a-project-init/scripts/init_project_agents.py
+  - tests/test_project_init.py
+  - prompts/vibe-global-agent.md 路由条目
+  - .project-log 原子/澄清/决策/任务/会话记录
+  done_when:
+  - 新建项目初始化同时就绪 .project-log 与 AGENTS.md
+  - 已有 AGENTS.md 只注入通用区且幂等，原内容保留
+  - 通用规则模板存于 skill 内部为唯一来源
+  - 路由表包含 a-project-init
+  - 单测通过
+  verification:
+    status: passed
+    commands:
+    - python3 -m unittest discover -s tests -p test_project_init.py -v
+    - python3 runtime/scripts/validate_package.py --root .
+    - python3 runtime/scripts/validate_project.py --root .
+    evidence:
+    - "UNIT-PI-001: test_project_init.py 6 passed"
+    - "SMOKE-PI-001: CLI 初始化创建 .project-log(62) + AGENTS.md，重跑幂等"
+    - "VALID-PI-001: validate_package passed；validate_project 仅剩 4 个历史存量问题"
+    limitations:
+    - validate_project 仍有 4 个历史遗留问题（DEC-003 缺字段、evidence.yaml/trace.yaml YAML 解析），与本任务新增记录无关
+  created_at: '2026-08-15T10:20:00+08:00'
+  updated_at: '2026-08-15T10:40:00+08:00'

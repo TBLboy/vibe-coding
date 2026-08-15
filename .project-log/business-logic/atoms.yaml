@@ -1,3 +1,233 @@
 version: "0.2"
 source_of_truth: true
-atoms: []
+atoms:
+- id: BL-PROJECTINIT-001
+  title: .project-log 走现有创建链路且不覆盖已有内容
+  kind: rule
+  domain: project-init
+  status: active
+  priority: high
+  risk: low
+  authority: user-confirmed
+  source:
+    type: user-statement
+    reference: 2026-08-15 项目初始化 skill 澄清（用户确认不动 init_project.py 链路）
+  description: 初始化项目时 .project-log 的创建必须复用现有 init_project.py 链路，已存在则不覆盖。
+  actors:
+  - user
+  - agent
+  trigger: 用户要求初始化项目（初始化项目/项目初始化/初始化该项目）
+  preconditions:
+  - 目标项目根目录已确认
+  inputs:
+  - 目标项目根目录
+  rule:
+    statement: 调用现有 init_project.py 创建 .project-log；已存在时跳过并报告，不覆盖。
+  outputs:
+  - .project-log 模板目录树
+  side_effects: []
+  exceptions:
+  - project-log-template 缺失时初始化失败并停止
+  failure_handling:
+  - 报告错误，不继续写入 AGENTS.md
+  invariants:
+  - 不修改 init_project.py 及 project-log-template 内容
+  acceptance:
+  - id: AC-PI-001
+    given: 目标目录无 .project-log
+    when: 执行项目初始化
+    then: 创建完整 .project-log 模板
+    method: null
+    evidence: null
+    status: not-verified
+  - id: AC-PI-002
+    given: 目标目录已有 .project-log
+    when: 再次执行项目初始化
+    then: 跳过创建并报告 skipped，原内容不变
+    method: null
+    evidence: null
+    status: not-verified
+  dependencies: []
+  baseline_refs: []
+  decision_refs:
+  - DEC-004
+  implementation_refs:
+  - skills/a-project-init/scripts/init_project_agents.py
+  test_refs:
+  - tests/test_project_init.py
+  supersedes: []
+  notes: null
+  created_at: '2026-08-15T10:20:00+08:00'
+  updated_at: null
+  last_verified_at: null
+- id: BL-PROJECTINIT-002
+  title: 新建 AGENTS.md 时生成通用规则区与项目级规则区
+  kind: rule
+  domain: project-init
+  status: active
+  priority: high
+  risk: medium
+  authority: user-confirmed
+  source:
+    type: user-statement
+    reference: 2026-08-15 项目初始化 skill 澄清（模板 6 条与 README 提取规则确认）
+  description: 目标目录无 AGENTS.md 时，生成文件：先写通用开发规则区块（标记包裹），再写项目级规则区。
+  actors:
+  - user
+  - agent
+  trigger: 项目初始化且目标目录无 AGENTS.md
+  preconditions:
+  - 通用规则模板存在于 skill 内部
+  inputs:
+  - 项目级规则文本（可空）
+  rule:
+    statement: AGENTS.md = 通用规则区块（VIBE-PROJECT-GENERAL 标记包裹） + 项目级规则区；项目级规则来自 README/docs 凝炼，无则写入占位提示。
+  outputs:
+  - 根目录 AGENTS.md
+  side_effects: []
+  exceptions:
+  - README/docs 不存在或不足以提炼项目规则
+  failure_handling:
+  - 项目级区保留占位提示，并向用户说明可手动补充
+  invariants:
+  - 通用规则模板内容原样注入，不裁剪
+  acceptance:
+  - id: AC-PI-003
+    given: 目标目录无 AGENTS.md 且有 README 提炼出的项目规则
+    when: 执行项目初始化
+    then: 生成含通用区块与项目级规则的 AGENTS.md
+    method: null
+    evidence: null
+    status: not-verified
+  - id: AC-PI-004
+    given: 目标目录无 AGENTS.md 且无 README/docs
+    when: 执行项目初始化
+    then: 项目级区写入占位提示
+    method: null
+    evidence: null
+    status: not-verified
+  dependencies: []
+  baseline_refs: []
+  decision_refs:
+  - DEC-004
+  implementation_refs:
+  - skills/a-project-init/templates/general-rules.md
+  - skills/a-project-init/scripts/init_project_agents.py
+  test_refs:
+  - tests/test_project_init.py
+  supersedes: []
+  notes: null
+  created_at: '2026-08-15T10:20:00+08:00'
+  updated_at: null
+  last_verified_at: null
+- id: BL-PROJECTINIT-003
+  title: 已有 AGENTS.md 时只安全注入通用规则且幂等
+  kind: rule
+  domain: project-init
+  status: active
+  priority: high
+  risk: high
+  authority: user-confirmed
+  source:
+    type: user-statement
+    reference: 2026-08-15 项目初始化 skill 澄清（原内容视为项目级规则，只注入通用区）
+  description: 目标目录已有 AGENTS.md 时，原内容一字不动保留（视为项目级规则），仅在文件最前注入通用规则区块；检测到标记则跳过。
+  actors:
+  - user
+  - agent
+  trigger: 项目初始化且目标目录已有 AGENTS.md
+  preconditions:
+  - AGENTS.md 可读
+  inputs:
+  - 现有 AGENTS.md 内容
+  rule:
+    statement: 若文件中无 VIBE-PROJECT-GENERAL:BEGIN 标记，则在最前注入通用区块并保留原内容；已有标记则跳过，不重复注入。
+  outputs:
+  - 更新后的 AGENTS.md
+  side_effects: []
+  exceptions:
+  - 文件编码不可读
+  failure_handling:
+  - 报告错误，不修改文件
+  invariants:
+  - 原 AGENTS.md 内容不被删除或改写
+  - 重复初始化不叠加通用区块
+  acceptance:
+  - id: AC-PI-005
+    given: 已有无标记的 AGENTS.md
+    when: 执行项目初始化
+    then: 通用区块注入到最前，原内容完整保留
+    method: null
+    evidence: null
+    status: not-verified
+  - id: AC-PI-006
+    given: AGENTS.md 已含通用标记
+    when: 再次执行项目初始化
+    then: 跳过注入，文件内容不变
+    method: null
+    evidence: null
+    status: not-verified
+  dependencies: []
+  baseline_refs: []
+  decision_refs:
+  - DEC-004
+  implementation_refs:
+  - skills/a-project-init/scripts/init_project_agents.py
+  test_refs:
+  - tests/test_project_init.py
+  supersedes: []
+  notes: null
+  created_at: '2026-08-15T10:20:00+08:00'
+  updated_at: null
+  last_verified_at: null
+- id: BL-PROJECTINIT-004
+  title: 通用开发规则模板以 skill 内部文件为唯一来源
+  kind: rule
+  domain: project-init
+  status: active
+  priority: medium
+  risk: low
+  authority: user-confirmed
+  source:
+    type: user-statement
+    reference: 2026-08-15 项目初始化 skill 澄清（规则记录在 skill 内部，避免丢失失真）
+  description: 通用开发规则只存放在 a-project-init skill 的 templates/general-rules.md，初始化脚本读取该模板渲染；用户新增通用规则通过修改该模板实现。
+  actors:
+  - user
+  - agent
+  trigger: 初始化 AGENTS.md 或用户修改通用规则
+  preconditions:
+  - 模板文件存在
+  inputs: []
+  rule:
+    statement: 通用规则唯一来源为 skill 内部模板；脚本不得内嵌重复规则文本，项目内不维护第二份通用规则。
+  outputs:
+  - 注入到 AGENTS.md 的通用规则
+  side_effects: []
+  exceptions:
+  - 模板缺失
+  failure_handling:
+  - 初始化失败并报告模板路径
+  invariants:
+  - 修改模板后，新注入或新建项目使用新规则
+  acceptance:
+  - id: AC-PI-007
+    given: 修改 skill 内通用规则模板
+    when: 对无标记项目重新初始化
+    then: 注入的是修改后的规则
+    method: null
+    evidence: null
+    status: not-verified
+  dependencies: []
+  baseline_refs: []
+  decision_refs:
+  - DEC-004
+  implementation_refs:
+  - skills/a-project-init/templates/general-rules.md
+  test_refs:
+  - tests/test_project_init.py
+  supersedes: []
+  notes: null
+  created_at: '2026-08-15T10:20:00+08:00'
+  updated_at: null
+  last_verified_at: null
