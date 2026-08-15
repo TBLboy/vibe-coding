@@ -155,3 +155,13 @@
   - `~/.codex/AGENTS.md`：已按安装器逻辑重新同步受管区块，校验嵌入内容与 `prompts/vibe-global-agent.md` 完全一致。
 - 验证：`validate_package.py --root .` 输出 `Package validation passed.`；AGENTS.md 同步校验通过；catalog JSON 解析与规则写入校验通过（两个模型模板均含该规则）。
 - 剩余说明：该缓解依赖模型遵循提示词，仍可能偶发；长期更稳妥做法是复杂 agentic 任务使用 `deepseek-v4-pro`，长会话及时 /compact。
+
+## 2026-08-15 a-project-init 增加 Git 仓库类型询问与团队仓库 exclude 规则
+
+- 需求：初始化项目时先确认 Git 仓库状态与类型；AGENTS.md 通用规则增加团队协作仓库的排除跟踪询问。
+- 改动：
+  - `skills/a-project-init/SKILL.md`：Workflow 增加 Git 状态检查（`git rev-parse --is-inside-work-tree`）；无仓库时询问用户是否 `git init`（同意才执行）；有仓库时询问个人/团队协作类型；仓库类型作为项目级信息写入 AGENTS.md「项目级规则」区（新建经 `--project-rules` 传入，已存在时手动追加/更新）。
+  - `skills/a-project-init/templates/general-rules.md`：新增第 7 条规则——团队协作仓库中新增与主业务流程无关文件（测试、个人脚本、文档等）前，先询问用户是否加入 `.git/info/exclude` 不纳入跟踪。
+  - 同步到本机 `~/.codex/skills/a-project-init/`（SKILL.md、templates/general-rules.md）。
+- 验证：`validate_package.py --root .` 输出 `Package validation passed.`；临时目录真实初始化验证 AGENTS.md 含第 7 条规则与「仓库类型：团队协作仓库」项目级记录。
+- 未改动：`init_project_agents.py` 确定性链路保持原样；已有 AGENTS.md 的注入语义不变。
