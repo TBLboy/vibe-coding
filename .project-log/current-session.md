@@ -135,3 +135,23 @@
   - `README.md`：Windows 安装命令后加一行指引。
 - 验证：`validate_package.py --root .` 输出 `Package validation passed.`。
 - 约束遵守：未修改 runtime 脚本/安装器模板/任何框架行为代码；Linux/macOS 安装路径不变。
+
+
+## 2026-08-15 “回复一句就停止”根因排查（只读诊断，未改代码）
+
+- 现象：dexbot/kitchen_robot_home 会话中，模型输出承诺句（“我先检查这两处来源…”“我再补一次项目日志…”）后回合结束，任务未继续；用户多次遇到。
+- 排查路径：`~/.codex/logs_2.sqlite` 会话日志 + `~/.codex/config.toml` + `cc-switch-model-catalog.json`。
+- 直接证据：最后一次纯文本完成 `response.completed`：`status=completed`、`model=deepseek-v4-flash`、output 仅 `[reasoning, message]`、无 `function_call`；同窗口无 ERROR/WARN、无 Hook 失败、无 `response.incomplete`。Codex 回合在模型响应无工具调用时正常结束。
+- 上下文证据：该线程 `input_tokens=229021`（300k 窗口约 76%），`cached_input_tokens=20`（几乎无缓存）；模型为 cc-switch 代理的 `deepseek-v4-flash`（`127.0.0.1:15721`，wire_api=responses）。
+- 结论：根因在模型侧（flash 模型在长上下文下倾向“总结+承诺”并以纯文本正常结束，而非继续调用工具），不是用户消息格式、Hook、Loop 或 Goal 机制问题；kitchen_robot_home 无 `.project-log`，可排除 loopctl 恢复状态导致的提前结束。
+- 候选缓解（未执行）：复杂 agentic 任务改用 `deepseek-v4-pro`；长会话及时 /compact 或开新会话；catalog 中该模型 `default_verbosity=low`，可在 instructions_template 中强化“必须调用工具继续直到验收”约束。
+
+## 2026-08-15 “回复一句就停止”缓解措施落地（框架侧）
+
+- 决策（B 级，DEC 记录于本条目）：针对根因（flash 模型以纯文本承诺句正常结束回合、无工具调用），在框架与模型提示两个层面加强约束，不改 Hook/Loop 机制。
+- 改动：
+  - `prompts/vibe-global-agent.md`：新增「回合执行纪律（防止半途停止）」——任务未完成前每次回复必须以工具调用继续或提出必须由用户决策的问题；禁止以“我将/我先/接下来……”承诺句结束；仅任务完成且有验证证据、明确阻塞或用户要求暂停时才允许纯文本收尾。
+  - 本机 `~/.codex/cc-switch-model-catalog.json`：`deepseek-v4-pro` 与 `deepseek-v4-flash` 的 `instructions_template` 追加英文版 `## Turn completion discipline` 同款约束（本机文件，不进仓库；cc-switch 切换 provider 时可能重新生成，届时需重新应用）。
+  - `~/.codex/AGENTS.md`：已按安装器逻辑重新同步受管区块，校验嵌入内容与 `prompts/vibe-global-agent.md` 完全一致。
+- 验证：`validate_package.py --root .` 输出 `Package validation passed.`；AGENTS.md 同步校验通过；catalog JSON 解析与规则写入校验通过（两个模型模板均含该规则）。
+- 剩余说明：该缓解依赖模型遵循提示词，仍可能偶发；长期更稳妥做法是复杂 agentic 任务使用 `deepseek-v4-pro`，长会话及时 /compact。
