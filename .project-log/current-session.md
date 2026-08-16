@@ -1,5 +1,13 @@
 # Current Session
 
+## 2026-08-16 归档 vibe-coding 并修复归档脚本
+
+- 已按 a-project-log-archive 归档 vibe-coding 到 `My_knowledge_base/工程记录/vibe-coding/.project-log` 并推送知识库。
+- 归档时发现脚本使用 `git add -A`，把知识库根 `.project-log` 与未提交学习记录一并纳入提交；已恢复根 `.project-log` 位置，并推送修复提交 `b607e27`。
+- 已把归档脚本 `git add` 范围收窄到 `工程记录/<project-name>`，记录为 TASK-009；已用修复后的脚本重新归档并推送 `2169d80`，知识库工作区干净。
+- 记录时间：2026-08-16T18:05:00+08:00。
+
+
 ## 2026-08-15 充实 docs/USAGE.md 用户使用指南（TASK-008）
 
 - 用户确认目标文件为 `docs/USAGE.md`，要求把简略文档写得更丰满。

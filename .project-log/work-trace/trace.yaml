@@ -337,3 +337,20 @@ entries:
   evidence:
   - DOC-USAGE-001
   knowledge_candidate: false
+- id: TRACE-20260816-ARCHIVE-FIX-001
+  task_id: TASK-009
+  timestamp: '2026-08-16T18:05:00+08:00'
+  context: 用户要求归档 vibe-coding。归档脚本实测把知识库根 .project-log 移到 学习路线/.project-log，并把本地未提交学习记录一并提交。
+  hypothesis: 归档脚本只应影响 工程记录/<project-name>；把 git add -A 改为限定路径可防止无关变更进入归档提交。
+  decision_ref: null
+  action: 将 archive.py 的 git add 范围限定为 工程记录/<project-name>；恢复知识库根 .project-log 位置并推送修复提交；更新源码任务与留痕。
+  expected_result: 归档只更新对应项目目录，知识库其余目录和根 .project-log 保持不动。
+  observation: 知识库已推送 ee93beb（归档）与 b607e27（修复）；修复后工作区干净，工程记录/vibe-coding 有 63 个文件，根
+    .project-log 恢复 62 个文件。
+  actual_result: passed
+  delta: git add -A 改为 git add -- 工程记录/<project-name>。
+  lesson: 归档等自动化脚本必须把 git add/commit 范围限定到自己的产物目录，不能依赖工作区恰好干净。
+  next_adjustment: 下次归档其他项目后核对 git status 只含 工程记录/<project-name>。
+  evidence:
+  - ARCHIVE-FIX-001
+  knowledge_candidate: true

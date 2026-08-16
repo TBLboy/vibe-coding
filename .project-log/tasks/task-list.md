@@ -7,3 +7,5 @@ Active goal: -
 - `TASK-007` 修复项目日志结构与残留 Loop active run — `done`
 
 - `TASK-008` 充实 docs/USAGE.md 用户使用指南 — `done`
+
+- `TASK-009` 限制归档脚本提交范围并记录知识库修复 — `done`

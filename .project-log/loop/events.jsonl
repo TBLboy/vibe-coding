@@ -39,3 +39,4 @@
 {"schema_version":1,"event_id":"LE-000038","time":"2026-08-15T11:54:14Z","run_id":"RUN-20260815-115012-c88e595d","type":"evidence-recorded","evidence_id":"DOC-USAGE-001","status":"valid"}
 {"schema_version":1,"event_id":"LE-000039","time":"2026-08-15T11:54:36Z","run_id":"RUN-20260815-115012-c88e595d","type":"run-completed","reason":"TASK-008 documentation work verified"}
 {"schema_version":1,"event_id":"LE-000040","time":"2026-08-15T11:54:36Z","run_id":"RUN-20260815-115012-c88e595d","type":"handoff-generated","reason":"complete"}
+{"schema_version":1,"event_id":"LE-000041","time":"2026-08-16T09:37:14Z","run_id":"RUN-20260815-115012-c88e595d","type":"evidence-recorded","evidence_id":"ARCHIVE-FIX-001","status":"valid"}

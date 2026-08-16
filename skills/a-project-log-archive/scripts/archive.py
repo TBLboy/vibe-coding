@@ -26,7 +26,9 @@ def git_push(kb_root: Path, project_name: str):
     cwd = os.getcwd()
     try:
         os.chdir(kb_root)
-        subprocess.run(["git", "add", "-A"], check=True)
+        # Scope the archive commit to the project directory so unrelated KB
+        # changes are never swept into an archive commit by accident.
+        subprocess.run(["git", "add", "--", str(Path("工程记录") / project_name)], check=True)
         result = subprocess.run(["git", "diff", "--cached", "--quiet"], check=False)
         if result.returncode == 0:
             print("No changes to commit in knowledge base.")

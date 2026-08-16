@@ -342,3 +342,28 @@ evidence:
   recorded_at: '2026-08-15T11:54:14Z'
   invalidated_at: null
   invalidation_reason: null
+- id: ARCHIVE-FIX-001
+  kind: validation
+  subject: 归档脚本范围修复与 vibe-coding 项目日志归档
+  status: valid
+  command: archive.py --project-root /home/tbl/Project/vibe-coding; git -C My_knowledge_base
+    status/log 核对; validate_project/loopctl/validate_package
+  result_ref: KB clean at 2169d80; 63 files archived; root .project-log 62 files intact
+  covers:
+    files:
+    - skills/a-project-log-archive/scripts/archive.py
+    - .project-log/tasks/task-list.yaml
+    - .project-log/work-trace/trace.yaml
+    requirements: []
+    tasks:
+    - TASK-009
+  version_binding:
+    git_commit: 47e1ddcd9667f21e331bd673f452859f92a2e97f
+    diff_hash: c37f48374e7dd3bf04635e172dddbaa2f299206930c25a346279bcf447c14b83
+    file_hashes:
+      skills/a-project-log-archive/scripts/archive.py: fd800e3cdb662f97d71986472da1b5511a5d262dce69e66e8690068a1f650d32
+      .project-log/tasks/task-list.yaml: 8e6eaaef0f1ca248324787359ec76491d3250e63cf2c43045d3404511cf7aba9
+      .project-log/work-trace/trace.yaml: 083cfb4c2dc77ade9403c8d7080ce8c54f4cdaad479ca8f7b6473677c5aa3c18
+  recorded_at: '2026-08-16T09:37:14Z'
+  invalidated_at: null
+  invalidation_reason: null

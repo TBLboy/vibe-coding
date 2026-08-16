@@ -1,6 +1,44 @@
 version: '0.2'
 active_goal: null
 tasks:
+- id: TASK-009
+  title: 限制归档脚本提交范围并记录知识库修复
+  kind: repair
+  phase: implementation
+  goal: 归档 vibe-coding 后修复归档脚本把知识库根 .project-log 及未提交学习记录一并提交的问题
+  status: done
+  authority: A
+  owner: agent
+  related_business_logic: []
+  depends_on: []
+  inputs:
+  - skills/a-project-log-archive/scripts/archive.py
+  - /home/tbl/Project/My_knowledge_base
+  outputs:
+  - skills/a-project-log-archive/scripts/archive.py
+  - .project-log 会话/任务/工作留痕
+  done_when:
+  - 归档提交只包含 工程记录/<project-name>
+  - 知识库根 .project-log 位置保持原样
+  - 验证与推送结果已记录
+  verification:
+    status: passed
+    commands:
+    - archive.py --project-root 实测
+    - git -C 知识库 status/log 核对
+    evidence:
+    - ARCHIVE-FIX-001
+    limitations:
+    - 未在其他项目重复执行归档脚本
+  result:
+    summary: 归档脚本 git add 范围收窄到 工程记录/<project-name>；知识库根 .project-log 已恢复并推送修复提交。
+    changed_files:
+    - skills/a-project-log-archive/scripts/archive.py
+    deviations: []
+    follow_ups:
+    - 下次归档其他项目时确认提交范围
+  created_at: '2026-08-16T18:05:00+08:00'
+  updated_at: '2026-08-16T18:05:00+08:00'
 - id: TASK-001
   title: Audit installed Vibe Coding Codex framework
   kind: task
