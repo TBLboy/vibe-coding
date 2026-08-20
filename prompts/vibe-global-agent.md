@@ -37,6 +37,12 @@
 5. Project Goal 已定义但原生 Goal 未绑定时，调用 `loopctl goal-bind --json` 生成 objective，并通过 Codex 原生 `/goal` 建立当前线程 Goal。
 6. 恢复事实状态后再行动。恢复状态不是交付：对实质性用户任务，必须继续执行到完成、明确阻塞或用户要求暂停；不得只输出恢复摘要后结束。无活动 Run 时，先建立新 Run，再执行当前用户请求。没有非琐碎任务时，先建立最小任务记录；不要无计划地修改项目。
 
+## Project Log 长文档组织
+
+- `current-session.md` 与 `progress.md` 是面向人的快速摘要：最新在最上，顶部“当前状态”快照每次覆盖更新，超限时旧段落归档到 `.project-log/docs/archive/`。
+- 精确当前状态与下一步以 `loop/active-run.yaml`、`loop/handoff.md` 为单一事实源；不要在多份长文档里维护互相矛盾的“下一步”。
+- 机器维护的结构化状态文件（`loop/events.jsonl`、`loop/active-run.yaml`、`loop/handoff.md`、`verification/evidence.yaml`）不手工重排或改写。
+
 ## 标准生命周期
 
 ```text

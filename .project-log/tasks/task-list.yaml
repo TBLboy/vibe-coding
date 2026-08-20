@@ -427,3 +427,68 @@ tasks:
     - validate_project 仍有 4 个历史遗留问题（DEC-003 缺字段、evidence.yaml/trace.yaml YAML 解析），与本任务新增记录无关
   created_at: '2026-08-15T10:20:00+08:00'
   updated_at: '2026-08-15T10:40:00+08:00'
+- id: TASK-010
+  title: 固化 project-log 长文档组织约定到框架源码
+  kind: task
+  phase: implementation
+  goal: 将 current-session.md/progress.md 的最新在最上、头部快照、超限归档和单一事实源规则写进模板、Skills、文档并加回归测试
+  status: done
+  authority: B
+  owner: agent
+  related_business_logic: []
+  depends_on: []
+  inputs:
+  - /home/tbl/Project/boss_electrics/.project-log/docs/log-file-organization-task.md
+  - runtime/project-log-template/progress.md
+  - runtime/project-log-template/current-session.md
+  - skills/a-project-log/SKILL.md
+  - skills/a-project-log/REFERENCE.md
+  - skills/a-session-handoff/SKILL.md
+  - docs/USAGE.md
+  - prompts/vibe-global-agent.md
+  outputs:
+  - runtime/project-log-template/progress.md
+  - runtime/project-log-template/current-session.md
+  - skills/a-project-log/SKILL.md
+  - skills/a-project-log/REFERENCE.md
+  - skills/a-session-handoff/SKILL.md
+  - docs/USAGE.md
+  - prompts/vibe-global-agent.md
+  - tests/test_project_templates.py
+  done_when:
+  - 模板与规则文档明确四约定：最新在最上、头部快照、超限归档、单一事实源
+  - 明确归档路径 .project-log/docs/archive/ 与阈值
+  - 明确机器维护文件 loop/*、verification/evidence.yaml 不手工重排
+  - 回归测试覆盖模板关键约定
+  - 包校验、项目校验、Loop 校验与单元测试通过
+  verification:
+    status: passed
+    commands:
+    - python -m unittest discover -s tests -p 'test_*.py' -q
+    - python runtime/scripts/validate_package.py --root .
+    - python runtime/scripts/validate_project.py --root .
+    - vibe-workflow/scripts/loopctl.py --root . validate
+    evidence:
+    - DOC-CONV-001
+    limitations:
+    - 未修改 boss_electrics 现有项目日志；约定先通过框架模板与规则文档落地
+  result:
+    summary: 将 project-log 长文档组织四约定固化为模板、Skill、文档与回归测试；本仓库项目日志按新约定记录本次任务。
+    changed_files:
+    - runtime/project-log-template/progress.md
+    - runtime/project-log-template/current-session.md
+    - skills/a-project-log/SKILL.md
+    - skills/a-project-log/REFERENCE.md
+    - skills/a-session-handoff/SKILL.md
+    - docs/USAGE.md
+    - prompts/vibe-global-agent.md
+    - runtime/scripts/validate_package.py
+    - tests/test_project_templates.py
+    - .project-log/current-session.md
+    - .project-log/progress.md
+    deviations:
+    - 未将 current-session.md 中更早的既有历史会话区块整体重排，仅按最新在最上新增本次记录并补头部快照
+    follow_ups:
+    - 用户确认后提交并推送 main
+  created_at: '2026-08-20T10:00:00+08:00'
+  updated_at: '2026-08-20T17:45:00+08:00'

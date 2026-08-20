@@ -48,6 +48,7 @@ python3 "${CODEX_HOME:-$HOME/.codex}/vibe-workflow/scripts/init_project.py" --ta
 - `retrospective/`、`distillation/`：如何改进工作方式；
 - `current-session.md`：下一次一分钟恢复。
 - `loop/active-run.yaml`、`events.jsonl`、`evidence-index.yaml`、`handoff.md`：Loop 快照、历史、证据有效性和恢复视图。
+- `docs/archive/`：长 Markdown 摘要的旧段落归档位置。
 
 ## 更新纪律
 
@@ -59,5 +60,26 @@ python3 "${CODEX_HOME:-$HOME/.codex}/vibe-workflow/scripts/init_project.py" --ta
 - 只记录可复核的决策摘要，不记录冗长隐性推理；
 - 会话结束或压缩前更新 current-session、任务、验证和下一步。
 - 原生 `/goal` 管线程执行；Project Goal 与 Loop 状态不得被原生 Goal 临时措辞反向覆盖。
+
+## 长文档维护约定
+
+`current-session.md` 与 `progress.md` 是面向人的长 Markdown 摘要，必须遵守以下规则，不能靠手写自觉维护：
+
+1. **最新在最上**
+   - `current-session.md`：最新一次会话写在文件最上面的会话区块，旧会话依次向下。
+   - `progress.md`：按日期倒序排列，最新阶段段落位于文件顶部。
+2. **头部快照**
+   - 两份文档顶部都维护一个简短稳定的“当前状态”区块，每次更新时覆盖而不是追加。
+   - 快照至少包含：当前任务/当前阶段、当前状态、最近一次验证、下一步（1~3 条）。
+3. **超限归档**
+   - `current-session.md` 超过约 50-100 KB 或会话区块达到约 10 条时，把旧会话区块移动到 `.project-log/docs/archive/`。
+   - `progress.md` 超过约 50-100 KB 时，把旧阶段段落移动到 `.project-log/docs/archive/`。
+   - 主文档只保留最近内容；归档文件按日期可检索，不删除任何已记录事实。
+4. **单一事实源**
+   - 精确当前状态与下一步以 `loop/handoff.md`、`loop/active-run.yaml` 为权威状态源。
+   - 两份 md 是快速摘要，不得与权威状态互相矛盾；不要在多份长文档里各留一份不一致的“下一步”。
+5. **机器维护文件边界**
+   - 不手工重排或改写 `loop/events.jsonl`、`loop/active-run.yaml`、`loop/handoff.md`、`verification/evidence.yaml`。
+   - 这些文件由运行时脚本与 Hooks 维护；整理长文档时只调整两个 md 的位置、做归档和改写为更清晰的结构。
 
 详细规范见 `REFERENCE.md`、`.project-log/docs/`、模板和 schemas。

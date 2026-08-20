@@ -57,12 +57,20 @@ Vibe Coding 是一套面向 Codex CLI、VS Code 插件、桌面端和 ACP 外部
 ├── alignment/            # 业务、代码、配置、测试对齐结果
 ├── decisions/            # A/B/C 决策记录
 ├── loop/                 # Loop 状态、事件、证据索引和 handoff
+├── docs/                 # 项目日志说明与长文档归档（docs/archive/）
 ├── work-trace/           # 紧凑工作留痕
 ├── retrospective/        # 阶段复盘
 └── distillation/         # 可沉淀的经验候选
 ```
 
 项目日志是项目的持久记忆，不是聊天记录的复制品。它应记录确认事实、可复核证据、决策摘要和下一步，而不是把模型的隐性推理写进去。
+
+`current-session.md` 和 `progress.md` 是面向人的长 Markdown 摘要，维护约定如下：
+
+- **最新在最上**：最新会话区块或最新阶段段落位于文件顶部，旧内容依次向下。
+- **头部快照**：顶部维护简短稳定的“当前状态”区块，每次更新时覆盖而不是追加，方便不翻页即可恢复。
+- **超限归档**：`current-session.md` 超过约 50-100 KB 或会话区块达到约 10 条时，把旧区块移到 `docs/archive/`；`progress.md` 超过约 50-100 KB 时做同样处理。归档保留全部历史，不删除事实。
+- **单一事实源**：精确当前状态和下一步以 `loop/active-run.yaml`、`loop/handoff.md` 为权威状态源；两个 md 摘要不得与之矛盾。机器维护的 `loop/` 与 `verification/evidence.yaml` 文件不要手工重排。
 
 ### 1.3 当前对话层
 

@@ -354,3 +354,19 @@ entries:
   evidence:
   - ARCHIVE-FIX-001
   knowledge_candidate: true
+- id: TRACE-20260820-DOC-CONV-001
+  task_id: TASK-010
+  timestamp: '2026-08-20T17:45:00+08:00'
+  context: 用户提供了 project-log 长文档组织问题说明，并明确不整理已有项目日志，只优化 vibe-coding 框架源码。
+  hypothesis: 将“最新在最上、头部快照、超限归档、单一事实源”写入模板、Skill、文档并加测试，可让新项目从初始化起就遵守一致结构。
+  decision_ref: DEC-005
+  action: 更新 project-log 模板、a-project-log/a-session-handoff Skills、docs/USAGE.md、prompts/vibe-global-agent.md、validate_package.py，新增 tests/test_project_templates.py，并按新约定更新本仓库项目日志。
+  expected_result: 新项目初始化后的两个长摘要文档顶部有当前状态快照，最新内容在最上，超限时可归档到 docs/archive/。
+  observation: 41 个 unittest（1 跳过）、包校验、项目校验、Loop 校验全部通过；本仓库项目日志文件约 24KB，无需执行归档。
+  actual_result: passed
+  delta: 从“只记规则到项目日志”改为“模板 + Skills + 文档 + 测试”全链路固化；既有项目日志不做历史重排。
+  lesson: 组织约定应沉淀到初始化模板与规则资产中，并用测试锁住关键短语，避免长文档再次靠自觉维护。
+  next_adjustment: 用户确认后提交并推送 main；后续可对存量项目按同约定做一次性迁移。
+  evidence:
+  - DOC-CONV-001
+  knowledge_candidate: true

@@ -1,5 +1,26 @@
 # Current Session
 
+## 当前状态
+
+- 当前阶段：implementation（TASK-010）
+- 当前目标：将 project-log 长文档组织四约定固化为框架模板、Skills、文档与测试
+- 当前任务：固化 project-log 长文档组织约定到框架源码
+- 当前状态：进行中（源码改动与验证已完成，待提交）
+- 最近验证：41 个 unittest（1 跳过）、包校验、项目校验、Loop 校验全部通过
+- 下一步：
+  1. 完成 `.project-log` 记录更新与 `loopctl handoff`
+  2. 提交源码改动
+  3. 用户确认后推送到 origin/main
+
+## 2026-08-20 固化 project-log 长文档组织约定（TASK-010）
+
+- 需求来源：`boss_electrics/.project-log/docs/log-file-organization-task.md` 描述的长 Markdown 摘要组织问题。
+- 范围决策：用户明确不整理已有项目的 `.project-log`，只优化 vibe-coding 框架源码。
+- 实现：在 `runtime/project-log-template/{progress.md,current-session.md}` 中加入“最新在最上、头部快照、超限归档、单一事实源、机器维护文件不手工重排”五条维护规则；`a-project-log` 的 `SKILL.md`/`REFERENCE.md`、`a-session-handoff` 同步同一约定；`docs/USAGE.md` 与 `prompts/vibe-global-agent.md` 增加用户与主 Agent 可见的短规则；`validate_package.py` 把两个模板纳入必选运行时产物；新增 `tests/test_project_templates.py` 回归测试。
+- 验证：41 个 unittest（1 个历史跳过）通过；`validate_package.py`、`validate_project.py`、`loopctl validate` 全部通过。
+- 记录时间：2026-08-20T17:45:00+08:00。
+
+
 ## 2026-08-16 归档 vibe-coding 并修复归档脚本
 
 - 已按 a-project-log-archive 归档 vibe-coding 到 `My_knowledge_base/工程记录/vibe-coding/.project-log` 并推送知识库。

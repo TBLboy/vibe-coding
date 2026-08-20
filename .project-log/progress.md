@@ -1,5 +1,22 @@
 # Progress
 
+## 当前状态
+
+- 当前阶段：implementation
+- 当前任务：TASK-010 固化 project-log 长文档组织约定到框架源码
+- 当前状态：进行中（源码改动与验证完成，待提交）
+- 最近验证：41 个 unittest（1 跳过）、包校验、项目校验、Loop 校验全部通过
+- 下一步：
+  - 完成 `.project-log` 记录更新与 `loopctl handoff`
+  - 提交源码改动并等待用户确认推送
+
+## 2026-08-20T17:45:00+08:00 固化 project-log 长文档组织约定
+
+- 状态：实现与本地验证完成；提交待用户确认。
+- 变更：project-log 两个长摘要模板加入“最新在最上、头部快照、超限归档、单一事实源、机器维护文件不手工重排”规则；`a-project-log`、`a-session-handoff`、`docs/USAGE.md`、`prompts/vibe-global-agent.md` 同步约定；`validate_package.py` 将模板纳入必选运行时资产；新增 `tests/test_project_templates.py`。
+- 验证：`python -m unittest discover -s tests -p 'test_*.py' -q` -> 41 passed, 1 skipped；`validate_package.py`、`validate_project.py`、`loopctl validate` 全部通过。
+- 下一步：提交并推送 `main`（用户确认后）。
+
 ## 2026-08-14T22:17:00+08:00 Stop-after-status-update root cause
 
 - Status: root cause confirmed from local rollout and log evidence; no framework code changed.
