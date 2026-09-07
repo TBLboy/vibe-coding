@@ -197,3 +197,26 @@
   - `docs/USAGE.md`：新增完整使用指南。以团队协作机器人项目（ROS 2 主线仓库 + 独立执行器仓库、同一分支多人开发）新增「设备状态采集」为例，贯穿六个环节：初始化工程（生成 .project-log 与 AGENTS.md、Git 仓库检查与类型询问）→ 业务逻辑澄清（功能/技术/双向对齐）→ 技术选型（接口、架构、兼容约束）→ 代码落地（写代码-测试-收集证据-判断）→ 非线性回退（BUG 回到澄清）→ 归档工程（a-project-log-archive 推送至个人知识库）。并介绍 Skills a/b 分级与自动路由、内外双循环等框架特点。
 - 验证：`validate_package.py --root .` 输出 `Package validation passed.`。
 - 说明：示例场景为通用描述，未引用任何真实项目内部规则或代码内容。
+
+
+## 2026-08-16 拉取远端更新并同步安装到本地框架
+
+- 远端更新：`2b5a553..32dbb4c`，含 `a-project-init` skill、docs/USAGE.md、全局 Agent turn-completion 纪律、project-log 归档修复等 6 个提交。
+- 拉取：直连 fetch 失败（curl 56 连接重置），走 `127.0.0.1:10808` 代理成功；fast-forward 合并，工作区干净。
+- 同步安装：`global_installer.py update` 成功，安装到 `C:\Users\12187\.codex`，备份 `backups\vibe-global-update-20260816-215024-213681`。
+- 验证：`a-project-init/SKILL.md` 已安装；全局 AGENTS.md 已含“回合执行纪律”；`codex exec` 输出 `hook: SessionStart Completed`。
+- 注意：安装器会重写 config.toml 的 `commandWindows` 为带引号形式，Windows 适配需在 update 后重新应用（本次已重新去引号并清除 trusted_hash）。
+
+
+## 2026-08-16 SessionStart Hook 复发根因：cc-switch 重写 config.toml
+
+- 现象：用户切换模型（cc-switch）后 SessionStart hook 再次 `hook exited with code 1`。
+- 根因一（结构损坏）：cc-switch 用通用配置重写 config.toml 时把 `[[hooks.PostToolUse]]` 与 `[[hooks.PostToolUse.hooks]]` 之间插入 `[model_providers]`、`[mcp_servers.codegraph]` 等表，TOML 结构交错损坏；同时丢失 `[projects]`、`[windows]` 段。
+- 根因二（引号回退）：cc-switch 通用配置模板 `cc-switch-common-config-codex.txt` 由 `scripts/generate_cc_switch_config.py` 生成，其中 `commandWindows` 为带引号形式；Windows 上 Codex 0.147.0+ 不解析引号，hook 无法启动。
+- 修复（本地 + 源码生成器/安装器）：
+  - 重建本地 `~/.codex/config.toml` 为合法 TOML（hooks 块连续、保留 projects/windows、commandWindows 无引号）。
+  - `scripts/generate_cc_switch_config.py`：`hook_commands()` 的 windows_command 改为无引号；重新生成模板。
+  - `scripts/global_installer.py`：`managed_config_block()` 的 windows_command 改为无引号，避免下次 install/update 回退。
+  - `tests/test_installer.py`：同步断言 commandWindows 为无引号前缀。
+- 验证：本地 config TOML 解析通过；`codex exec --dangerously-bypass-hook-trust` 输出 `hook: SessionStart Completed`；安装器测试 10 passed 1 skipped；临时 CODEX_HOME 完整安装生成的 commandWindows 为无引号。
+- 说明：unix `command` 保持带引号，Linux/macOS 不受影响；Windows 上如果路径含空格需保留引号或用短路径。

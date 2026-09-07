@@ -38,7 +38,10 @@ def toml_string(value: str) -> str:
 
 def hook_commands(python: Path, script: Path) -> tuple[str, str]:
     unix_command = f'"{python.as_posix()}" "{script.as_posix()}"'
-    windows_command = f'"{python}" "{script}"'
+    # Codex 0.147.0+ on Windows no longer parses quotes in hook commands, so
+    # commandWindows must be unquoted. Paths with spaces require manual quoting
+    # or short-path substitution; Vibe default paths have no spaces.
+    windows_command = f"{python} {script}"
     return unix_command, windows_command
 
 

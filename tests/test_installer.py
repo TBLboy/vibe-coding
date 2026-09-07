@@ -227,7 +227,7 @@ class InstallerTests(unittest.TestCase):
             expected_unix_python = Path(sys.executable).resolve().as_posix()
             expected_windows_python = str(Path(sys.executable).resolve())
             self.assertTrue(command.startswith(f'\"{expected_unix_python}\" '), command)
-            self.assertTrue(command_windows.startswith(f'\"{expected_windows_python}\" '), command_windows)
+            self.assertTrue(command_windows.startswith(f"{expected_windows_python} "), command_windows)
             self.assertNotEqual(command.split(maxsplit=1)[0], "python3")
             self.assertNotEqual(command_windows.split(maxsplit=1)[0], "python3")
 

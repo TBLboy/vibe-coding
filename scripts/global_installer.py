@@ -286,7 +286,9 @@ def managed_config_block(home: Path, access_profile: str, include_hooks: bool) -
 
     def add_hook(event: str, script: Path) -> None:
         unix_command = f'"{python.as_posix()}" "{script.as_posix()}"'
-        windows_command = f'"{python}" "{script}"'
+        # Codex 0.147.0+ on Windows no longer parses quotes in hook commands, so
+        # commandWindows must be unquoted. Vibe default paths have no spaces.
+        windows_command = f"{python} {script}"
         lines.extend(
             [
                 f"[[hooks.{event}]]",
