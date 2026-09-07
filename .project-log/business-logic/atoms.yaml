@@ -60,6 +60,66 @@ atoms:
   created_at: '2026-08-15T10:20:00+08:00'
   updated_at: null
   last_verified_at: null
+- id: BL-PROJECTLOG-001
+  title: 长 Markdown 摘要遵守最新在最上、头部快照、超限归档、单一事实源
+  kind: rule
+  domain: project-log
+  status: active
+  priority: high
+  risk: low
+  authority: user-confirmed
+  source:
+    type: user-statement
+    reference: boss_electrics/.project-log/docs/log-file-organization-task.md（用户确认只优化 vibe-coding 框架源码）
+  description: current-session.md 与 progress.md 是面向人的长摘要；最新内容在最上，顶部维护稳定的当前状态快照，超限时旧段落归档到 docs/archive/，精确下一步以 loop 状态文件为单一事实源。
+  actors:
+  - user
+  - agent
+  trigger: 初始化项目日志、更新 current-session.md/progress.md 或将长文档归档
+  preconditions:
+  - .project-log 已初始化
+  inputs:
+  - current-session.md
+  - progress.md
+  - loop/active-run.yaml
+  - loop/handoff.md
+  rule:
+    statement: current-session.md 最新会话区块在顶部、progress.md 按日期倒序；两部文档顶部“当前状态”区块每次覆盖更新；文件超过约 50-100 KB 或会话区块约 10 条时，旧段落移动到 .project-log/docs/archive/；精确状态和下一步以 loop/active-run.yaml、loop/handoff.md 为准；机器维护的结构化状态文件不手工重排。
+  outputs:
+  - 可快速恢复的 current-session.md/progress.md
+  - 可检索的 .project-log/docs/archive/ 归档文件
+  side_effects: []
+  exceptions:
+  - 机器维护文件异常需要修复时，按运行时提供的方式处理
+  failure_handling:
+  - 归档时先校验引用完整性，不删除任何已记录事实
+  invariants:
+  - 不手工重排 loop/events.jsonl、loop/active-run.yaml、loop/handoff.md、verification/evidence.yaml
+  acceptance:
+  - id: AC-PROJECTLOG-001
+    given: 新项目初始化
+    when: 查看 current-session.md/progress.md
+    then: 顶部存在“当前状态”快照，且文档写明最新在最上与归档约定
+    method: tests/test_project_templates.py
+    evidence: DOC-CONV-001
+    status: not-verified
+  dependencies: []
+  baseline_refs: []
+  decision_refs:
+  - DEC-005
+  implementation_refs:
+  - runtime/project-log-template/current-session.md
+  - runtime/project-log-template/progress.md
+  - skills/a-project-log/SKILL.md
+  - skills/a-project-log/REFERENCE.md
+  - skills/a-session-handoff/SKILL.md
+  test_refs:
+  - tests/test_project_templates.py
+  supersedes: []
+  notes: null
+  created_at: '2026-08-20T17:45:00+08:00'
+  updated_at: null
+  last_verified_at: null
 - id: BL-PROJECTINIT-002
   title: 新建 AGENTS.md 时生成通用规则区与项目级规则区
   kind: rule

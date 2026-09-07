@@ -225,3 +225,52 @@ decisions:
   supersedes: []
   created_at: '2026-08-15T10:20:00+08:00'
   updated_at: '2026-08-15T10:40:00+08:00'
+- id: DEC-005
+  title: 将 project-log 长文档组织约定固化为框架默认规则
+  category: tooling
+  status: active
+  authority: B
+  user_approval: approved
+  related_tasks:
+  - TASK-010
+  related_business_logic:
+  - BL-PROJECTLOG-001
+  context: 现有项目日志的长 Markdown 摘要缺少统一维护约定，新内容位置靠手写自觉，文件越大越乱，恢复成本随时间线性上升。
+  hypothesis: 把“最新在最上 + 头部快照 + 超限归档 + 单一事实源”写成模板与规则文档，并加测试，可以让新项目从初始化起就遵守一致结构。
+  options:
+  - name: 仅手工整理单个项目日志
+    benefits:
+    - 改动范围最小
+    costs:
+    - 不解决框架复用，新项目仍靠自觉
+    risks:
+    - 长文档会继续失序
+  - name: 写入框架模板、Skills 与文档（选择）
+    benefits:
+    - 所有新项目初始化即带约定
+    - 规则可被回归测试保护
+    costs:
+    - 需要同步多处框架源码与文档
+    risks:
+    - 既有项目需按需迁移
+  decision: 将四约定写入 runtime/project-log-template 的两个长摘要模板，并同步 a-project-log、a-session-handoff、docs/USAGE.md、prompts/vibe-global-agent.md；validate_package 把模板纳入必选产物，新增 tests/test_project_templates.py。
+  reason_summary:
+  - 模板是每个新项目初始化的唯一来源，适合承载默认约定
+  - Skill 与主 Agent 提示负责让代理遵守约定
+  - 测试防止模板约定在未来被意外精简
+  conditions:
+  - 不手工重排机器维护的结构化状态文件
+  - 归档路径固定为 .project-log/docs/archive/
+  - 精确下一步以 loop/active-run.yaml、loop/handoff.md 为单一事实源
+  action: 更新模板、Skills、用户指南、主 Agent 提示、包校验与测试，并更新本仓库项目日志。
+  expected_result: 新初始化的项目在 current-session.md/progress.md 顶部有当前状态快照，最新内容在最上，超限时可归档到 docs/archive/。
+  reversal_plan: 回滚框架源码与测试改动；模板更新只影响未来初始化的项目，不会自动改写既有项目日志。
+  observation: 41 个 unittest（1 跳过）、包校验、项目校验、Loop 校验全部通过；本仓库项目日志已按新约定记录本次任务。
+  actual_result: implemented and verified in source repo
+  outcome_status: successful
+  lesson: 长文档维护约定应固化在模板与规则资产中并配回归测试，避免每次靠代理自觉或不一致的手工整理。
+  evidence:
+  - DOC-CONV-001
+  supersedes: []
+  created_at: '2026-08-20T17:45:00+08:00'
+  updated_at: '2026-08-20T17:45:00+08:00'

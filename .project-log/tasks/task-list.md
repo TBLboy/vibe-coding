@@ -9,3 +9,5 @@ Active goal: -
 - `TASK-008` 充实 docs/USAGE.md 用户使用指南 — `done`
 
 - `TASK-009` 限制归档脚本提交范围并记录知识库修复 — `done`
+
+- `TASK-010` 固化 project-log 长文档组织约定到框架源码 — `in-progress`
