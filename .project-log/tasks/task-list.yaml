@@ -492,3 +492,51 @@ tasks:
     - 用户确认后提交并推送 main
   created_at: '2026-08-20T10:00:00+08:00'
   updated_at: '2026-08-20T17:45:00+08:00'
+- id: TASK-011
+  title: 将八荣八耻工作口诀加入通用 Agent 规则
+  kind: task
+  phase: implementation
+  goal: 把用户提供的八荣八耻口诀加入全局 Agent 提示与项目通用规则模板，并同步到当前 Codex
+  status: done
+  authority: B
+  owner: agent
+  related_business_logic: []
+  depends_on: []
+  inputs:
+  - 用户提供的八荣八耻口诀
+  - prompts/vibe-global-agent.md
+  - skills/a-project-init/templates/general-rules.md
+  outputs:
+  - prompts/vibe-global-agent.md
+  - skills/a-project-init/templates/general-rules.md
+  - ~/.codex/AGENTS.md
+  - ~/.codex/skills/a-project-init/templates/general-rules.md
+  done_when:
+  - 全局 Agent 提示包含八荣八耻
+  - 通用规则模板包含八荣八耻
+  - 当前 Codex 的 AGENTS.md 与已安装 skill 模板同步
+  - 包校验、项目日志校验与单元测试通过
+  verification:
+    status: passed
+    commands:
+    - python -m unittest discover -s tests -p 'test_*.py' -q -> 41 passed, 1 skipped
+    - python runtime/scripts/validate_package.py --root . -> Package validation passed
+    - python runtime/scripts/validate_project.py --root . -> Validation passed
+    - vibe-workflow/scripts/loopctl.py --root . validate -> passed
+    evidence:
+    - RULES-011
+    limitations:
+    - 已存在项目的 AGENTS.md 不自动重新注入；只有重新初始化会使用新模板
+  result:
+    summary: 将八荣八耻加入全局 Agent 提示与 a-project-init 通用规则模板，并通过安装器同步到当前 Codex；第 7 条按语义写为“以诚实无知为荣”。
+    changed_files:
+    - prompts/vibe-global-agent.md
+    - skills/a-project-init/templates/general-rules.md
+    - ~/.codex/AGENTS.md
+    - ~/.codex/skills/a-project-init/templates/general-rules.md
+    deviations:
+    - 用户原文第 7 条为“诚实无知为菜”，按八荣八耻句式修正为“诚实无知为荣”
+    follow_ups:
+    - 用户确认是否需要提交并推送 vibe-coding main
+  created_at: '2026-09-07T15:00:00+08:00'
+  updated_at: '2026-09-07T15:40:00+08:00'

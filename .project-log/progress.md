@@ -3,12 +3,19 @@
 ## 当前状态
 
 - 当前阶段：implementation
-- 当前任务：TASK-010 固化 project-log 长文档组织约定到框架源码
-- 当前状态：进行中（源码改动与验证完成，待提交）
+- 当前任务：TASK-011 将八荣八耻工作口诀加入通用 Agent 规则
+- 当前状态：已完成（源码与当前 Codex 已同步）
 - 最近验证：41 个 unittest（1 跳过）、包校验、项目校验、Loop 校验全部通过
 - 下一步：
-  - 完成 `.project-log` 记录更新与 `loopctl handoff`
-  - 提交源码改动并等待用户确认推送
+  - 用户确认后提交并推送 vibe-coding main 源码改动
+
+## 2026-09-07T15:40:00+08:00 将八荣八耻口诀加入通用 Agent 规则
+
+- 状态：实现与当前 Codex 同步完成；提交待用户确认。
+- 变更：`prompts/vibe-global-agent.md` 与 `skills/a-project-init/templates/general-rules.md` 新增“八荣八耻”；通过安装器同步到 `~/.codex/AGENTS.md` 与已安装 skill 模板。
+- 验证：41 个 unittest（1 跳过）、包校验、项目校验、Loop 校验全部通过；已安装文件核对一致。
+- 备注：第 7 条原文“以诚实无知为菜”修正为“以诚实无知为荣”。
+- 下一步：用户确认后提交并推送 main。
 
 ## 2026-08-20T17:45:00+08:00 固化 project-log 长文档组织约定
 

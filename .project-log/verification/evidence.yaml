@@ -557,3 +557,27 @@ evidence:
   - docs/USAGE.md
   - prompts/vibe-global-agent.md
   - tests/test_project_templates.py
+- id: RULES-011
+  task_id: TASK-011
+  business_logic: []
+  acceptance_criteria:
+  - 全局 Agent 提示包含八荣八耻
+  - 通用规则模板包含八荣八耻
+  - 当前 Codex 的 AGENTS.md 与已安装 skill 模板同步
+  - 包校验、项目日志校验与单元测试通过
+  result: passed
+  level: 2
+  commands:
+  - python -m unittest discover -s tests -p 'test_*.py' -q -> 41 passed, 1 skipped
+  - python runtime/scripts/validate_package.py --root . -> Package validation passed
+  - python runtime/scripts/validate_project.py --root . -> Validation passed
+  - vibe-workflow/scripts/loopctl.py --root . validate -> passed
+  - grep -n 八荣八耻 ~/.codex/AGENTS.md -> 存在
+  - diff 源码与 ~/.codex/skills/a-project-init/templates/general-rules.md -> MATCH
+  limitations:
+  - 已存在项目的 AGENTS.md 不会自动重新注入，只有重新初始化会使用新通用规则模板。
+  artifacts:
+  - prompts/vibe-global-agent.md
+  - skills/a-project-init/templates/general-rules.md
+  - ~/.codex/AGENTS.md
+  - ~/.codex/skills/a-project-init/templates/general-rules.md

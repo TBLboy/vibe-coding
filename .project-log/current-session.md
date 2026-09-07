@@ -2,15 +2,22 @@
 
 ## 当前状态
 
-- 当前阶段：implementation（TASK-010）
-- 当前目标：将 project-log 长文档组织四约定固化为框架模板、Skills、文档与测试
-- 当前任务：固化 project-log 长文档组织约定到框架源码
-- 当前状态：进行中（源码改动与验证已完成，待提交）
-- 最近验证：41 个 unittest（1 跳过）、包校验、项目校验、Loop 校验全部通过
+- 当前阶段：implementation（TASK-011）
+- 当前目标：将用户提供的八荣八耻口诀加入 vibe-coding 通用 Agent 规则
+- 当前任务：将八荣八耻工作口诀加入通用 Agent 规则
+- 当前状态：已完成（源码与当前 Codex 已同步）
+- 最近验证：41 个 unittest（1 跳过）、包校验、项目校验、Loop 校验全部通过；已安装 AGENTS.md 与 skill 模板均含口诀
 - 下一步：
-  1. 完成 `.project-log` 记录更新与 `loopctl handoff`
-  2. 提交源码改动
-  3. 用户确认后推送到 origin/main
+  1. 用户确认后提交并推送 vibe-coding main 源码改动
+
+## 2026-09-07 将八荣八耻口诀加入通用 Agent 规则（TASK-011）
+
+- 需求：用户要求把八条“八荣八耻”工作口诀加入 vibe-coding agents 文件的通用规则。
+- 范围：同时落到全局 Agent 提示（`prompts/vibe-global-agent.md` -> `~/.codex/AGENTS.md`）和项目通用规则模板（`skills/a-project-init/templates/general-rules.md` -> 已安装 skill）。
+- 处理：第 7 条原文“以诚实无知为菜”按八荣八耻句式修正为“以诚实无知为荣”。
+- 验证：`global_installer.py update --access-profile keep-existing` 通过；`~/.codex/AGENTS.md` 与已安装 general-rules 均包含完整口诀；包校验、项目校验、Loop 校验和 41 个 unittest 通过。
+- 记录时间：2026-09-07T15:40:00+08:00。
+
 
 ## 2026-08-20 固化 project-log 长文档组织约定（TASK-010）
 

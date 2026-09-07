@@ -367,3 +367,25 @@ evidence:
   recorded_at: '2026-08-16T09:37:14Z'
   invalidated_at: null
   invalidation_reason: null
+- id: RULES-011
+  kind: validation
+  subject: TASK-011 八荣八耻通用规则同步验证
+  status: valid
+  command: unittest -q; validate_package; validate_project; loopctl validate; global_installer
+    update
+  result_ref: 41 passed(1 skipped); package/project/loop passed; AGENTS.md and installed
+    template match
+  covers:
+    files:
+    - .project-log/verification/evidence.yaml
+    requirements: []
+    tasks:
+    - TASK-011
+  version_binding:
+    git_commit: aeda22dc10f4c552ba0f54144c21892270c84520
+    diff_hash: f6d7e6102d9b6a6af4091b8140bdb91f75cb361df71c049da37774bc5923da70
+    file_hashes:
+      .project-log/verification/evidence.yaml: 1c6b7619d5c951522d411f35569e5906efc02d9344607c7d11230ff448db44a3
+  recorded_at: '2026-09-07T08:13:30Z'
+  invalidated_at: null
+  invalidation_reason: null
