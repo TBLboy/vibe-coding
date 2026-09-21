@@ -832,13 +832,15 @@ format 2 是框架的默认格式：新建项目直接生成新格式，不再�
 
 每个新的业务操作使用新的 `command_id` 和最近观察到的 `revision`。网络或调用中断后，重试原始信封（包括原始 revision），返回原回执；不能修改同一 ID 的载荷或 revision。`goal.create` 显式创建目标；任务不自动继承历史目标。等待用户必须记录问题引用和恢复条件。
 
+`--covers`、`--version-binding`、`--payload`、`--scope`、`--success-conditions` 和 `--required-evidence` 接受 JSON。值以 `@` 开头时从文件读取，其余情况按内联 JSON 解析。Windows PowerShell 5.1 在把参数交给原生程序时会破坏内联 JSON 的引号（典型症状是 `covers must be valid JSON`），因此这些参数在 Windows 上一律使用 `@file`：把 `{"tasks":["TASK-001"]}` 写入 `covers.json`，再传 `--covers @covers.json`。
+
 新格式的结构化事实包括：
 
 - `records` / `record_links`：业务原子、需求基线、决策、架构、研究、对齐、复盘与蒸馏及其交叉引用；
 - `evidence`：证据状态、覆盖范围与产物哈希绑定；
 - `reviews`：任务级独立复核、结论与证据引用。
 
-长文档正文只放在 `.project-log/docs/**`，结构化记录只保存 `doc_ref`（路径与内容哈希）。`task.finish` 要求至少一条 `valid` 且覆盖该任务的证据；高风险任务还要求独立 `go` 复核。`goal.complete` 会逐条检查 `success_conditions`、`required_evidence` 与显式 `not-applicable` 理由。`evidence refresh` 会在覆盖文件字节变化后把证据写成 `stale`，旧证据不会被删除。
+长文档正文只放在 `.project-log/docs/**`，结构化记录只保存 `doc_ref`（路径与内容哈希）。`task.finish` 要求至少一条 `valid` 且覆盖该任务的证据；这里的“覆盖”指证据的 `covers.tasks` 列出该任务 ID，只用 `--task-id` 归属不足以通过 `vibe gate`。高风险任务还要求独立 `go` 复核。`goal.complete` 会逐条检查 `success_conditions`、`required_evidence` 与显式 `not-applicable` 理由。`evidence refresh` 会在覆盖文件字节变化后把证据写成 `stale`，旧证据不会被删除。
 
 新格式标记为 `.project-log/state-format.json`。Git 项目数据库位于该 worktree 的 Git 管理目录下，按项目 ID 和分支上下文隔离；非 Git 测试项目位于 `.project-log/.state/`。不会把 SQLite 文件加入 Git。初次切换到没有本地状态的分支会明确失败，而不是沿用另一分支的状态。跨副本同步只在显式执行 `state-export`/`state-import` 时发生，见下文“显式快照交换”；日常任务命令不会触发同步。普通操作不占用或清理 `index.lock`。
 

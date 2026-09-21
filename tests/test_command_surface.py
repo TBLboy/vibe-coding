@@ -117,5 +117,32 @@ class CommandSurfaceTests(unittest.TestCase):
         self.assertEqual(open_store(self.root).get_evidence("EVID-001")["status"], "valid")
 
 
+class NonProjectSurfaceTests(unittest.TestCase):
+    """A directory that is not a Vibe project must fail cleanly, not traceback."""
+
+    def setUp(self) -> None:
+        self.temporary = tempfile.TemporaryDirectory()
+        self.root = Path(self.temporary.name)
+
+    def tearDown(self) -> None:
+        self.temporary.cleanup()
+
+    def assert_not_a_project(self, *arguments: str) -> None:
+        result = run_vibe(self.root, *arguments)
+        self.assertEqual(result.returncode, 2, result.stdout)
+        self.assertNotIn("Traceback", result.stdout)
+        self.assertIn("not_a_project", result.stdout)
+
+    def test_status_on_an_empty_directory(self) -> None:
+        self.assert_not_a_project("status")
+
+    def test_validate_on_an_empty_directory(self) -> None:
+        self.assert_not_a_project("validate")
+
+    def test_status_on_a_project_log_without_a_marker(self) -> None:
+        (self.root / ".project-log").mkdir()
+        self.assert_not_a_project("status")
+
+
 if __name__ == "__main__":
     unittest.main()

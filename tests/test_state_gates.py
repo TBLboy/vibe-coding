@@ -69,6 +69,62 @@ class GateStoreTests(unittest.TestCase):
         })
         self.assertEqual(result["result"]["status"], "implemented-unverified")
 
+    def test_gate_names_the_covers_binding_when_evidence_only_carries_task_id(self) -> None:
+        """A task_id attribution is not a coverage claim, and the gate must say so."""
+        self.begin_task()
+        self.apply("evidence.record", {
+            "id": "EVID-001", "kind": "test", "subject": "task",
+            "status": "valid", "task_id": "TASK-001",
+        })
+        blocking = " ".join(self.store.gate_task("TASK-001")["blocking"])
+        self.assertIn("no valid evidence covers task TASK-001", blocking)
+        self.assertIn("covers.tasks", blocking)
+        self.assertIn("EVID-001", blocking)
+
+    def test_gate_explains_how_to_cover_a_task_with_no_evidence(self) -> None:
+        self.begin_task()
+        blocking = " ".join(self.store.gate_task("TASK-001")["blocking"])
+        self.assertIn("no valid evidence covers task TASK-001", blocking)
+        self.assertIn("covers.tasks", blocking)
+        self.assertNotIn("attributed to this task by task_id", blocking)
+
+    def test_gate_does_not_claim_missing_covers_when_covering_evidence_is_stale(self) -> None:
+        """Covering evidence that went stale must not be reported as uncovered."""
+        project = self.root / "stale-worktree"
+        project.mkdir()
+        artifact = project / "artifact.txt"
+        artifact.write_text("before\n", encoding="utf-8")
+        digest = hashlib.sha256(artifact.read_bytes()).hexdigest()
+        store = Store(project / "state.sqlite3", uuid.uuid4().hex, "f" * 64, project)
+        store.initialize()
+
+        def apply(action: str, payload: dict) -> dict:
+            return store.apply({
+                "schema_version": 1, "command_id": uuid.uuid4().hex,
+                "expected_revision": store.status()["revision"],
+                "action": action, "payload": payload,
+            })
+
+        apply("goal.create", {"id": "GOAL-001", "title": "Goal"})
+        apply("task.create", {
+            "id": "TASK-001", "title": "Task", "goal_id": "GOAL-001",
+            "extensions": {"risk": "normal", "implementer": "implementer-a"},
+        })
+        apply("task.begin", {
+            "task_id": "TASK-001", "run_id": "RUN-001", "next_action": "verify",
+        })
+        apply("evidence.record", {
+            "id": "EVID-001", "kind": "test", "subject": "artifact",
+            "status": "valid", "task_id": "TASK-001",
+            "covers": {"tasks": ["TASK-001"], "files": ["artifact.txt"]},
+            "version_binding": {"file_hashes": {"artifact.txt": digest}},
+        })
+        artifact.write_text("after\n", encoding="utf-8")
+        blocking = " ".join(store.gate_task("TASK-001")["blocking"])
+        self.assertIn("covering task TASK-001 is stale", blocking)
+        self.assertIn("covers.tasks", blocking)
+        self.assertNotIn("does not declare covers.tasks", blocking)
+
     def test_high_risk_task_requires_independent_go_review(self) -> None:
         self.begin_task(risk="high")
         self.apply("evidence.record", {

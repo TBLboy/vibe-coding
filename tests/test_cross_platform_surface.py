@@ -20,8 +20,39 @@ if str(RUNTIME / "scripts") not in sys.path:
 from state_context import open_store  # noqa: E402
 
 
+def usable_posix_bash() -> str | None:
+    """Return a bash that can run the launcher with native paths, or None.
+
+    On Windows the PATH normally holds the WSL stub. It runs commands inside a
+    Linux namespace, so a native Windows path argument never resolves and the
+    launcher cannot be exercised through it without separate wslpath translation.
+    That is a host limitation, not a launcher defect, so the bash check is
+    skipped instead of reported as a failure.
+    """
+    bash = shutil.which("bash")
+    if bash is None:
+        return None
+    probe = subprocess.run(
+        [bash, "-c", "printf vibe-bash-probe"],
+        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, check=False,
+    )
+    if probe.returncode != 0 or probe.stdout != b"vibe-bash-probe":
+        return None
+    # A bash inside WSL exposes wslpath; it cannot take a native Windows path.
+    in_wsl = subprocess.run(
+        [bash, "-c", "command -v wslpath"],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False,
+    )
+    if in_wsl.returncode == 0:
+        return None
+    return bash
+
+
 class CrossPlatformSurfaceTests(unittest.TestCase):
     def test_bash_launcher_forwards_the_formal_command_surface(self) -> None:
+        bash = usable_posix_bash()
+        if bash is None:
+            self.skipTest("no POSIX bash that can consume native paths (missing, unusable, or the WSL stub)")
         with tempfile.TemporaryDirectory() as temporary:
             target = Path(temporary) / "project"
             target.mkdir()
@@ -30,12 +61,12 @@ class CrossPlatformSurfaceTests(unittest.TestCase):
             (codex_home / "vibe-python").write_text(sys.executable + "\n", encoding="utf-8")
             result = subprocess.run(
                 [
-                    "bash", str(VIBE_SH), "--codex-home", str(codex_home),
+                    bash, str(VIBE_SH), "--codex-home", str(codex_home),
                     "--root", str(target), "init",
                 ],
-                text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False,
             )
-            self.assertEqual(result.returncode, 0, result.stdout)
+            self.assertEqual(result.returncode, 0, result.stdout.decode("utf-8", "replace"))
             self.assertTrue((target / ".project-log/state-format.json").is_file())
 
     def test_powershell_launcher_is_present_and_targets_the_same_python_entry(self) -> None:

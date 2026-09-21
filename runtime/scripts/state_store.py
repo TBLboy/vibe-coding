@@ -1189,13 +1189,45 @@ class Store:
         return problems
 
     @staticmethod
+    def _missing_evidence_problem(connection, task_id: str, covered_any: bool) -> str:
+        """Explain how the completion gate counts evidence, without guessing.
+
+        ``covered_any`` means covering evidence exists but none of it is currently
+        valid (typically stale), and the caller has already reported why. The hint
+        then only names the binding rule. When nothing covers the task at all, it
+        also lists evidence that is attributed by ``task_id`` yet never declared as
+        covering, because that attribution silently does not satisfy the gate.
+        """
+        hint = (
+            f"; the gate only counts evidence whose covers.tasks lists {task_id} "
+            "(vibe evidence record --covers @covers.json)"
+        )
+        if not covered_any:
+            uncovered = []
+            for row in connection.execute(
+                "SELECT id, covers FROM evidence WHERE task_id = ? ORDER BY recorded_sequence",
+                (task_id,),
+            ):
+                covers = _decode_json(row["covers"], "evidence covers")
+                tasks = covers.get("tasks") if type(covers) is dict else None
+                if type(tasks) is not list or task_id not in tasks:
+                    uncovered.append(row["id"])
+            if uncovered:
+                hint += (
+                    f"; {', '.join(uncovered)} is attributed to this task by task_id "
+                    "but does not declare covers.tasks"
+                )
+        return f"no valid evidence covers task {task_id}{hint}"
+
+    @staticmethod
     def _task_completion_problems(connection, task: dict, root: Path | None = None) -> list[str]:
         extensions = task.get("extensions")
         if type(extensions) is not dict:
             extensions = {}
         problems: list[str] = Store._document_drift_problems(connection, root)
         valid = []
-        for row in Store._evidence_covers_task(connection, task["id"]):
+        covered = Store._evidence_covers_task(connection, task["id"])
+        for row in covered:
             if row["status"] != "valid":
                 continue
             stale = Store._stale_reasons(root, Store._evidence(row))
@@ -1209,7 +1241,9 @@ class Store:
                 continue
             valid.append(row)
         if not valid:
-            problems.append(f"no valid evidence covers task {task['id']}")
+            problems.append(
+                Store._missing_evidence_problem(connection, task["id"], bool(covered))
+            )
         risk = extensions.get("risk")
         verification = extensions.get("verification")
         level = verification.get("level") if type(verification) is dict else None

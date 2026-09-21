@@ -529,6 +529,18 @@ def main() -> int:
                     "unsupported_legacy_command",
                     "legacy writes are disabled for format 2; use the formal vibe command surface",
                 )
+        elif args.command in {"status", "validate", "render-tasks", "next-id"}:
+            # Not a format 2 project. The legacy fallback below needs a legacy
+            # Project Log; report a clean error instead of a traceback when the
+            # directory holds no Vibe project at all.
+            if not (root / ".project-log" / "workflow.yaml").exists():
+                raise StateError(
+                    "not_a_project",
+                    f"No Vibe Project Log found under {root}: expected "
+                    f"{(root / '.project-log' / 'state-format.json')} (format 2) or "
+                    f"{(root / '.project-log' / 'workflow.yaml')} (format 1). "
+                    "Run 'vibe init' to create a format 2 project.",
+                )
         if result is not None:
             print(json.dumps(result, ensure_ascii=True, indent=2))
             return 0
