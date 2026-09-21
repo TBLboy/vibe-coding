@@ -39,7 +39,9 @@
    python3 "$VIBE_RUNTIME/scripts/vibe.py" --root <project-root> init
    ```
    默认运行时为 `~/.codex/vibe-workflow`。
-3. 读取 `.project-log/current-session.md`、任务清单、相关业务原子、需求基线、决策和现有验证证据；format 2 的精确事实源是状态库，旧格式才是 YAML 文件。
+3. 读取相关业务原子、需求基线、决策和现有验证证据。format 2 的精确事实源是状态库，
+   用 `vibe status`、`vibe render`、`vibe context` 读取；`current-session.md`、`progress.md`
+   与 `workflow.yaml` 只在旧格式项目里是文件，format 2 由状态库生成只读视图。
 4. format 2 调用：
    ```bash
    python3 "$VIBE_RUNTIME/scripts/vibe.py" --root <project-root> status
