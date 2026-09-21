@@ -337,8 +337,12 @@ def _task_status(status: str) -> str:
     }.get(status, "ready")
 
 
-def _populate_staging(store, root: Path, unmapped: list[dict]) -> None:
+def _populate_staging(
+    store, root: Path, unmapped: list[dict], relocated: list[dict] | None = None
+) -> None:
     """Build a format 2 store from legacy facts without inventing business state."""
+    if relocated is None:
+        relocated = []
     goal_document = _load_mapping(root / LEGACY_SOURCES["goal"]) or {}
     goal = goal_document.get("goal") if type(goal_document) is dict else None
     goal_id = None
@@ -391,6 +395,9 @@ def _populate_staging(store, root: Path, unmapped: list[dict]) -> None:
         covers = entry.get("covers") if type(entry.get("covers")) is dict else {}
         task_ids = covers.get("tasks") if type(covers.get("tasks")) is list else []
         task_id = task_ids[0] if len(task_ids) == 1 and task_ids[0] in task_statuses else None
+        binding = entry.get("version_binding") if type(entry.get("version_binding")) is dict else {}
+        for move in _relocated_evidence_references(covers, binding):
+            relocated.append({"section": "evidence", "id": evidence_id, **move})
         try:
             _apply(store, "evidence.record", {
                 "id": str(evidence_id),
@@ -403,7 +410,7 @@ def _populate_staging(store, root: Path, unmapped: list[dict]) -> None:
                     "requirements": covers.get("requirements", []),
                     "tasks": covers.get("tasks", []),
                 },
-                "version_binding": entry.get("version_binding") or {},
+                "version_binding": binding,
             })
         except StateError as error:
             unmapped.append({
@@ -551,6 +558,41 @@ def _is_format_two_layout_entry(entry: Path) -> bool:
     return False
 
 
+def _bytes_match(target: Path, digest) -> bool:
+    if type(digest) is not str or not digest:
+        return False
+    try:
+        if target.is_symlink() or not target.is_file():
+            return False
+        return hashlib.sha256(target.read_bytes()).hexdigest() == digest
+    except OSError:
+        return False
+
+
+def _relocated_evidence_references(covers: dict, version_binding: dict) -> list[dict]:
+    """Report references that the migration is about to relocate under ``legacy/``.
+
+    The recorded evidence keeps the path it was written with; ``state_store``
+    resolves a moved path against the migrated location when it re-checks
+    applicability. This list is only the audit trail written to the journal.
+    """
+    from state_store import relocated_legacy_path
+
+    paths = []
+    files = covers.get("files")
+    if type(files) is list:
+        paths.extend(files)
+    hashes = version_binding.get("file_hashes")
+    if type(hashes) is dict:
+        paths.extend(hashes)
+    moves = []
+    for path in dict.fromkeys(paths):
+        relocated = relocated_legacy_path(path)
+        if relocated is not None:
+            moves.append({"from": path, "to": relocated})
+    return moves
+
+
 def _ensure_format_two_layout(log: Path) -> None:
     (log / ".state").mkdir(parents=True, exist_ok=True)
     for relative, content in FORMAT_TWO_LAYOUT_FILES:
@@ -648,7 +690,8 @@ def apply(root, confirm: str) -> dict:
     store = Store(staging / "state.sqlite3", project_id, context_id, base)
     store.initialize()
     unmapped: list[dict] = list(report.get("unsupported", []))
-    _populate_staging(store, base, unmapped)
+    relocated: list[dict] = []
+    _populate_staging(store, base, unmapped, relocated)
     errors = store.validate()
     if errors:
         raise StateError("migration_validation_failed", "; ".join(errors))
@@ -664,6 +707,7 @@ def apply(root, confirm: str) -> dict:
         "status": "generated",
         "inventory": report["inventory"],
         "unmapped": len(unmapped),
+        "relocated_references": relocated,
     }
     _write_journal(journal_path, metadata)
     try:
@@ -676,6 +720,7 @@ def apply(root, confirm: str) -> dict:
         "preview_hash": report["preview_hash"],
         "project_id": project_id,
         "unmapped": len(unmapped),
+        "relocated_references": len(relocated),
         "backup": str(backup),
         **switched,
     }

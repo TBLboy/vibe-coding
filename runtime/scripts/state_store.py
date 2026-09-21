@@ -174,6 +174,59 @@ def _iter_doc_refs(value, path: str = "payload"):
             yield from _iter_doc_refs(item, f"{path}[{index}]")
 
 
+def relocated_legacy_path(path) -> str | None:
+    """Post-migration location of a ``.project-log/**`` artifact, or ``None``.
+
+    Migration moves every top-level legacy entry into ``.project-log/legacy/``;
+    the format-2 layout entries and the long-form ``docs/`` tree stay where they
+    are. Evidence recorded before that move still names the old path, so a
+    reference has to be resolvable at both locations or the migration would
+    invalidate evidence purely by relocating the project log itself.
+    """
+    if type(path) is not str:
+        return None
+    normalized = path.replace("\\", "/")
+    prefix = ".project-log/"
+    if not normalized.startswith(prefix):
+        return None
+    remainder = normalized[len(prefix):]
+    if not remainder or remainder.startswith("legacy/"):
+        return None
+    top = remainder.split("/", 1)[0]
+    if top in {"state-format.json", ".state", ".migration", "legacy", "docs", "exchange"}:
+        return None
+    return f"{prefix}legacy/{remainder}"
+
+
+def _covered_digest(base: Path, path: str) -> tuple[str | None, str]:
+    """Return ``(digest, reason)`` for a covered artifact; digest is None on failure.
+
+    A recorded path that no longer exists is retried at the migration's legacy
+    location, so moving the project log does not by itself stale its evidence.
+    The original location always wins when it still exists, which keeps a real
+    edit or deletion from being masked by an untouched legacy copy.
+    """
+    target = Path(path)
+    if not target.is_absolute():
+        target = base / target
+    if target.is_symlink() or not target.is_file():
+        if target.exists():
+            return None, f"covered input is missing: {path}"
+        relocated = relocated_legacy_path(path)
+        alternative = None
+        if relocated is not None:
+            alternative = Path(relocated)
+            if not alternative.is_absolute():
+                alternative = base / alternative
+        if alternative is None or alternative.is_symlink() or not alternative.is_file():
+            return None, f"covered input is missing: {path}"
+        target = alternative
+    try:
+        return hashlib.sha256(target.read_bytes()).hexdigest(), ""
+    except OSError as error:
+        return None, f"covered input is unreadable: {path}: {error}"
+
+
 def _doc_ref_issues(root: Path | None, payload) -> list[dict]:
     """Re-evaluate every ``doc_ref`` recorded in a record payload.
 
@@ -776,16 +829,9 @@ class Store:
             if type(path) is not str or type(expected) is not str or not expected:
                 reasons.append(f"invalid recorded hash for {path!r}")
                 continue
-            target = Path(path)
-            if not target.is_absolute():
-                target = base / target
-            try:
-                if target.is_symlink() or not target.is_file():
-                    reasons.append(f"covered input is missing: {path}")
-                    continue
-                actual = hashlib.sha256(target.read_bytes()).hexdigest()
-            except OSError as error:
-                reasons.append(f"covered input is unreadable: {path}: {error}")
+            actual, problem = _covered_digest(base, path)
+            if actual is None:
+                reasons.append(problem)
                 continue
             if actual != expected:
                 reasons.append(f"covered input changed: {path}")

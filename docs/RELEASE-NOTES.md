@@ -35,8 +35,12 @@
   `.project-log/legacy/unmapped/unmapped.json`。这是 fail-closed 行为，不是数据丢失：
   旧状态、旧证据与旧字段都可在 `legacy/` 中按原样找到。
 - 由此，迁移一个真实项目可能让“证据已随源码变化失效”的历史任务重新变为 `ready`，
-  需要按当前字节补证据后重新完成。迁移自带的文件搬移（`.project-log/**` →
-  `.project-log/legacy/**`）也会让引用旧路径的证据失效，同样记录在 `unmapped.json`。
+  需要按当前字节补证据后重新完成。
+- 迁移自带的文件搬移（`.project-log/**` → `.project-log/legacy/**`）**不会**让证据失效：
+  记录的路径保持不变，适用性检查在旧路径不存在时会到 `legacy/<同路径>` 按哈希解析，
+  只有哈希仍然匹配才算有效。旧路径只要还存在就以旧路径为准，因此真实的修改或删除
+  不会被未改动的 `legacy/` 副本掩盖；被重定位的引用会记入迁移 journal 的
+  `relocated_references`。
 
 ### format 1 退役阶段与用户关口
 

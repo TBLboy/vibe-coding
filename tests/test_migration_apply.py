@@ -1,6 +1,7 @@
 """TASK-040: explicit, resumable and rollback-safe legacy migration."""
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 import subprocess
@@ -231,6 +232,76 @@ class MigrationApplyTests(unittest.TestCase):
         )
         entry = next(e for e in unmapped["entries"] if e.get("id") == "TASK-UNVERIFIED")
         self.assertIn("completion gate could not be reproduced", entry["reason"])
+
+    def test_moved_legacy_artifacts_do_not_falsely_stale_evidence(self) -> None:
+        spec = self.root / ".project-log/specs/contract.md"
+        spec.parent.mkdir(parents=True, exist_ok=True)
+        spec.write_text("# Contract\n", encoding="utf-8")
+        digest = hashlib.sha256(spec.read_bytes()).hexdigest()
+        write_yaml(self.root / ".project-log/loop/evidence-index.yaml", {
+            "schema_version": 1,
+            "evidence": [{
+                "id": "EVID-MOVED", "kind": "test", "subject": "moved artifact",
+                "status": "valid",
+                "covers": {
+                    "files": [".project-log/specs/contract.md"],
+                    "requirements": [], "tasks": ["TASK-DONE"],
+                },
+                "version_binding": {
+                    "file_hashes": {".project-log/specs/contract.md": digest},
+                },
+            }],
+        })
+        report = self.preview()
+        result = run_vibe(self.root, "migrate", "apply", "--confirm", report["preview_hash"])
+        self.assertEqual(result.returncode, 0, result.stdout)
+        store = open_store(self.root)
+        # The artifact moved to legacy/, but the recorded reference is unchanged
+        # and the staleness check resolves it at the migrated location.
+        self.assertEqual(store.stale_evidence(self.root), [])
+        evidence = store.get_evidence("EVID-MOVED")
+        self.assertEqual(
+            evidence["covers"]["files"], [".project-log/specs/contract.md"]
+        )
+        self.assertEqual(
+            list(evidence["version_binding"]["file_hashes"]),
+            [".project-log/specs/contract.md"],
+        )
+        self.assertTrue((self.root / ".project-log/legacy/specs/contract.md").is_file())
+        self.assertEqual(
+            store.get_task("TASK-DONE")["status"], "implemented-unverified"
+        )
+
+    def test_changed_legacy_artifact_stays_stale_after_migration(self) -> None:
+        spec = self.root / ".project-log/specs/contract.md"
+        spec.parent.mkdir(parents=True, exist_ok=True)
+        spec.write_text("# Contract\n", encoding="utf-8")
+        stale_digest = hashlib.sha256(b"# Older contract\n").hexdigest()
+        write_yaml(self.root / ".project-log/loop/evidence-index.yaml", {
+            "schema_version": 1,
+            "evidence": [{
+                "id": "EVID-STALE", "kind": "test", "subject": "changed artifact",
+                "status": "valid",
+                "covers": {
+                    "files": [".project-log/specs/contract.md"],
+                    "requirements": [], "tasks": ["TASK-DONE"],
+                },
+                "version_binding": {
+                    "file_hashes": {".project-log/specs/contract.md": stale_digest},
+                },
+            }],
+        })
+        report = self.preview()
+        result = run_vibe(self.root, "migrate", "apply", "--confirm", report["preview_hash"])
+        self.assertEqual(result.returncode, 0, result.stdout)
+        store = open_store(self.root)
+        # The recorded hash never matched these bytes: re-pointing must not mask it.
+        self.assertEqual([item["id"] for item in store.stale_evidence(self.root)], ["EVID-STALE"])
+        self.assertEqual(
+            list(store.get_evidence("EVID-STALE")["version_binding"]["file_hashes"]),
+            [".project-log/specs/contract.md"],
+        )
+        self.assertEqual(store.get_task("TASK-DONE")["status"], "ready")
 
     def test_long_form_docs_are_not_relocated_by_migration(self) -> None:
         document = self.root / ".project-log/docs/note.md"
