@@ -274,3 +274,32 @@ TASK-027 的 apply 需要用户对安装目标与试点项目授权，但它的*
 **遗留边界**：覆盖 `.project-log` 记录文件的证据不会因每次日志编辑而重新失效（本轮只对运行时/产品文件执行了精确失效）。这属于用户复盘中 P0-2/P1-2 的“证据范围语义化”后续项，已记入 TASK-030 的 limitations。
 
 **结论**：显式配置的解释器不再被静默替换；三条链路（日常入口、安装器主体、安装/更新引导）现在采用一致的 fail-closed 策略，唯一例外是用户显式 opt-in。第 13 节与本节共同覆盖的当前修订是 `exports/task030-fix3`。
+
+## 15. 增补（TASK-031）：引导失败提示只给出可执行动作
+
+**来源**：`reviewer-031` 的 F6——`ensure_python` 的 `except` 分支在 `selected` 赋值之前抛出，因此提示里的 `VIBE_PYTHON_REPAIR=1` 在该状态下无法生效；另外 `VIBE_PYTHON="   "` 会给出配置文件路径的提示。
+
+**修复**（`scripts/bootstrap_vibe_python.py`）：
+
+- `configured_python()` 改为返回 `(interpreter, source, problem)`，不再对畸形取值抛异常；空白 `VIBE_PYTHON` 仍归因到环境变量，空配置文件报告 problem。
+- 新增 `unusable_hint()`：按来源给出出路（环境变量来源 → 取消或修正它；配置文件来源 → 修路径或 opt-in 切换），不再提示一个做不到的动作。
+- 新增 `switch_interpreter()`：把 opt-in 的提示集中到一处。
+- `ensure_python()` 重构：**配置路径本身不可用**且显式 opt-in 时，真正回落到命名 Conda 环境并重写配置；未 opt-in 时仍然 fail-closed、不写任何东西。
+- 无 Conda 时的失败信息改为说明“已配置的解释器不可用且找不到 Conda，因此 opt-in 也无法切换”。
+
+**回归测试**（`tests/test_installer.py`，新增 2 项并重定向 1 条断言）：配置路径不可用 + opt-in 会切换并重写配置；空白 `VIBE_PYTHON` 的提示归因到环境变量且不写文件；`VIBE_PYTHON` 优先时断言可执行提示并确认没有宣布切换。
+
+**反证**：把上一修订的 `bootstrap_vibe_python.py`（`9f3fe49f…`）放回后，恰好这 2 项新测试失败、其余 5 项通过——修复是 load-bearing。证据：`runs/task031-falsify-vs-fix3/report.json`。
+
+**冻结版本**：`exports/task031-fix/source`，239 个文件，按第 1 节算法复算摘要 `a309d075ad458006d8735e4926e2f96def98019128bfcf44a23f234c4003a65d`；`scripts/bootstrap_vibe_python.py` `5a9c6cf8f3a4c3fc0c3660e068ee9299706d53d3dde6faa19ac6b5644becbdff`。
+
+**复验矩阵（全部退出码 0）**：Windows `runs/task031-baseline2`（57 项：56 通过 + 1 跳过，含 7 项 bootstrap 测试）与 `runs/task031-{binding,launchers,state,crashes,exchange,routing,evidence,gate,migrate,integration,metadata}`；Ubuntu `linux/runs/task031-linux-wsl`（14 项检查，`platform=linux`）。
+
+**独立复核（reviewer-031，第三轮）**：W1–W4、W6、W7 全部 `verified`；W5 的 Windows 半边 verified、Linux 半边在其给出结论时仍在运行（随后由 `linux/runs/task031-linux-wsl` 补齐为 14 项 exit 0）。结论：**TASK-031 代码 GO**。同轮报出：
+
+- **X1（高，记录层）** 本修订使被 `passed` 条件引用的证据失效（`SC-004` ← `PYTHONREPAIR-030`/`PLATFORM-030`，`SC-007` ← `GOALREVIEW-031`）——已按规则失效这三条，登记绑定当前修订的 `PYTHONHINT-031`、`PLATFORM-031`、`GOALREVIEW-032`，并把 `SC-004`/`SC-007`/`required_evidence` 改指新证据。
+- **X2（低）** 无 Conda 时会先打印“正在切换”再失败——提示顺序问题，本轮未改。
+- **X3（低-中，先于本轮存在）** `find_conda`/`env_python` 接受“退出码 0 但打印错误”的管理器，把错误文本当成解释器路径（本机 `D:\conda\Library\bin\conda.bat`）——已登记为 `TASK-032`。
+- **X4（信息）** 被取代的 `runs/task031-baseline`（针对重定向前断言的运行）与权威的 `baseline2` 并存，保留以便审计。
+
+**结论**：引导脚本失败时给出的每个动作都在该状态下真实可执行；显式配置的解释器仍不会被静默替换。

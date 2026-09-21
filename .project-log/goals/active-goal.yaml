@@ -29,10 +29,9 @@ goal:
     status: passed
     evidence_refs:
     - CROSSPLATFORM-026
-    - PLATFORM-030
-    - PYTHONREPAIR-030
-    - PYTHON-002
-    - PYTHON-003
+    - PLATFORM-031
+    - PYTHONHINT-031
+    - LAUNCHCFG-031
   - id: SC-005
     statement: 迁移和回退演练保全历史与迁移后新写入
     status: passed
@@ -50,7 +49,7 @@ goal:
     evidence_refs:
     - CROSSPLATFORM-026
     - GOALREVIEW-030
-    - GOALREVIEW-031
+    - GOALREVIEW-032
   non_goals:
   - 不自动修改论文项目或真实全局模型配置
   - 不实现通用多主同步或完整 LaTeX 语义分析
@@ -64,7 +63,7 @@ goal:
     subject: goal-final-review
     evidence_refs:
     - GOALREVIEW-030
-    - GOALREVIEW-031
+    - GOALREVIEW-032
   - kind: integration
     subject: external-cross-platform-release
     evidence_refs:

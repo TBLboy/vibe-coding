@@ -2,13 +2,20 @@
 
 ## 当前状态
 
-- 当前阶段：GOAL-001 已结算完成（`loopctl decide action=goal-complete`）；唯一遗留是 TASK-031（pending，B 级）
-- 当前任务：TASK-001..TASK-030 全部完成（done），含 TASK-027（全局安装与真实项目试点）、TASK-029（实时 Hook 精确失效）与 TASK-030（Python 引导原地修复显式解释器）
-- 当前状态：当前修订 `exports/task030-fix3`（摘要 `33765c8d…`）在 Windows 与 Ubuntu 上全部回归套件退出码 0；Q-001 已由用户答复并落地（`DEC-008`）；按框架规则失效 6 条漂移证据并登记 3 条锚定当前修订的新证据；`SC-001`/`SC-004`/`SC-007` 证据引用已更新；`evaluate goal` 返回 `passed: true`、`reasons: []`
-- 最近验证（当前修订 `exports/task030-fix3`）：Windows 基线 55 项（54 通过 + 1 跳过）、绑定 8、入口 16、状态 39、强杀 3、交换 15、分流 17、证据 20、门禁 29、迁移 12、安装集成 7、元数据通过；Ubuntu `linux/runs/task030-linux-wsl4` 14 项检查全部退出码 0（基线 55 项：54 通过 + 1 跳过）；`exports/state027-frozen` 与 `state029-hook` 的矩阵保留为历史基线；失败与被取代记录全部保留
+- 当前阶段：GOAL-001 已结算完成；TASK-031 亦已完成（唯一遗留是 TASK-032，pending，B 级）
+- 当前任务：TASK-001..TASK-031 全部完成（done），含 TASK-027（全局安装与真实项目试点）、TASK-030（Python 引导原地修复显式解释器）与 TASK-031（失败提示只给可执行动作）；TASK-032 待办
+- 当前状态：当前修订 `exports/task031-fix`（摘要 `a309d075…`）在 Windows 与 Ubuntu 上全部回归套件退出码 0；Q-001 已由用户答复并落地（`DEC-008`）；按框架规则失效 3 条漂移证据并登记 3 条锚定当前修订的新证据；`SC-004`/`SC-007` 证据引用已更新
+- 最近验证（当前修订 `exports/task031-fix`）：Windows 基线 57 项（56 通过 + 1 跳过）、绑定 8、入口 16、状态 39、强杀 3、交换 15、分流 17、证据 20、门禁 29、迁移 12、安装集成 7、元数据通过；Ubuntu `linux/runs/task031-linux-wsl` 14 项检查全部退出码 0（基线 57 项：56 通过 + 1 跳过）；`state027-frozen`/`state029-hook`/`task030-fix3` 的矩阵保留为历史基线；失败与被取代记录全部保留
 - 下一步：
-  - TASK-031（pending，B 级）：让配置路径不可用时的引导提示真正可执行（`reviewer-031` 的 F6）
+  - TASK-032（pending，B 级）：让 `find_conda`/`env_python` 拒绝“退出码 0 但打印错误”的管理器（`reviewer-031` 的 X3）
   - 工作区改动尚未提交，待用户决定是否 commit / push
+
+## 2026-09-21 TASK-031：引导失败提示只给可执行动作
+
+- 来源：`reviewer-031` 的 F6；修复 `scripts/bootstrap_vibe_python.py`，使配置路径不可用 + 显式 opt-in 时真正回落命名 Conda 环境并重写配置，未 opt-in 仍 fail-closed，提示按来源给出可执行动作。
+- 新增 2 项回归测试并重定向 1 条断言；反证：上一修订恰好这 2 项失败、其余 5 项通过。
+- 冻结修订 `exports/task031-fix`（摘要 `a309d075…`）；Windows `runs/task031-*` 全部 exit 0，Ubuntu `linux/runs/task031-linux-wsl` 14 项 exit 0。
+- 第三轮独立复核 W1–W4/W6/W7 verified、代码 GO；X1 已通过证据重新锚定解决，X2 未改，X3 → TASK-032，X4 保留为审计记录。
 
 ## 2026-09-21 TASK-030：Python 引导原地修复显式解释器（Q-001 落地）
 

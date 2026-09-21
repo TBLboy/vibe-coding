@@ -1555,8 +1555,8 @@ tasks:
     - Independent review reviewer-031 -> A1-A7 verified; findings F1/F2 fixed, F3/F4/F5
       resolved at close-out
     evidence:
-    - PYTHONREPAIR-030
-    - PLATFORM-030
+    - PYTHONHINT-031
+    - PLATFORM-031
     - STATESLICE-030
     limitations:
     - opt-in 用环境变量 VIBE_PYTHON_REPAIR（只有 1/true/yes/on 生效）或 --repair-interpreter；
@@ -1564,6 +1564,8 @@ tasks:
     - 只改安装/更新期的引导脚本；日常运行入口（vibe.ps1/vibe.sh）与 global_installer.py 的
       fail-closed 行为未改动
     - 覆盖 .project-log 记录文件的证据不会因每次日志编辑而重新失效；语义化证据范围仍是后续项
+    - TASK-031 重新锚定：PYTHONREPAIR-030 与 PLATFORM-030 已因覆盖对象变化转为 stale，由 PYTHONHINT-031 与
+      PLATFORM-031 接替（同一 `done_when` 在当前修订上重新验证）
   result:
     summary: bootstrap_vibe_python.py 不再把显式配置的解释器换成命名 Conda 环境：配置解释器是
       Python 3.11+ 但缺 Vibe 依赖时改为原地安装依赖并保持配置不变；不是 3.11+ 或不可执行时明确报错并给出修复命令；
@@ -1582,7 +1584,7 @@ tasks:
   kind: repair
   phase: implementation
   goal: 引导脚本失败时的提示必须指向当前状态下真正能改变结果的命令
-  status: pending
+  status: done
   authority: B
   risk: low
   tags:
@@ -1605,15 +1607,82 @@ tasks:
   - 提示里给出的变量或命令在该状态下确实能改变结果，否则不得提及
   - 三种畸形配置各有独立回归测试
   verification:
+    status: passed
+    commands:
+    - External task031-baseline2 -> 57 run (56 passed + 1 skipped) on Windows, including
+      the 7 bootstrap tests
+    - External task031-{binding,launchers,state,crashes,exchange,routing,evidence,gate,migrate,integration,metadata}
+      -> all exit 0 on the frozen revision exports/task031-fix (a309d075…)
+    - Ubuntu linux/runs/task031-linux-wsl -> 14 checks exit 0 (platform=linux)
+    - Falsification vs task030-fix3 -> exactly the two new tests fail (opt-in switching
+      on an unusable path, and the VIBE_PYTHON source hint); the five earlier bootstrap
+      tests still pass
+    - Independent review reviewer-031 (round 3) -> W1-W4/W6/W7 verified, verdict GO
+    evidence:
+    - PYTHONHINT-031
+    - PLATFORM-031
+    - GOALREVIEW-032
+    limitations:
+    - 提示文本按来源区分（VIBE_PYTHON 说“取消或修正环境变量”，配置文件说“修路径或 opt-in 切换”）；
+      不再声称 VIBE_PYTHON 覆盖配置文件（该解释只对旧实现成立）
+    - 无 Conda 时仍会在切换提示之后失败（reviewer-031 的 X2，低）；find_conda/env_python 接受
+      “退出码 0 但打印错误”的管理器（X3，低-中，先于本任务存在），已登记为 TASK-032
+  result:
+    summary: configured_python 改为返回 (interpreter, source, problem) 而不再抛异常，ensure_python
+      在“配置路径本身不可用”且显式 opt-in 时真正回落到命名 Conda 环境并重写配置；提示按来源给出可执行动作，
+      空白 VIBE_PYTHON 归因到环境变量而非配置文件。
+    changed_files:
+    - scripts/bootstrap_vibe_python.py
+    - tests/test_installer.py
+    deviations:
+    - 重定向了 test_bootstrap_refuses_to_rewrite_while_vibe_python_env_var_is_set 的一条断言：从字面词
+      “overrides” 改为可执行提示 Unset VIBE_PYTHON，并新增 assertNotIn("switching to Conda environment")
+    follow_ups:
+    - TASK-032：让 find_conda/env_python 拒绝“退出码 0 但打印错误”的管理器（reviewer-031 的 X3）
+  created_at: '2026-09-21T11:55:00+08:00'
+  updated_at: '2026-09-21T11:55:00+08:00'
+- id: TASK-032
+  title: 让 Conda 管理器探测拒绝“退出码 0 但打印错误”的结果
+  kind: repair
+  phase: implementation
+  goal: find_conda/env_python 不得把错误文本当成解释器路径，失败时给出原始诊断
+  status: pending
+  authority: B
+  risk: low
+  tags:
+  - workflow-optimization
+  - review-follow-up
+  related_business_logic:
+  - BL-WFOPT-002
+  related_decisions:
+  - DEC-008
+  depends_on:
+  - TASK-030
+  - TASK-031
+  blocked_by_questions: []
+  inputs:
+  - scripts/bootstrap_vibe_python.py
+  outputs:
+  - 对管理器输出做有效性校验后的解释器解析
+  - 覆盖该分支的回归测试
+  plan:
+  - 计划验证：管理器以退出码 0 打印错误文本、以退出码 0 打印多行输出、以及正常打印路径三种情形。
+  done_when:
+  - 管理器以退出码 0 打印错误文本时，env_python 返回 None 而不是把文本当成路径
+  - 该情形下失败信息包含管理器原始输出，而不是原始 WinError/FileNotFoundError
+  - 三种情形各有独立回归测试
+  verification:
     status: not-run
     commands: []
     evidence: []
     limitations: []
   result:
-    summary: 未开始。来源：reviewer-031 的 F6——ensure_python 的 except 分支在 selected 赋值之前抛出，因此提示中的
-      VIBE_PYTHON_REPAIR=1 在该状态下无法生效；另外 VIBE_PYTHON 为空白字符串时会给出配置文件路径的提示。
+    summary: 未开始。来源：reviewer-031 的 X3（先于 TASK-030/031 存在，在 task030-fix3 上可复现）——
+      本机 find_conda 命中 D:\conda\Library\bin\conda.bat，它在 `conda run` 不可用时打印
+      CommandNotFoundError 却返回退出码 0，于是 env_python 把该文本当作解释器路径，随后 python_is_usable
+      抛出原始 FileNotFoundError [WinError 2]。
     changed_files: []
     deviations: []
     follow_ups: []
-  created_at: '2026-09-21T11:55:00+08:00'
-  updated_at: '2026-09-21T11:55:00+08:00'
+  created_at: '2026-09-21T13:20:00+08:00'
+  updated_at: '2026-09-21T13:20:00+08:00'

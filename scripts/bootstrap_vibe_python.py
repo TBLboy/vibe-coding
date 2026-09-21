@@ -38,27 +38,48 @@ def codex_home(value: str | None) -> Path:
     return Path(raw).expanduser().resolve() if raw else (Path.home() / ".codex").resolve()
 
 
-def configured_python(home: Path) -> tuple[str | None, str | None]:
-    """Return the configured interpreter and the source that supplied it.
+def configured_python(home: Path) -> tuple[str | None, str | None, str | None]:
+    """Return ``(interpreter, source, problem)`` for the configured interpreter.
 
-    ``VIBE_PYTHON`` wins over the ``vibe-python`` file. The second element labels
-    the source for diagnostics and is ``None`` when nothing is configured.
+    ``VIBE_PYTHON`` wins over the ``vibe-python`` file. Malformed values are reported
+    through ``problem`` instead of raising, so the caller can offer a way out that
+    actually works in the state that produced the error.
     """
     raw = os.environ.get(PYTHON_ENV_NAME, "")
     source = PYTHON_ENV_NAME if raw else None
-    if not raw:
+    if source is None:
         path = home / PYTHON_CONFIG_NAME
         if path.is_file():
-            raw = path.read_text(encoding="utf-8-sig").strip()
             source = str(path)
-            if not raw:
-                raise RuntimeError(f"Invalid interpreter configuration: {path}")
-    if not raw:
-        return None, None
-    candidate = Path(raw)
-    if "\n" in raw or "\r" in raw or not candidate.is_absolute() or not candidate.is_file():
-        raise RuntimeError(f"Configured Vibe Python must be one absolute executable path: {raw!r}")
-    return str(candidate.resolve()), source
+            raw = path.read_text(encoding="utf-8-sig")
+            if not raw.strip():
+                return None, source, f"Invalid interpreter configuration: {path} is empty"
+    if source is None:
+        return None, None, None
+    value = raw.strip()
+    candidate = Path(value) if value else None
+    if (
+        candidate is None
+        or "\n" in value
+        or "\r" in value
+        or not candidate.is_absolute()
+        or not candidate.is_file()
+    ):
+        return None, source, f"Configured Vibe Python must be one absolute executable path: {value!r}"
+    return str(candidate.resolve()), source, None
+
+
+def unusable_hint(source: str | None, home: Path, env_name: str) -> str:
+    """The way out for a configured interpreter that cannot be used."""
+    if source == PYTHON_ENV_NAME:
+        return (
+            f"Unset {PYTHON_ENV_NAME}, or point it at a Python 3.11+ interpreter with the Vibe "
+            f"requirements installed."
+        )
+    return (
+        f"Fix the path in {source or home / PYTHON_CONFIG_NAME}, or set {REPAIR_ENV_NAME}=1 to "
+        f"switch to the Conda environment {env_name!r} and rewrite the configuration."
+    )
 
 
 def run(command: Sequence[str], *, check: bool = True, capture: bool = True) -> subprocess.CompletedProcess[str]:
@@ -159,6 +180,15 @@ def write_config(home: Path, python: str) -> Path:
     return path
 
 
+def switch_interpreter(env_name: str, home: Path) -> None:
+    """Announce an explicitly requested switch before the Conda environment is resolved."""
+    print(
+        f"[!] {REPAIR_ENV_NAME} is set; switching to Conda environment {env_name!r} and rewriting "
+        f"{home / PYTHON_CONFIG_NAME}.",
+        file=sys.stderr,
+    )
+
+
 def ensure_python(
     home: Path,
     requirements: Path,
@@ -167,43 +197,32 @@ def ensure_python(
     create: bool,
     repair_interpreter: bool = False,
 ) -> str:
-    try:
-        selected, source = configured_python(home)
-    except RuntimeError as error:
-        if not create:
-            raise
-        if os.environ.get(PYTHON_ENV_NAME, "").strip():
-            hint = (
-                f"Unset {PYTHON_ENV_NAME}, or point it at a Python 3.11+ interpreter with the Vibe "
-                f"requirements installed."
-            )
+    selected, source, problem = configured_python(home)
+    if source is not None:
+        if problem is not None:
+            if not create:
+                raise RuntimeError(problem)
+            if not repair_interpreter or source == PYTHON_ENV_NAME:
+                raise RuntimeError(f"{problem}\n{unusable_hint(source, home, env_name)}")
+            switch_interpreter(env_name, home)
         else:
-            hint = (
-                f"Fix that path, or set {REPAIR_ENV_NAME}=1 to switch to the Conda environment "
-                f"{env_name!r} and rewrite the configuration."
-            )
-        raise RuntimeError(f"{error}\n{hint}") from error
-    if selected:
-        usable, detail = python_is_usable(selected, requirements)
-        if usable:
-            return detail
-        if not create:
-            raise RuntimeError(f"Configured Vibe Python is unusable: {selected}\n{detail}")
-        if repair_interpreter:
-            if source == PYTHON_ENV_NAME:
-                raise RuntimeError(
-                    f"{PYTHON_ENV_NAME} overrides {home / PYTHON_CONFIG_NAME}; refusing to rewrite the "
-                    f"configuration while it is set. Unset {PYTHON_ENV_NAME}, or point it at a Python 3.11+ "
-                    f"interpreter with the Vibe requirements installed."
-                )
-            print(
-                f"[!] {REPAIR_ENV_NAME} is set; switching to Conda environment {env_name!r} and rewriting "
-                f"{home / PYTHON_CONFIG_NAME}.",
-                file=sys.stderr,
-            )
-        else:
-            version_ok, version_detail = python_version_ok(selected)
-            if version_ok:
+            usable, detail = python_is_usable(selected, requirements)
+            if usable:
+                return detail
+            unusable = f"Configured Vibe Python is unusable: {selected}\n{detail}"
+            if not create:
+                raise RuntimeError(unusable)
+            if repair_interpreter:
+                if source == PYTHON_ENV_NAME:
+                    raise RuntimeError(f"{unusable}\n{unusable_hint(source, home, env_name)}")
+                switch_interpreter(env_name, home)
+            else:
+                version_ok, version_detail = python_version_ok(selected)
+                if not version_ok:
+                    raise RuntimeError(
+                        f"Configured Vibe Python is not a Python 3.11+ interpreter: {selected}\n"
+                        f"{version_detail}\n{unusable_hint(source, home, env_name)}"
+                    )
                 print(
                     f"[*] Installing the missing Vibe Python requirements into the configured interpreter {selected}.",
                     file=sys.stderr,
@@ -212,29 +231,23 @@ def ensure_python(
                     install_requirements(selected, requirements)
                 except RuntimeError as error:
                     raise RuntimeError(
-                        f"Could not install the Vibe requirements into the configured interpreter {selected}: {error}\n"
-                        f"Fix that interpreter, or set {REPAIR_ENV_NAME}=1 to switch to the Conda environment "
-                        f"{env_name!r} and rewrite the configuration."
+                        f"Could not install the Vibe requirements into the configured interpreter {selected}: "
+                        f"{error}\n{unusable_hint(source, home, env_name)}"
                     ) from error
                 usable, detail = python_is_usable(selected, requirements)
                 if usable:
                     return detail
                 raise RuntimeError(
-                    f"Configured Vibe Python remains unusable after installing the Vibe requirements: {selected}\n"
-                    f"{detail}\nFix that interpreter, or set {REPAIR_ENV_NAME}=1 to switch to the Conda "
-                    f"environment {env_name!r} and rewrite the configuration."
+                    f"Configured Vibe Python remains unusable after installing the Vibe requirements: "
+                    f"{selected}\n{detail}\n{unusable_hint(source, home, env_name)}"
                 )
-            raise RuntimeError(
-                f"Configured Vibe Python is not a Python 3.11+ interpreter: {selected}\n{version_detail}\n"
-                f"Fix that interpreter, or set {REPAIR_ENV_NAME}=1 to switch to the Conda environment "
-                f"{env_name!r} and rewrite the configuration."
-            )
 
     manager = find_conda()
     if not manager:
-        if selected:
+        if source is not None:
             raise RuntimeError(
-                f"Configured Vibe Python is unusable and no Conda/Miniforge executable was found: {selected}"
+                f"Configured Vibe Python cannot be used ({source}) and no Conda/Miniforge executable was "
+                f"found, so {REPAIR_ENV_NAME} cannot switch to the named environment."
             )
         raise RuntimeError(
             "No usable Vibe Python found. Install Miniforge/Miniconda or set VIBE_PYTHON to a Python 3.11+ environment."

@@ -361,7 +361,8 @@ class InstallerTests(unittest.TestCase):
             )
 
             self.assertNotEqual(result.returncode, 0, result.stdout)
-            self.assertIn("overrides", result.stdout)
+            self.assertIn("Unset VIBE_PYTHON", result.stdout)
+            self.assertNotIn("switching to Conda environment", result.stdout)
             self.assertFalse(created.is_file(), result.stdout)
             self.assertEqual(config.read_text(encoding="utf-8"), str(workspace / "untouched") + "\n")
 
@@ -428,6 +429,66 @@ class InstallerTests(unittest.TestCase):
                     Path(interpreter).resolve(),
                     f"value={value!r}\n{result.stdout}",
                 )
+
+    def test_bootstrap_opt_in_switches_when_the_configured_path_is_unusable(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = Path(temporary)
+            home = workspace / "codex-home"
+            home.mkdir(parents=True)
+            missing = workspace / "gone-python"
+            config = home / "vibe-python"
+            config.write_text(str(missing) + "\n", encoding="utf-8")
+            created = workspace / "created"
+            env = os.environ.copy()
+            env.pop("VIBE_PYTHON", None)
+            env["VIBE_PYTHON_REPAIR"] = "1"
+            env["CONDA_EXE"] = str(write_fake_conda(workspace, "conda", created))
+
+            result = subprocess.run(
+                [
+                    sys.executable, str(BOOTSTRAP),
+                    "--codex-home", str(home),
+                    "--requirements", str(ROOT / "runtime/scripts/requirements.txt"),
+                    "--print-python",
+                ],
+                env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stdout)
+            self.assertTrue(created.is_file(), result.stdout)
+            self.assertEqual(
+                Path(config.read_text(encoding="utf-8").strip()).resolve(),
+                Path(sys.executable).resolve(),
+                result.stdout,
+            )
+
+    def test_bootstrap_reports_the_vibe_python_source_for_a_blank_value(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = Path(temporary)
+            home = workspace / "codex-home"
+            home.mkdir(parents=True)
+            config = home / "vibe-python"
+            config.write_text(str(workspace / "untouched") + "\n", encoding="utf-8")
+            created = workspace / "created"
+            env = os.environ.copy()
+            env["VIBE_PYTHON"] = "   "
+            env["VIBE_PYTHON_REPAIR"] = "1"
+            env["CONDA_EXE"] = str(write_fake_conda(workspace, "conda", created))
+
+            result = subprocess.run(
+                [
+                    sys.executable, str(BOOTSTRAP),
+                    "--codex-home", str(home),
+                    "--requirements", str(ROOT / "runtime/scripts/requirements.txt"),
+                    "--print-python",
+                ],
+                env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False,
+            )
+
+            self.assertNotEqual(result.returncode, 0, result.stdout)
+            self.assertIn("Unset VIBE_PYTHON", result.stdout)
+            self.assertFalse(created.is_file(), result.stdout)
+            self.assertEqual(config.read_text(encoding="utf-8"), str(workspace / "untouched") + "\n")
 
     def test_global_python_config_pins_hook_commands(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

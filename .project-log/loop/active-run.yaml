@@ -1,15 +1,15 @@
 schema_version: 1
-run_id: RUN-20260921-034141-1bc663b8
-goal_id: GOAL-001
+run_id: RUN-20260921-051230-64786075
+goal_id: null
 phase: implementation
 clarification_domain: null
-task_id: TASK-030
-status: complete
+task_id: TASK-031
+status: handed-off
 next_action:
   kind: follow-up
-  subject: TASK-031
-  statement: GOAL-001 已结算完成。唯一遗留是 TASK-031（pending，B 级）：让配置路径不可用时的引导提示真正可执行（reviewer-031
-    的 F6）。工作区改动尚未提交，待用户决定是否 commit/push；真实项目 my_lunwen 的 EV-019 重验与 Q-021 答复仍属该项目自己的决策。
+  subject: TASK-032
+  statement: GOAL-001 保持关闭，TASK-031 已完成并重新锚定证据。唯一遗留是 TASK-032（pending，B 级）：让 find_conda/env_python
+    拒绝“退出码 0 但打印错误”的管理器（reviewer-031 的 X3）。工作区改动尚未提交，待用户决定是否 commit/push。
 counters:
   task_attempts: 0
   same_failure_count: 0
@@ -25,5 +25,5 @@ native_goal:
   thread_goal_id: 019fa3c1-74a0-7693-97de-209b5b918788
   last_known_status: null
   last_synced_at: null
-last_event_id: LE-000190
-updated_at: '2026-09-21T04:04:22Z'
+last_event_id: LE-000203
+updated_at: '2026-09-21T05:12:31Z'

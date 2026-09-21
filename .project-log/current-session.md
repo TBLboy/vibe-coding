@@ -2,14 +2,22 @@
 
 ## 当前状态
 
-- 当前阶段：GOAL-001 已结算完成（`loopctl decide action=goal-complete`）；唯一遗留是 TASK-031（pending，B 级）
-- 当前目标：GOAL-001（四项优化交付并在源码之外完成完整验证）——`status: complete`；SC-001..SC-007 全部 `passed` 且引用有效证据（SC-001 改指 `STATESLICE-030`/`GOALREVIEW-030`，SC-004 改指 `PLATFORM-030`/`PYTHONREPAIR-030`，SC-007 含 `GOALREVIEW-030`/`GOALREVIEW-031`）
-- 当前任务：TASK-001..TASK-030 全部完成，含 TASK-027（全局安装与真实项目试点）与 TASK-030（Python 引导原地修复显式解释器）
-- 当前状态：当前修订 `exports/task030-fix3`（摘要 `33765c8d…`，`bootstrap_vibe_python.py` `9f3fe49f…`）在 Windows 与 Ubuntu 上全部回归套件退出码 0；Q-001 已由用户答复（原地修复、绝不静默换环境）并落地；按框架规则失效了 6 条漂移证据并登记锚定当前修订的 3 条新证据；`loopctl evaluate goal` 返回 `passed: true`、`reasons: []`
-- 最近验证（当前修订 `exports/task030-fix3`）：Windows 基线 55 项（54 通过 + 1 跳过）及全部套件退出码 0；Linux（WSL Ubuntu，Python 3.11.16）`linux/runs/task030-linux-wsl4` 14 项检查全部退出码 0（基线 55 项：54 通过 + 1 跳过）；两轮独立复核（`reviewer-030` A1–A8、`reviewer-031` A1–A7/V1–V7）结论均为 GO。历史矩阵见验收记录第 2、9、11 节。跨平台验收记录见 `docs/workflow-optimization-cross-platform-acceptance.md`
+- 当前阶段：GOAL-001 已结算完成；TASK-031 亦已完成（唯一遗留是 TASK-032，pending，B 级）
+- 当前目标：GOAL-001（四项优化交付并在源码之外完成完整验证）——`status: complete`；SC-001..SC-007 全部 `passed` 且引用有效证据（SC-001 指 `STATESLICE-030`/`GOALREVIEW-030`，SC-004 改指 `PLATFORM-031`/`PYTHONHINT-031`，SC-007 含 `GOALREVIEW-030`/`GOALREVIEW-032`）
+- 当前任务：TASK-001..TASK-031 全部完成，含 TASK-027（全局安装与真实项目试点）、TASK-030（Python 引导原地修复显式解释器）与 TASK-031（失败提示只给可执行动作）；TASK-032 待办
+- 当前状态：当前修订 `exports/task031-fix`（摘要 `a309d075…`，`bootstrap_vibe_python.py` `5a9c6cf8…`）在 Windows 与 Ubuntu 上全部回归套件退出码 0；Q-001 已答复并落地；TASK-031 修掉了 `reviewer-031` 的 F6；按框架规则失效了 3 条漂移证据并登记锚定当前修订的 3 条新证据
+- 最近验证（当前修订 `exports/task031-fix`）：Windows 基线 57 项（56 通过 + 1 跳过）及全部套件退出码 0；Linux（WSL Ubuntu，Python 3.11.16）`linux/runs/task031-linux-wsl` 14 项检查全部退出码 0；第三轮独立复核 `reviewer-031` 的 W1–W4/W6/W7 全部 verified、TASK-031 代码 GO。历史矩阵见验收记录第 2、9、11、14 节。跨平台验收记录见 `docs/workflow-optimization-cross-platform-acceptance.md`
 - 下一步：
-  1. TASK-031（pending，B 级）：让配置路径不可用时的引导提示真正可执行（`reviewer-031` 的 F6）
+  1. TASK-032（pending，B 级）：让 `find_conda`/`env_python` 拒绝“退出码 0 但打印错误”的管理器（`reviewer-031` 的 X3）
   2. 工作区改动尚未提交，待用户决定是否 commit / push；真实项目 `my_lunwen` 的 `EV-019` 重验与 `Q-021` 答复仍属该项目自己的决策
+
+## 2026-09-21 TASK-031：引导失败提示只给可执行动作
+
+- 来源：`reviewer-031` 的 F6——`ensure_python` 的 `except` 分支在 `selected` 赋值前抛出，提示里的 `VIBE_PYTHON_REPAIR=1` 无法生效；空白 `VIBE_PYTHON` 还会给出配置文件路径的提示。
+- 修复：`configured_python` 返回 `(interpreter, source, problem)`；新增 `unusable_hint`/`switch_interpreter`；配置路径不可用 + 显式 opt-in 时真正回落命名 Conda 环境并重写配置，未 opt-in 仍 fail-closed。
+- 新增 2 项回归测试并重定向 1 条断言；反证：上一修订恰好这 2 项失败、其余 5 项通过。
+- 冻结修订 `exports/task031-fix`（摘要 `a309d075…`）；Windows `runs/task031-*` 全部 exit 0，Ubuntu `linux/runs/task031-linux-wsl` 14 项 exit 0。
+- 复核第三轮：W1–W4/W6/W7 verified，代码 GO；X1（记录层）已通过失效 3 条 + 登记 3 条新证据并改指 `SC-004`/`SC-007` 解决；X2 未改；X3 登记为 TASK-032；X4 保留为审计记录。
 
 ## 2026-09-21 TASK-030：Python 引导原地修复显式解释器（Q-001 落地）
 

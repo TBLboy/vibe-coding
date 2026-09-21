@@ -1200,7 +1200,7 @@ evidence:
 - id: PYTHONREPAIR-030
   kind: test
   subject: explicit interpreter is repaired in place and never silently replaced
-  status: valid
+  status: stale
   command: External task030c-baseline -> 55 run (54 passed + 1 skipped) incl. 5 new
     bootstrap tests; falsification vs state029-hook -> all 5 fail, vs task030-fix2
     -> the F1/F2 tests fail
@@ -1219,8 +1219,9 @@ evidence:
       scripts/bootstrap_vibe_python.py: 9f3fe49f36092e784d2ca050a4caba19a95708f4ef6de87f8762bbecb47dfdcd
       tests/test_installer.py: 9b67711d0d72f6cf6744a407d19a7d14354ce8bcc3485322e3c1c7c2fe6f8eea
   recorded_at: '2026-09-21T03:40:30Z'
-  invalidated_at: null
-  invalidation_reason: null
+  invalidated_at: '2026-09-21T05:06:23Z'
+  invalidation_reason: 'TASK-031: the bootstrap and installer tests changed again,
+    so evidence bound to the previous revision no longer describes the same inputs'
 - id: STATESLICE-030
   kind: test
   subject: state slice, exchange and run binding on the task030-fix3 revision
@@ -1260,7 +1261,7 @@ evidence:
 - id: PLATFORM-030
   kind: integration
   subject: cross-platform matrix on the task030-fix3 revision
-  status: valid
+  status: stale
   command: Windows runs/task030c-{baseline,binding,launchers,state,crashes,exchange,routing,evidence,gate,migrate,integration,metadata}
     all exit 0; Ubuntu linux/runs/task030-linux-wsl4 14 checks exit 0 (platform=linux)
   result_ref: null
@@ -1278,12 +1279,13 @@ evidence:
       scripts/bootstrap_vibe_python.py: 9f3fe49f36092e784d2ca050a4caba19a95708f4ef6de87f8762bbecb47dfdcd
       runtime/scripts/loop_state.py: 7c403182ada0612b8272cb6182b726104ad451b17a96280c9142a4fc1033ff21
   recorded_at: '2026-09-21T03:40:31Z'
-  invalidated_at: null
-  invalidation_reason: null
+  invalidated_at: '2026-09-21T05:06:23Z'
+  invalidation_reason: 'TASK-031: the bootstrap and installer tests changed again,
+    so evidence bound to the previous revision no longer describes the same inputs'
 - id: GOALREVIEW-031
   kind: review
   subject: goal-final-review
-  status: valid
+  status: stale
   command: 'reviewer-031 delta release review of exports/task030-fix3: V1-V7 verified
     (F1/F2 fixes reproduced, digest 33765c8d, Windows 55 / Linux 14/14 green, 0 valid-but-stale
     goal references, validators and evaluate goal pass); verdict GO for TASK-030 and
@@ -1304,5 +1306,106 @@ evidence:
       scripts/bootstrap_vibe_python.py: 9f3fe49f36092e784d2ca050a4caba19a95708f4ef6de87f8762bbecb47dfdcd
       tests/test_installer.py: 9b67711d0d72f6cf6744a407d19a7d14354ce8bcc3485322e3c1c7c2fe6f8eea
   recorded_at: '2026-09-21T04:03:12Z'
+  invalidated_at: '2026-09-21T05:06:23Z'
+  invalidation_reason: 'TASK-031: the bootstrap and installer tests changed again,
+    so evidence bound to the previous revision no longer describes the same inputs'
+- id: PYTHONHINT-031
+  kind: test
+  subject: unusable configured interpreter reports only actionable ways out
+  status: valid
+  command: External task031-baseline2 -> 57 run (56 passed + 1 skipped) incl. 7 bootstrap
+    tests; falsification vs task030-fix3 -> exactly the two new tests fail; Ubuntu
+    linux/runs/task031-linux-wsl -> 14 checks exit 0
+  result_ref: null
+  covers:
+    files:
+    - scripts/bootstrap_vibe_python.py
+    - tests/test_installer.py
+    requirements: []
+    tasks:
+    - TASK-031
+  version_binding:
+    git_commit: c81333a907e52090c2fa6ac46608439b3f0104e1
+    diff_hash: cd17bd34ce53141dbeb538d4d57aa83cf745865e2c244e29cf63510d4830a2eb
+    file_hashes:
+      scripts/bootstrap_vibe_python.py: 5a9c6cf8f3a4c3fc0c3660e068ee9299706d53d3dde6faa19ac6b5644becbdff
+      tests/test_installer.py: ad5a15614a8df78fd62f211d58ca6a239b77db2982c4440c9b3d04f90dbfa7e5
+  recorded_at: '2026-09-21T05:06:23Z'
+  invalidated_at: null
+  invalidation_reason: null
+- id: PLATFORM-031
+  kind: integration
+  subject: cross-platform matrix on the task031-fix revision
+  status: valid
+  command: Windows runs/task031-{baseline2,binding,launchers,state,crashes,exchange,routing,evidence,gate,migrate,integration,metadata}
+    all exit 0; Ubuntu linux/runs/task031-linux-wsl 14 checks exit 0 (platform=linux)
+  result_ref: null
+  covers:
+    files:
+    - scripts/bootstrap_vibe_python.py
+    - runtime/scripts/loop_state.py
+    requirements: []
+    tasks:
+    - TASK-031
+  version_binding:
+    git_commit: c81333a907e52090c2fa6ac46608439b3f0104e1
+    diff_hash: efefffead1858b844fa13f182e2965fefab5021f4082f2901b2c9ca9119acf2f
+    file_hashes:
+      scripts/bootstrap_vibe_python.py: 5a9c6cf8f3a4c3fc0c3660e068ee9299706d53d3dde6faa19ac6b5644becbdff
+      runtime/scripts/loop_state.py: 7c403182ada0612b8272cb6182b726104ad451b17a96280c9142a4fc1033ff21
+  recorded_at: '2026-09-21T05:06:24Z'
+  invalidated_at: null
+  invalidation_reason: null
+- id: GOALREVIEW-032
+  kind: review
+  subject: goal-final-review
+  status: valid
+  command: 'reviewer-031 round-3 delta review of exports/task031-fix: W1-W4/W6/W7
+    verified (F6 fixed and reproduced independently, hints actionable, falsification
+    load-bearing, digest a309d075, only the two intended files changed); W5 Windows
+    verified, Linux reported partial at the time; verdict GO for the TASK-031 code'
+  result_ref: null
+  covers:
+    files:
+    - scripts/bootstrap_vibe_python.py
+    - tests/test_installer.py
+    requirements: []
+    tasks:
+    - TASK-031
+  version_binding:
+    git_commit: c81333a907e52090c2fa6ac46608439b3f0104e1
+    diff_hash: cd17bd34ce53141dbeb538d4d57aa83cf745865e2c244e29cf63510d4830a2eb
+    file_hashes:
+      scripts/bootstrap_vibe_python.py: 5a9c6cf8f3a4c3fc0c3660e068ee9299706d53d3dde6faa19ac6b5644becbdff
+      tests/test_installer.py: ad5a15614a8df78fd62f211d58ca6a239b77db2982c4440c9b3d04f90dbfa7e5
+  recorded_at: '2026-09-21T05:06:35Z'
+  invalidated_at: null
+  invalidation_reason: null
+- id: LAUNCHCFG-031
+  kind: test
+  subject: interpreter resolution and launcher entries are pinned and fail closed
+  status: valid
+  command: External task031-launchers -> all exit 0 (launcher/interpreter resolution
+    incl. unix launchers); supersedes the unanchored PYTHON-002/PYTHON-003 configuration
+    and smoke-test records so SC-004 rests only on in-repo anchored evidence
+  result_ref: null
+  covers:
+    files:
+    - runtime/scripts/vibe_python.ps1
+    - runtime/scripts/vibe_python.sh
+    - runtime/vibe.ps1
+    - runtime/vibe.sh
+    requirements: []
+    tasks:
+    - TASK-031
+  version_binding:
+    git_commit: c81333a907e52090c2fa6ac46608439b3f0104e1
+    diff_hash: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+    file_hashes:
+      runtime/scripts/vibe_python.ps1: cbe0b3792fbdc32d38906c35f4eeef3a1ccc0124a98477310c29cc887fa7b219
+      runtime/scripts/vibe_python.sh: 2934e25593ff18e2295779fa3097045937307d7f71118df701bc50fb9f92f15f
+      runtime/vibe.ps1: c4718f1b7b903abc7e0ffa1449d6140a2f62ff78b833c23fdf0bc5bbce8f61ba
+      runtime/vibe.sh: c2c4af3faa0e66747cc0598ab64a1272ed01fb732515d6db8528eb7793d6753d
+  recorded_at: '2026-09-21T05:11:26Z'
   invalidated_at: null
   invalidation_reason: null
