@@ -28,6 +28,15 @@
   `.project-log/.migration/journal.json`，无法映射的历史进入 `.project-log/legacy/unmapped/`
   而不是被丢弃。
 - 未获显式授权时，迁移工具不会改写 format 1 项目的字节。
+- 迁移不会把旧的“已完成”直接当作 format 2 的完成：旧任务状态保留在
+  `extensions.legacy_status`，但只有当覆盖该任务的证据在当前字节下仍然有效、且高风险任务
+  有独立 `go` 复核时，才会重建为 `implemented-unverified`；否则任务回到 `ready`，并把
+  “completion gate could not be reproduced” 与逐条原因写入
+  `.project-log/legacy/unmapped/unmapped.json`。这是 fail-closed 行为，不是数据丢失：
+  旧状态、旧证据与旧字段都可在 `legacy/` 中按原样找到。
+- 由此，迁移一个真实项目可能让“证据已随源码变化失效”的历史任务重新变为 `ready`，
+  需要按当前字节补证据后重新完成。迁移自带的文件搬移（`.project-log/**` →
+  `.project-log/legacy/**`）也会让引用旧路径的证据失效，同样记录在 `unmapped.json`。
 
 ### format 1 退役阶段与用户关口
 
@@ -45,7 +54,8 @@
 ### 迁移授权边界
 
 - 真实项目的迁移由该项目自己决定并单独授权，不随框架升级自动执行。
-- `vibe-coding` 仓库自身的 `.project-log` 迁移同样是独立授权项，需在发布评审通过后单独申请。
+- `vibe-coding` 仓库自身的 `.project-log` 迁移是独立授权项。用户已于 2026-09-21 显式授权
+  （DEC-010），该仓库自身已在独立复核通过、预览零冲突、备份与回退演练完成后迁移到 format 2。
 - 安装、升级、卸载都不会改写任何项目的 `.project-log/`。
 
 ### 版本与校验

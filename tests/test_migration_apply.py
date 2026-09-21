@@ -210,6 +210,28 @@ class MigrationApplyTests(unittest.TestCase):
             (log / "exchange/.gitattributes").read_text(encoding="utf-8"), "* -text\n"
         )
 
+    def test_unreproducible_completion_claims_reopen_and_are_recorded(self) -> None:
+        document = self.root / ".project-log/tasks/task-list.yaml"
+        legacy = yaml.safe_load(document.read_text(encoding="utf-8"))
+        legacy["tasks"].append({
+            "id": "TASK-UNVERIFIED", "title": "Unverified task", "status": "done",
+            "phase": "implementation", "depends_on": [], "related_decisions": [],
+            "blocked_by_questions": [],
+        })
+        write_yaml(document, legacy)
+        report = self.preview()
+        result = run_vibe(self.root, "migrate", "apply", "--confirm", report["preview_hash"])
+        self.assertEqual(result.returncode, 0, result.stdout)
+        task = open_store(self.root).get_task("TASK-UNVERIFIED")
+        # No evidence covers it, so the legacy "done" claim is not carried over.
+        self.assertEqual(task["status"], "ready")
+        self.assertEqual(task["extensions"]["legacy_status"], "done")
+        unmapped = json.loads(
+            (self.root / ".project-log/legacy/unmapped/unmapped.json").read_text(encoding="utf-8")
+        )
+        entry = next(e for e in unmapped["entries"] if e.get("id") == "TASK-UNVERIFIED")
+        self.assertIn("completion gate could not be reproduced", entry["reason"])
+
     def test_long_form_docs_are_not_relocated_by_migration(self) -> None:
         document = self.root / ".project-log/docs/note.md"
         document.parent.mkdir(parents=True, exist_ok=True)
