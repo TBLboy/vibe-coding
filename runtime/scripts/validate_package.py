@@ -15,10 +15,13 @@ except ImportError as exc:  # pragma: no cover
     print("Missing dependency: PyYAML", file=sys.stderr)
     raise SystemExit(2) from exc
 
+from framework_info import VERSION
+
 
 SKILL_NAME_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 ALLOWED_FRONTMATTER = {"name", "description", "license", "compatibility", "metadata"}
 REQUIRED_RUNTIME = {
+    "scripts/framework_info.py",
     "scripts/state_store.py",
     "scripts/state_views.py",
     "scripts/state_context.py",
@@ -56,6 +59,7 @@ REQUIRED_PACKAGE_FILES = {
     "AI_INSTALL.md",
     "AI_UPGRADE.md",
     "README.md",
+    "docs/RELEASE-NOTES.md",
     "install.ps1",
     "install.sh",
     "update.ps1",
@@ -172,6 +176,10 @@ def validate(root: Path) -> list[str]:
         errors.append("missing global agent prompt")
     elif ".opencode/" in prompt.read_text(encoding="utf-8"):
         errors.append("global prompt contains obsolete .opencode path")
+
+    release_notes = root / "docs/RELEASE-NOTES.md"
+    if release_notes.is_file() and VERSION not in release_notes.read_text(encoding="utf-8"):
+        errors.append(f"docs/RELEASE-NOTES.md does not document the current version {VERSION}")
 
     for path in root.rglob("*.py"):
         if "__pycache__" in path.parts:

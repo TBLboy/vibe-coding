@@ -1,6 +1,6 @@
 # AI 安装指南
 
-本指南用于让 Codex 或其他本机 AI Agent 安装 Vibe Coding Codex Global Core 0.4.1。
+本指南用于让 Codex 或其他本机 AI Agent 安装 Vibe Coding Codex Global Core 0.5.0。
 
 ## 安装目标
 
@@ -69,7 +69,7 @@ Vibe Coding 的所有控制层（安装器、Hooks、`loopctl`、项目/包校�
 8. 如果公司网络或 MCP 前置工具不可用，使用 --without-mcp 完成核心安装，不要阻塞核心工作流。
 9. 不使用 --skip-preflight。
 10. 安装后运行 global_installer.py verify。
-11. 创建临时项目，运行已安装的 init_project.py、validate_project.py、loopctl.py restore 和 loopctl.py validate。
+11. 创建临时项目，运行已安装的 `vibe.py init`、`vibe.py validate` 和 `vibe.py status`。
 12. 不修改或删除任何真实项目的 .project-log。
 13. 最后报告版本、CODEX_HOME、Skill 路径、Hook 状态、已选 MCP、备份路径、验证结果和任何限制。
 14. 安装前确认本机代理可用（默认 127.0.0.1:10808，可用 HTTP_PROXY/HTTPS_PROXY 调整）；可选 MCP 拉取与远端同步依赖外网。
@@ -160,10 +160,9 @@ Windows：
 ```powershell
 $TestProject = Join-Path $env:TEMP "vibe-codex-smoke"
 New-Item -ItemType Directory -Force -Path $TestProject | Out-Null
-python "$env:CODEX_HOME\vibe-workflow\scripts\init_project.py" --target $TestProject
-python "$env:CODEX_HOME\vibe-workflow\scripts\validate_project.py" --root $TestProject
-python "$env:CODEX_HOME\vibe-workflow\scripts\loopctl.py" --root $TestProject --json restore
-python "$env:CODEX_HOME\vibe-workflow\scripts\loopctl.py" --root $TestProject --json validate
+python "$env:CODEX_HOME\vibe-workflow\scripts\vibe.py" init --root $TestProject
+python "$env:CODEX_HOME\vibe-workflow\scripts\vibe.py" --root $TestProject validate
+python "$env:CODEX_HOME\vibe-workflow\scripts\vibe.py" --root $TestProject status
 ```
 
 若未设置 `CODEX_HOME`，默认使用 `$HOME/.codex`。

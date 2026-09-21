@@ -1,4 +1,4 @@
-"""Explicit experimental project format and branch-local state selection."""
+"""Transactional project format (format 2) and branch-local state selection."""
 from __future__ import annotations
 
 import hashlib
@@ -22,7 +22,7 @@ def is_transactional(root: Path) -> bool:
 
 def reject_legacy(root: Path) -> None:
     if is_transactional(root):
-        raise ValueError("state_format_conflict: legacy writes are disabled; use vibe state-apply")
+        raise ValueError("state_format_conflict: legacy writes are disabled; use the formal vibe command surface")
 
 
 def reject_legacy_path(path: Path) -> None:
@@ -39,9 +39,16 @@ def read_marker(root: Path) -> dict:
         if path.stat().st_size > 4096:
             raise ValueError("oversized format marker")
         marker = json.loads(path.read_text(encoding="utf-8"))
-        if not isinstance(marker, dict) or set(marker) != {"format", "project_id", "experimental"}:
+        if not isinstance(marker, dict):
             raise ValueError("unsupported format marker fields")
-        if type(marker["format"]) is not int or marker["format"] != 2 or marker["experimental"] is not True:
+        # Promoted format: {"format","project_id"}. Projects initialized while format 2
+        # was experimental also carry experimental:true; it is read but never written.
+        if set(marker) == {"format", "project_id", "experimental"}:
+            if marker["experimental"] is not True:
+                raise ValueError("unsupported state format")
+        elif set(marker) != {"format", "project_id"}:
+            raise ValueError("unsupported format marker fields")
+        if type(marker["format"]) is not int or marker["format"] != 2:
             raise ValueError("unsupported state format")
         identifier = marker["project_id"]
         if not isinstance(identifier, str) or uuid.UUID(identifier).hex != identifier:
@@ -75,7 +82,7 @@ def git_context(root: Path) -> tuple[str, Path]:
         try:
             top = Path(os.fsdecode(git("rev-parse", "--show-toplevel"))).resolve()
             if top != root:
-                raise StateError("git_context_error", "experimental state requires the Git worktree root")
+                raise StateError("git_context_error", "format 2 state requires the Git worktree root")
             directory = Path(os.fsdecode(git("rev-parse", "--absolute-git-dir"))).resolve() / "vibe-state"
             branch = git("symbolic-ref", "--quiet", "HEAD", optional=True)
             if not branch:
@@ -92,7 +99,7 @@ def open_store(root: Path) -> Store:
     marker = read_marker(root)
     context_id, directory = git_context(root)
     path = directory / marker["project_id"] / context_id / "state.sqlite3"
-    return Store(path, marker["project_id"], context_id)
+    return Store(path, marker["project_id"], context_id, root)
 
 
 def initialize(root: Path) -> Store:
@@ -106,7 +113,7 @@ def initialize(root: Path) -> Store:
     except FileExistsError as exc:
         raise StateError("migration_required", "refusing existing Project Log; migration is not available") from exc
     (log / ".state").mkdir()
-    marker = {"format": 2, "project_id": uuid.uuid4().hex, "experimental": True}
+    marker = {"format": 2, "project_id": uuid.uuid4().hex}
     with (log / MARKER).open("x", encoding="utf-8", newline="\n") as stream:
         json.dump(marker, stream, sort_keys=True)
         stream.write("\n")
@@ -116,7 +123,12 @@ def initialize(root: Path) -> Store:
     exchange_directory = log / "exchange"
     exchange_directory.mkdir()
     (exchange_directory / ".gitattributes").write_text("* -text\n", encoding="utf-8")
-    store = Store(directory / marker["project_id"] / context_id / "state.sqlite3", marker["project_id"], context_id)
+    store = Store(
+        directory / marker["project_id"] / context_id / "state.sqlite3",
+        marker["project_id"],
+        context_id,
+        root,
+    )
     store.initialize()
     return store
 
@@ -129,7 +141,7 @@ def attach(root: Path) -> Store:
     path = directory / marker["project_id"] / context_id / "state.sqlite3"
     if path.exists() or path.is_symlink():
         raise StateError("store_exists", "This worktree context already has local state")
-    store = Store(path, marker["project_id"], context_id)
+    store = Store(path, marker["project_id"], context_id, root)
     store.initialize()
     return store
 
@@ -153,6 +165,60 @@ def refresh_views(root: Path) -> dict:
 
     store = open_store(root)
     return publish(store, store.path.parent / "generated")
+
+
+def refresh_evidence(root: Path, reason: str | None = None, changed_paths=None) -> dict:
+    """Invalidate active evidence whose recorded covered bytes changed."""
+    store = open_store(root)
+    stale = store.stale_evidence(root)
+    if changed_paths is not None:
+        normalized = set()
+        for value in changed_paths:
+            if not isinstance(value, str) or not value.strip():
+                continue
+            candidate = Path(value)
+            if not candidate.is_absolute():
+                candidate = root / candidate
+            try:
+                normalized.add(candidate.resolve().relative_to(root.resolve()).as_posix())
+            except ValueError:
+                normalized.add(candidate.resolve().as_posix())
+        covered_by_id = {
+            entry["id"]: set(entry.get("covers", {}).get("files", []))
+            for entry in store.list_evidence()
+        }
+        stale = [
+            item for item in stale
+            if normalized.intersection(covered_by_id.get(item["id"], set()))
+        ]
+    invalidated = []
+    for item in stale:
+        envelope = {
+            "schema_version": 1,
+            "command_id": uuid.uuid4().hex,
+            "expected_revision": store.status()["revision"],
+            "action": "evidence.invalidate",
+            "payload": {
+                "id": item["id"],
+                "reason": reason or "; ".join(item["reasons"]),
+            },
+        }
+        store.apply(envelope)
+        invalidated.append(item["id"])
+    result = {
+        "checked_stale": len(stale),
+        "invalidated": invalidated,
+        "status": "updated" if invalidated else "unchanged",
+    }
+    if invalidated:
+        try:
+            result["view"] = refresh_views(root)
+        except Exception as exc:
+            result["projection_error"] = {
+                "code": getattr(exc, "code", "projection_failed"),
+                "message": str(exc),
+            }
+    return result
 
 
 def publish_snapshot(root: Path) -> dict:
@@ -198,10 +264,35 @@ def abandon_export(root: Path, reason: str) -> dict:
 
 
 def compact_context(root: Path) -> str:
-    state = open_store(root).status(limit=5)
-    return (
-        "Vibe transactional preview (read-only restore).\n"
-        + json.dumps(state, ensure_ascii=True, separators=(",", ":"))
-        + "\nUse explicit state-apply commands. Evidence/review completion gates and Git exchange "
-        "are not yet enabled; implemented-unverified is not done. Do not initialize legacy state."
+    store = open_store(root)
+    state = store.status(limit=5)
+    task = state.get("current_task") or state.get("latest_task")
+    try:
+        goal = store.get_goal(store.active_goal_id())
+    except StateError:
+        goal = None
+    evidence = store.list_evidence()
+    counts = {
+        name: sum(item["status"] == name for item in evidence)
+        for name in ("candidate", "valid", "failed", "stale", "superseded", "invalid")
+    }
+    lines = [
+        "Vibe transactional context (read-only restore).",
+        f"Project: {state['project_id']}",
+        f"Revision: {state['revision']}",
+        f"Project goal: {goal['id'] if goal else '-'}",
+        f"Run status: {(state.get('current_run') or state.get('latest_run') or {}).get('status', '-')}",
+        f"Task: {task['id'] if task else '-'} [{task['status'] if task else '-'}]",
+        f"Next action: {task.get('next_action') if task and task.get('next_action') else '-'}",
+        "Evidence: " + ", ".join(f"{name}={counts[name]}" for name in counts),
+    ]
+    if task and task.get("blocker"):
+        blocker = task["blocker"]
+        lines.append(
+            f"Blocker: {blocker['kind']} / {blocker['reason']} / resume when: {blocker['resume_when']}"
+        )
+    lines.append(
+        "Completion requires valid evidence; high-risk work also requires an independent go review. "
+        "Use the formal vibe command surface; do not initialize or write legacy YAML."
     )
+    return "\n".join(lines) + "\n"

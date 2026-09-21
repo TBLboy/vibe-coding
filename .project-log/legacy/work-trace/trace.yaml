@@ -1,0 +1,406 @@
+version: '0.2'
+entries:
+- id: TRACE-20260802-PUSH-001
+  task_id: TASK-006
+  timestamp: 2026-08-02 09:30:00+08:00
+  context: User requested a temporary stop to the investigation and synchronization
+    of the current vibe-coding source.
+  hypothesis: The current worktree contains the MCP encoding/proxy fixes, Codex hook
+    compatibility fixes, and their validation records as one coherent change set.
+  decision: Check worktree and remote state, commit all related changes, and retry
+    push through 127.0.0.1:10808 if the direct push fails.
+  actions:
+  - Checked main branch, origin remote, and modified files.
+  - Added closeout records to the current session and progress logs.
+  - Ran diff and configuration validation.
+  - Committed and pushed to origin/main.
+  observation: Commit and push output, commit log, and post-push worktree status are
+    the completion evidence.
+  result: passed
+  next_step: Verify the post-push commit and clean worktree.
+  action: Checked main branch, origin remote, and modified files.; Added closeout
+    records to the current session and progress logs.; Ran diff and configuration
+    validation.; Committed and pushed to origin/main.
+  actual_result: passed
+- id: TRACE-003
+  task_id: TASK-003
+  timestamp: '2026-07-27T10:09:55+08:00'
+  context: 用户要求将 Vibe Coding 涉及 Python 的部分改为跨项目全局使用 Miniforge vibe-coding 环境。
+  hypothesis: 用户级解释器配置文件加上安装器生成的绝对路径 Hook，可以消除新项目继承系统 python3 的版本漂移。
+  decision_ref: null
+  action: 新增 CODEX_HOME/vibe-python 与 VIBE_PYTHON 解析；修改安装器、Linux wrappers、全局 Agent
+    提示词和文档；更新全局安装。
+  expected_result: 所有新项目的 Vibe Hooks 与 Project Log 工具使用 Python 3.11.15。
+  observation: 全局 config.toml 三个 Hook 均绑定 /home/tbl/miniforge3/envs/vibe-coding/bin/python3.11；包校验、18
+    个 unittest、安装 verify、新项目 smoke test 均通过。
+  actual_result: 全局 Vibe Python 配置生效；项目数据不受影响。
+  delta: 新增用户级 /home/tbl/.codex/vibe-python；更新全局 managed AGENTS/config/runtime/Skills。
+  lesson: 跨项目控制层配置应放在 CODEX_HOME，而不是每个项目的 .project-log；项目自身应用环境仍需独立管理。
+  next_adjustment: 重启 Codex 会话，使新的 Hook 命令在新会话中加载。
+  evidence:
+  - PYTHON-001
+  - PYTHON-002
+  - PYTHON-003
+  knowledge_candidate: false
+- id: TRACE-004
+  task_id: TASK-003
+  timestamp: '2026-07-27T10:17:25+08:00'
+  context: 用户进一步要求安装器自己创建 Miniforge/Miniconda 风格的 vibe-coding 环境，并让后续全局依赖固定使用该环境。
+  hypothesis: 安装包装脚本先运行无第三方依赖 bootstrap，再调用已准备好的 Python 安装器，可以覆盖新机器和新项目而不依赖系统 python
+    版本。
+  decision_ref: null
+  action: 新增 bootstrap_vibe_python.py；install/update/uninstall 包装脚本调用它；bootstrap 查找现有
+    Conda、创建/修复 vibe-coding、安装 PyYAML/jsonschema、写入 CODEX_HOME/vibe-python。
+  expected_result: 缺少配置时自动准备环境；真实更新后 Hooks 和 verify 使用该环境。
+  observation: 模拟缺失环境测试通过；真实 update.sh 完成全局更新；三个 Hooks 均绑定 vibe-coding Python；包校验与
+    19 个 unittest 通过。
+  actual_result: 安装路径已具备自动创建/修复环境能力；没有 Conda 时明确失败，不自动下载 Miniforge。
+  delta: 从“要求用户先创建环境”改为“安装脚本在已有 Conda 管理器下自动创建环境”。
+  lesson: 引导式安装应在进入需要 tomllib 的安装器前完成 Python bootstrap；否则系统 Python 3.10 会在导入阶段失败。
+  next_adjustment: 若需要零前置依赖安装，还需另行设计并经用户确认 Miniforge 下载、校验和安装策略。
+  evidence:
+  - PYTHON-001
+  - PYTHON-002
+  - PYTHON-003
+  - PYTHON-004
+  knowledge_candidate: false
+- id: TRACE-005
+  task_id: TASK-004
+  timestamp: '2026-07-27T11:48:34+08:00'
+  context: 用户确认采用 CodeGraph，并要求将 MCP 设计为 Vibe Coding 的可选安装项。
+  hypothesis: 将可选 MCP 做成源码 catalog、安装器选择参数和可验证状态，可以同时支持当前 CodeGraph 和未来 MCP，而不强制污染核心安装。
+  decision_ref: DEC-001
+  action: 新增 runtime/mcp/optional-mcps.json；扩展 global_installer.py 的 --mcp、状态、验证、卸载和冲突保护；补充
+    validator、测试、文档；构建 0.4.1 并更新全局 Codex。
+  expected_result: 新安装默认核心-only；选择 codegraph 后 Codex MCP enabled；CodeGraph 索引保持 up
+    to date。
+  observation: 包校验、21 个 unittest、release/plugin validation、全局 verify、codex mcp list/get
+    和 codegraph status 均通过；隔离真实 Codex 安装/卸载与 --without-mcp 保留测试通过。
+  actual_result: Vibe Coding 0.4.1 已安装；state.optional_mcps=[codegraph]；CodeGraph 1.5.0
+    enabled；LeRobot 索引 804 files / 17,512 nodes / 46,134 edges。
+  delta: 相对 TASK-003，新增可选 MCP 生命周期和当前 CodeGraph 实例；未把 CodeGraph 安装进 /home/tbl/miniforge3/envs/lerobot。
+  lesson: MCP 配置必须与应用 Python 环境分离，并记录 catalog、选择状态、所有权和验证证据。
+  next_adjustment: 重启 Codex 或 Zed ACP Thread，确认新会话实际暴露 CodeGraph MCP tools。
+  evidence:
+  - MCP-001
+  - MCP-002
+  - MCP-003
+  - MCP-004
+  - MCP-005
+  knowledge_candidate: false
+- id: TRACE-006
+  task_id: TASK-004
+  timestamp: '2026-07-27T21:54:40+08:00'
+  context: 本机 Windows 全量测试暴露了模拟 Conda、Codex、CodeGraph 命令和 Hook 路径断言的跨平台问题。
+  hypothesis: 测试夹具应通过平台原生可执行入口调用 Python，并分别断言 Unix 与 Windows Hook 配置；测试写入 TOML 的 Windows
+    路径也必须合法转义。
+  decision_ref: null
+  action: 在 tests/test_installer.py 新增跨平台测试命令包装器，覆盖 commandWindows，并将 CodeGraph 测试路径写为
+    POSIX 表示。
+  expected_result: 三个此前失败的 Windows 回归测试和完整测试集通过。
+  observation: 聚焦三项测试通过；完整 21 项 unittest、包校验、插件校验和编译检查通过。
+  actual_result: Windows 测试夹具问题已消除；20 个 unittest、包校验、插件校验、编译检查和 0.4.1 发布构建均通过，仅历史
+    0.3.0 迁移测试保持 skipped。
+  delta: 测试仅改进可移植性和断言覆盖，不改变生产安装器行为。
+  lesson: Windows 集成测试不能直接执行无扩展名脚本，跨平台配置断言应覆盖实际平台字段。
+  next_adjustment: 重启 Codex 或 Zed ACP Thread，确认新会话实际暴露 CodeGraph MCP tools。
+  evidence:
+  - MCP-006
+  - MCP-007
+  knowledge_candidate: false
+- id: TRACE-007
+  task_id: TASK-005
+  timestamp: '2026-07-29T00:00:00+08:00'
+  context: 用户要求将已经验证的源码讲解方法同步到 Vibe Coding 源码包，并更新该仓库的项目日志后推送。
+  hypothesis: 将 Skill 主文档、讲解模板、展示元数据和评测样例纳入源码包，可以让后续项目复用同一套源码驱动学习流程。
+  decision_ref: null
+  action: 读取源 Skill 和 Vibe Coding Skill/安装器规范，新增 skills/b-source-code-tutoring/，更新任务、进度、会话、蒸馏和评测记录；保持显式触发，不修改自动路由。
+  expected_result: Vibe Coding 包校验能发现并打包该 Skill，项目日志能恢复本次同步的变更、边界和验证证据。
+  observation: 安装器通过 source_skills() 自动收集 skills/* 目录；包校验要求 Skill frontmatter 合法，但没有要求额外的自动路由条目。
+  actual_result: Skill 文件和项目日志已写入；包校验、项目日志 schema 校验和 22 个 unittest 均通过，1 个历史 0.3.0
+    迁移测试因归档包不在当前源码工作区而跳过。
+  delta: 从用户级已安装 Skill 扩展为 Vibe Coding 源码包的受版本控制资源。
+  lesson: 显式触发的学习型 Skill 应随源码包发布，但不应因为存在 Skill 就扩大主 Agent 的自动触发范围。
+  next_adjustment: 审阅最终差异后提交并推送 main。
+  evidence:
+  - skills/b-source-code-tutoring/SKILL.md
+  - skills/b-source-code-tutoring/agents/openai.yaml
+  - skills/b-source-code-tutoring/references/teaching-template.md
+  - .project-log/evals/source-code-tutoring.yaml
+  knowledge_candidate: true
+- id: TRACE-20260802-MCP-008
+  context: cc-switch ????? document-loader MCP ???????
+  hypothesis: uvx latest ????/????? 10808 ??????????????? Codex ? initialize ???
+  decision: ?? awslabs document-loader 1.0.17?????? HTTP/HTTPS ?????? Codex 0.145.0
+    ???? Hook ??
+  actions:
+  - ???? MCP initialize
+  - ????????????
+  - ????????? config.toml
+  - ?????????? Codex exec
+  observation: ?? initialize ?? Document Loader 3.4.5?Codex exec ?? OK ??????
+  result: passed
+  next_step: ?????????????????
+  task_id: TASK-006
+  action: ???? MCP initialize; ????????????; ????????? config.toml; ?????????? Codex
+    exec
+  actual_result: passed
+- id: TRACE-20260802-MCP-009
+  task_id: TASK-006
+  timestamp: '2026-08-02T09:05:00+08:00'
+  context: 用户反馈终端 Codex 仍报告 document-loader 握手失败和 SessionStart hook failed
+  hypothesis: document-loader 在 Windows 下输出非 UTF-8 stderr，Codex MCP launcher 读取 stderr
+    时失败；同时终端 PATH 可能使用旧版 Codex
+  decision: 为 document-loader 注入 PYTHONUTF8=1 和 PYTHONIOENCODING=utf-8，保留固定版本与 10808
+    代理；不删除旧 Codex，记录路径冲突
+  actions:
+  - 从 Codex logs_2.sqlite 确认 stream did not contain valid UTF-8
+  - 更新插件 MCP 配置并重新运行 global_installer.py update
+  - 验证缓存、MCP initialize、Codex exec 和 SessionStart Hook
+  observation: 缓存配置正确；initialize 返回 Document Loader 3.4.5；Codex exec 返回 OK；Hook 返回
+    additionalContext；active codex 仍为 Zed cache 0.145.0，Roaming npm 为 0.146.0
+  result: passed
+  next_step: 重启终端会话；若仍报错，使用 C:\Users\12187\AppData\Roaming\npm\codex.cmd 验证并处理 PATH
+    优先级
+  action: 从 Codex logs_2.sqlite 确认 stream did not contain valid UTF-8; 更新插件 MCP 配置并重新运行
+    global_installer.py update; 验证缓存、MCP initialize、Codex exec 和 SessionStart Hook
+  actual_result: passed
+- id: TRACE-20260803-HOSTCFG-001
+  context: 用户发现 cc-switch 配置示例仍使用 Windows 路径，而当前宿主机为 Ubuntu，并要求改为按宿主实际配置生成后记录并推送。
+  hypothesis: 安装器已有正确的 CODEX_HOME/Vibe Python/源码根路径解析；将同一事实来源封装成生成脚本，可以消除手工模板跨机器复制造成的路径漂移。
+  decision_ref: DEC-003
+  action: 新增 scripts/generate_cc_switch_config.py，读取 CODEX_HOME、VIBE_PYTHON 或 CODEX_HOME/vibe-python
+    和当前源码根；更新 canonical 配置为当前 Ubuntu 生成结果。
+  expected_result: 当前宿主机可直接粘贴生成结果，更换宿主机时重新运行脚本即可。
+  observation: 当前宿主为 /home/tbl，CODEX_HOME=/home/tbl/.codex，Vibe Python=/home/tbl/miniforge3/envs/vibe-coding/bin/python，源码根=/home/tbl/Project/vibe-coding；生成一致性、TOML、路径扫描、安装器测试和包校验均通过。
+  actual_result: implemented-unverified
+  delta: 从静态 Windows 配置模板改为宿主机动态生成；canonical 文件不再包含 D:/conda、C:/Users 或 D:/Project。
+  lesson: 路径相关配置必须由目标宿主机生成，仓库只能提供生成机制和当前宿主的示例，不能把某台机器的绝对路径当作通用值。
+  next_adjustment: 提交并推送变更；用户在其他宿主机运行生成脚本后再粘贴到 cc-switch。
+  evidence:
+  - HOSTCFG-001
+  task_id: TASK-006
+- id: TRACE-20260803-HOOK-SESSION-001
+  context: 用户反馈 MCP 正常但每次新对话提示 SessionStart Hook 返回无效 JSON。
+  hypothesis: Hook 使用旧式顶层 additionalContext，当前 Codex 需要 hookSpecificOutput 并声明 hookEventName。
+  decision_ref: null
+  action: 检查 Codex Hook 源码调用链和本机实际输出；修复 SessionStart/PreCompact 输出结构；补充严格回归测试；更新本机受管
+    Hook。
+  expected_result: 新会话能接受 SessionStart 输出并注入 additionalContext，不再报告 invalid session
+    start JSON output。
+  observation: 修复前输出 JSON 合法但缺少 hookSpecificOutput；修复后输出事件专用结构，源码与安装文件哈希一致；Codex ephemeral
+    返回 OK。
+  actual_result: passed
+  delta: 从顶层 additionalContext 迁移为 hookSpecificOutput.hookEventName + additionalContext。
+  lesson: Hook 的 JSON 语法合法不等于事件协议合法，必须同时验证事件专用字段和真实宿主调用结果。
+  next_adjustment: 用户重启/新建交互式 Codex 对话观察 TUI 提示；确认后提交推送。
+  evidence:
+  - HOOK-SESSION-001
+  task_id: TASK-006
+- id: TRACE-20260805-WIN-SYNC-001
+  task_id: TASK-006
+  timestamp: '2026-08-05T21:30:00+08:00'
+  context: User asked to regenerate the cc-switch common config for this Windows host
+    and re-sync the installed hooks after pulling the remote updates.
+  hypothesis: The new host-aware generator can produce a correct Windows template,
+    and the installer can sync the new SessionStart/PreCompact hook protocol locally.
+  decision: Patch the generator to emit the host header, regenerate the tracked template,
+    and run the global installer update with the existing MCP/plugin selection.
+  actions:
+  - Verified CODEX_HOME/vibe-python and installed hook state.
+  - Regenerated cc-switch-common-config-codex.txt and validated TOML.
+  - Ran global_installer.py update and verified installed hooks against runtime/hooks.
+  - Ran hook and installer test suites.
+  observation: TOML parses; generator output equals the tracked file; installed hook
+    hashes match source; hook tests 13 passed; installer tests 10 passed, 1 skipped.
+  result: passed
+  next_step: Commit and push the regenerated template and generator header change
+    if the user confirms.
+  action: Verified CODEX_HOME/vibe-python and installed hook state.; Regenerated cc-switch-common-config-codex.txt
+    and validated TOML.; Ran global_installer.py update and verified installed hooks
+    against runtime/hooks.; Ran hook and installer test suites.
+  actual_result: passed
+- id: TRACE-20260805-HOOK-EXIT1-001
+  task_id: TASK-006
+  timestamp: '2026-08-05T22:00:00+08:00'
+  context: User reported the SessionStart hook still failed with exit code 1 after
+    the hookSpecificOutput protocol fix.
+  hypothesis: The hook process crashes on non-ASCII payloads or unavailable project-log
+    paths, and stdin/stdout encoding is locale-dependent on Windows.
+  decision: Read/write hooks as UTF-8 and make SessionStart/PreCompact degrade gracefully
+    so they always return valid JSON with exit code 0.
+  actions:
+  - Reproduced the crash with a non-ASCII payload and captured the PermissionError
+    traceback.
+  - Patched hook_common.py for UTF-8 streams and both hooks for graceful degradation.
+  - Added a non-ASCII payload regression test and re-synced installed hooks.
+  - Ran hook, installer, and codex exec smoke validations.
+  observation: Non-ASCII payload now exits 0 with valid JSON; hook tests 14 passed,
+    4 subtests; installer tests 10 passed, 1 skipped; codex exec returns OK.
+  result: passed
+  next_step: User restarts the terminal and confirms the interactive session no longer
+    shows the hook error.
+  action: Reproduced the crash with a non-ASCII payload and captured the PermissionError
+    traceback.; Patched hook_common.py for UTF-8 streams and both hooks for graceful
+    degradation.; Added a non-ASCII payload regression test and re-synced installed
+    hooks.; Ran hook, installer, and codex exec smoke validations.
+  actual_result: passed
+- id: TRACE-20260814-UPDATE-001
+  task_id: TASK-006
+  timestamp: '2026-08-14T22:10:00+08:00'
+  context: User asked to pull the updated remote code, review it, and install it into
+    the local framework without committing.
+  hypothesis: The remote update (stale loop state fix) can be merged with the local
+    hook fixes and installed cleanly by the global installer.
+  decision: Fast-forward pull, merge local changes, resolve conflicts, run the installer
+    update, and verify installed files.
+  actions:
+  - Reviewed remote commit 53d611d and merged local changes.
+  - Resolved conflicts in pre_compact.py and tests/test_loop_core.py.
+  - Ran global_installer.py update and loopctl validate.
+  - Compared installed runtime hashes with source.
+  observation: Installer verification passed; installed hashes match source; hook
+    tests 21 passed, 4 subtests; installer tests 10 passed, 1 skipped.
+  result: passed
+  next_step: User decides whether to commit and push the merged changes.
+  action: Reviewed remote commit 53d611d and merged local changes.; Resolved conflicts
+    in pre_compact.py and tests/test_loop_core.py.; Ran global_installer.py update
+    and loopctl validate.; Compared installed runtime hashes with source.
+  actual_result: passed
+- id: TRACE-20260814-HOOK-QUOTE-001
+  task_id: TASK-STOP-ROOTCAUSE-001
+  timestamp: 2026-08-14 22:45:00+08:00
+  context: 用户终端启动 Codex 报 SessionStart hook failed exit 1；Hook 脚本直连正常。
+  hypothesis: Codex 0.147.0 变更了 Hook 命令执行方式，不再通过 shell 解析引号，导致带引号命令无法 spawn 进程。
+  decision: 用一次性诊断 runner/诊断版 Hook 抓真实调用证据，确认进程未启动；再将命令改为无引号形式修复。
+  actions:
+  - 复现：codex exec 输出 hook SessionStart Failed；诊断版 Hook 无任何日志，证明进程未启动。
+  - 对照：命令改为 python.exe -c ... 后 SessionStart Completed；无引号路径形式同样 Completed。
+  - 修复：config.toml 三个 Hook command/commandWindows 去引号，清除 trusted_hash。
+  observation: codex exec --dangerously-bypass-hook-trust 输出 hook SessionStart Completed；三
+    Hook 直连 exit 0。
+  result: passed
+  next_step: 用户在终端新会话确认；框架安装器模板需同步无引号命令格式（未改源码）。
+  action: 复现：codex exec 输出 hook SessionStart Failed；诊断版 Hook 无任何日志，证明进程未启动。; 对照：命令改为
+    python.exe -c ... 后 SessionStart Completed；无引号路径形式同样 Completed。; 修复：config.toml
+    三个 Hook command/commandWindows 去引号，清除 trusted_hash。
+  actual_result: passed
+- id: TRACE-20260814-DOC-WINHOOK-001
+  task_id: TASK-STOP-ROOTCAUSE-001
+  timestamp: 2026-08-14 23:05:00+08:00
+  context: 用户确认 Windows 上需去引号修复、Linux 上原配置正常，要求不改框架源码，只在部署文档写明 Windows 适配。
+  hypothesis: 文档补充 Windows 专属适配步骤即可同时满足两端：Linux 正常安装，Windows 按文档修改 commandWindows。
+  decision: 仅修改 AI_INSTALL.md、AI_UPGRADE.md、README.md；不改 runtime/安装器/行为代码。
+  actions:
+  - AI_INSTALL.md 新增 Windows Hook 命令适配章节。
+  - AI_UPGRADE.md、README.md 补充指引。
+  - 运行 validate_package.py 校验。
+  observation: validate_package 输出 Package validation passed；git diff 仅涉及三个文档。
+  result: passed
+  next_step: 提交并推送文档改动（需用户确认）。
+  action: AI_INSTALL.md 新增 Windows Hook 命令适配章节。; AI_UPGRADE.md、README.md 补充指引。; 运行
+    validate_package.py 校验。
+  actual_result: passed
+- id: TRACE-20260815-RECORD-REPAIR-001
+  task_id: TASK-007
+  timestamp: '2026-08-15T11:40:03+08:00'
+  context: 项目快速检查发现项目日志存在四类结构问题：DEC-003 缺少字段、两个 YAML 文件解析失败，以及没有目标和下一步的残留 active run。
+  hypothesis: 补全结构字段、移除造成 YAML 词法错误的反引号，并将无目标残留 run 标记为 complete 后，项目日志和 Loop 状态应恢复可验证且不再恢复为
+    active work。
+  decision_ref: null
+  action: 修复 DEC-003、verification/evidence.yaml、work-trace/trace.yaml；补齐被解析错误遮蔽的历史
+    trace/evidence 必填字段；清理残留 active run 并写入完成事件。
+  expected_result: validate_project.py 与 loopctl validate 通过；SessionStart 恢复视图不再报告未完成的
+    active run。
+  observation: validate_project、loopctl validate、validate_package、38 个 unittest（1
+    个跳过）和 SessionStart smoke 均通过；恢复视图显示 Active task 为 -、Run status 为 complete。
+  actual_result: passed
+  delta: 从四个首层校验错误扩展为修复解析后暴露的历史必填字段缺失，避免日志仍无法通过完整 schema 校验。
+  lesson: 修复结构化项目日志时，必须先恢复 YAML 可解析性，再处理解析后暴露的 schema 级历史记录缺陷。
+  next_adjustment: 无；后续新任务需先创建新的 Loop run。
+  evidence: []
+  knowledge_candidate: false
+- id: TRACE-20260815-USAGE-001
+  task_id: TASK-008
+  timestamp: '2026-08-15T12:05:00+08:00'
+  context: 用户确认目标文件为 docs/USAGE.md，并要求把当前过于简略的文档充实为更完整的用户指南。
+  hypothesis: 结合 README、AI_INSTALL、AI_UPGRADE、全局 Agent 规则和当前实现补写用户手册，可以增加可操作性，同时保持命令、状态和安全边界与代码一致。
+  decision_ref: null
+  action: 重写 docs/USAGE.md，增加全局/项目/对话三层模型、安装准备、项目初始化、完整任务生命周期、Project Goal/Native
+    Goal/Loop 状态、决策权限、多客户端、cc-switch/MCP、常用提示、排障、安全边界、恢复和完成标准。
+  expected_result: 用户可以根据文档完成从安装、初始化、规划、实现、验证到归档的主要流程，并能处理常见状态和环境问题。
+  observation: 文档扩展为 767 行；链接目标存在，代码围栏成对；包校验、项目日志校验、Loop 校验和 38 个单元测试（1 个跳过）均通过。
+  actual_result: passed
+  delta: 从 117 行的简略流程示例扩展为按用户任务阶段组织的完整使用手册。
+  lesson: 用户文档应同时解释产品心智模型、可复制命令、状态语义、权限边界和失败排查，而不只列生命周期名词。
+  next_adjustment: 无；后续可根据真实用户反馈补充具体客户端截图或平台差异。
+  evidence:
+  - DOC-USAGE-001
+  knowledge_candidate: false
+- id: TRACE-20260816-ARCHIVE-FIX-001
+  task_id: TASK-009
+  timestamp: '2026-08-16T18:05:00+08:00'
+  context: 用户要求归档 vibe-coding。归档脚本实测把知识库根 .project-log 移到 学习路线/.project-log，并把本地未提交学习记录一并提交。
+  hypothesis: 归档脚本只应影响 工程记录/<project-name>；把 git add -A 改为限定路径可防止无关变更进入归档提交。
+  decision_ref: null
+  action: 将 archive.py 的 git add 范围限定为 工程记录/<project-name>；恢复知识库根 .project-log 位置并推送修复提交；更新源码任务与留痕。
+  expected_result: 归档只更新对应项目目录，知识库其余目录和根 .project-log 保持不动。
+  observation: 知识库已推送 ee93beb（归档）与 b607e27（修复）；修复后工作区干净，工程记录/vibe-coding 有 63 个文件，根
+    .project-log 恢复 62 个文件。
+  actual_result: passed
+  delta: git add -A 改为 git add -- 工程记录/<project-name>。
+  lesson: 归档等自动化脚本必须把 git add/commit 范围限定到自己的产物目录，不能依赖工作区恰好干净。
+  next_adjustment: 下次归档其他项目后核对 git status 只含 工程记录/<project-name>。
+  evidence:
+  - ARCHIVE-FIX-001
+  knowledge_candidate: true
+- id: TRACE-20260820-DOC-CONV-001
+  task_id: TASK-010
+  timestamp: '2026-08-20T17:45:00+08:00'
+  context: 用户提供了 project-log 长文档组织问题说明，并明确不整理已有项目日志，只优化 vibe-coding 框架源码。
+  hypothesis: 将“最新在最上、头部快照、超限归档、单一事实源”写入模板、Skill、文档并加测试，可让新项目从初始化起就遵守一致结构。
+  decision_ref: DEC-005
+  action: 更新 project-log 模板、a-project-log/a-session-handoff Skills、docs/USAGE.md、prompts/vibe-global-agent.md、validate_package.py，新增 tests/test_project_templates.py，并按新约定更新本仓库项目日志。
+  expected_result: 新项目初始化后的两个长摘要文档顶部有当前状态快照，最新内容在最上，超限时可归档到 docs/archive/。
+  observation: 41 个 unittest（1 跳过）、包校验、项目校验、Loop 校验全部通过；本仓库项目日志文件约 24KB，无需执行归档。
+  actual_result: passed
+  delta: 从“只记规则到项目日志”改为“模板 + Skills + 文档 + 测试”全链路固化；既有项目日志不做历史重排。
+  lesson: 组织约定应沉淀到初始化模板与规则资产中，并用测试锁住关键短语，避免长文档再次靠自觉维护。
+  next_adjustment: 用户确认后提交并推送 main；后续可对存量项目按同约定做一次性迁移。
+  evidence:
+  - DOC-CONV-001
+  knowledge_candidate: true
+- id: TRACE-20260921-LANDING-044-001
+  task_id: TASK-044
+  timestamp: '2026-09-21T14:45:00+08:00'
+  context: 用户要求“32 顺手清理掉，现在开始落地”。TASK-032..043 已由上一轮完成，剩余落地面是安装/升级/卸载与旧格式退役机制（TASK-044）和独立发布评审（TASK-045）。
+  hypothesis: 把版本号、默认格式、退役三阶段收敛到一个机器可读常量，并让只读命令、写入弃用提示、发布说明与安装器输出都引用它，才能让“format 2 是唯一默认、format 1 按关口退役”不是只写在文档里。
+  decision_ref: DEC-009
+  action: 新增 runtime/scripts/framework_info.py 作为版本与退役阶段单一来源；新增 vibe version/--version；loopctl 旧格式 status/validate 输出 legacy 指引、旧格式写入输出弃用提示；新增 docs/RELEASE-NOTES.md 并同步 README/AI_INSTALL/AI_UPGRADE/USAGE；安装器与发布脚本改为引用同一版本；新增 tests/test_release_surface.py 7 项；对 TASK-040..044 补跑 e236fda 反证。
+  expected_result: 新项目默认 format 2 有单一版本来源与发布说明；旧格式项目仍可只读使用并得到迁移指引；安装/升级/卸载可重复执行且不改写项目 .project-log；退役三阶段都有用户关口。
+  observation: 完整套件 117 项通过（1 跳过）；validate_package、validate_project、loopctl validate 全通过；test_release_surface 7/7 通过，在 e236fda 基线上 7/7 失败；TASK-040 反证 7/7 失败、TASK-041 4/5 失败、TASK-042 3/3 失败、TASK-043 2/3 失败。
+  actual_result: passed
+  delta: 从“只在契约里写退役路线”变为“版本常量 + CLI 输出 + 发布说明 + 安装器输出 + 回归测试”共同承载；版本号从 0.4.1 升到 0.5.0 并去掉安装器与打包脚本里的重复字面量。
+  lesson: 框架级默认值切换必须同时落地到单一常量、用户可见输出、发布说明和可执行测试，否则文档与代码会在下一次修改时分叉。
+  next_adjustment: 等 TASK-045 独立复核给出 GO 后，再安装到本机 Codex；TASK-046（本仓库自身日志迁移）保持未授权状态，需用户单独确认。
+  evidence:
+  - RELEASE-044
+  - SUITE-044
+  knowledge_candidate: false
+- id: TRACE-20260921-REVIEW-045-001
+  task_id: TASK-047
+  timestamp: '2026-09-21T15:20:00+08:00'
+  context: TASK-045 第一轮独立复核在源码树外的冻结副本上给出 NO-GO（AC-FL-007/008/010/017 失败），实现方需要按契约回到实现阶段修复而不是调整验收口径。
+  hypothesis: 这四个失败同源：门禁只相信存储里的 status 而不重算工作区字节，迁移把“写标记”放在状态库落位之前，长正文限制只查顶层键；把三者都改成“以当前字节和唯一提交点为准”即可关闭缺陷。
+  decision_ref: DEC-009
+  action: 让 Store 携带工作区根并在门禁中重算 evidence_applicability；高风险任务要求记录实现者且复核绑定当前有效证据；记录载荷递归拒绝任意深度长正文；迁移切换改为“状态库→旧文件→布局→标记”的幂等顺序并可从任意中断点 resume；补齐迁移布局并让回退清理自建布局；docs/ 不随迁移搬走；新增 9 项回归测试并重跑第一轮探针。
+  expected_result: 第一轮报告中的 D-001..D-005 场景全部被拦截或修复，且不破坏默认初始化、旧格式只读兼容、安装链路与版本单一来源。
+  observation: 126 项测试（1 跳过）通过；validate_package、validate_project、loopctl validate、git diff --check 通过；第一轮自建探针重跑时 D-001 场景由放行变为 task_gate 拒绝，迁移与长正文场景按新语义通过。
+  actual_result: passed
+  delta: 门禁从“读取存储状态”改为“重算当前字节适用性”；迁移从“先写标记再移动”改为“标记最后写且每步幂等”；长正文边界从顶层键检查改为递归检查。
+  lesson: 独立复核的价值在于用不同假设重放同一契约；修复时要用实现层语义关闭缺陷，而不是把验收探针改成接受旧行为。
+  next_adjustment: 在修复修订上重跑第二轮独立复核；若仍为 NO-GO，继续按最早生命周期阶段回退修复。
+  evidence:
+  - FIXES-047
+  - ROUND1-045
+  knowledge_candidate: true

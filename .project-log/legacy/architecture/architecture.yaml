@@ -1,0 +1,82 @@
+version: "0.2"
+architectures:
+- id: ARCH-002
+  status: active
+  goal: format 2 成为唯一默认的结构化事实源；旧格式只读兼容并可经显式、无损、可回退的路径迁移
+  related_business_logic:
+  - BL-FRAMELAND-001
+  - BL-FRAMELAND-002
+  - BL-FRAMELAND-003
+  - BL-FRAMELAND-004
+  - BL-FRAMELAND-005
+  - BL-FRAMELAND-006
+  - BL-FRAMELAND-007
+  - BL-FRAMELAND-008
+  - BL-FRAMELAND-009
+  decision_refs:
+  - DEC-009
+  components:
+  - 生产契约 .project-log/specs/framework-landing-contract.md 是实体、命令、门禁与迁移的唯一语义来源
+  - state_context 负责格式标记、Git 上下文选择与初始化；不再要求 experimental
+  - state_store 的状态机实体（goals/tasks/runs/blockers/evidence/reviews）用专用表与约束
+  - 文档型实体（业务原子/需求/决策/架构/研究/对齐/复盘/蒸馏）共用 records + record_links，按 kind 判别
+  - vibe.py 是正式入口，state-* 与 loopctl 只作别名或兼容适配
+  - state_migrate 扩展为带日志的迁移编排（preview/apply/resume/rollback）
+  interfaces:
+  - 命令信封 {schema_version, command_id, expected_revision, action, payload}；action 集合见契约第 5.2 节
+  - CLI 面见契约第 6 节；退出码 0/1/2 与错误可执行性要求
+  - 迁移状态机 previewed→backed-up→generated→verified→switched，含 resume 与 rollback
+  data_flows:
+  - 写入只经命令信封进入本机事务库；投影生成 derived 视图，视图不是事实源
+  - 长正文留在 Git/Markdown，结构化存储只保存 doc_ref 与内容哈希
+  - 跨机器协作只经 exchange 文本快照，不提交 SQLite 二进制
+  state_and_concurrency:
+  - 本机 revision 只用于本机乐观并发；command_id 幂等，历史回执不重编号
+  - context_id = sha256({root, git_dir, branch_hex})，分支与 worktree 天然隔离
+  failure_paths:
+  - 门禁未满足时拒绝 task.finish/goal.complete 并逐条给出缺失证据
+  - 证据覆盖产物变化后转 stale，不再支撑完成判定
+  - 迁移冲突（重复 ID、悬空引用、源摘要不一致）中止并保留原状；不可映射历史进入 legacy/unmapped 而不中止
+  security_and_privacy:
+  - 未显式授权不发生迁移写入；回退不得丢弃迁移后的新写入
+  - 不把哈希通过当作语义正确或授权
+  observability:
+  - 事件账本记录命令、证据、复核与迁移步骤；失效保留原因与序列
+  deployment_and_compatibility:
+  - format 2 项目拒绝旧格式写入；format 1 项目在迁移窗口内保持旧写入并输出弃用提示
+  - 旧格式停止写入/读取/支持为三个独立关口，需用户确认
+  open_questions: []
+- id: ARCH-001
+  status: active
+  goal: 一次状态命令、一致事务、可重建摘要和有边界的显式 Git 交换
+  related_business_logic:
+  - BL-WFOPT-001
+  - BL-WFOPT-002
+  decision_refs:
+  - DEC-006
+  - DEC-007
+  components:
+  - 现有 vibe.py/loopctl.py 作为入口；新项目状态服务是唯一写入者
+  - 标准库 SQLite 的按实体事务仓储，不直接复用原型单行 JSON
+  - 事务后生成摘要与显式 Git 快照交换器
+  interfaces:
+  - 提议的命令信封包含 schema_version、command_id、expected_revision、action、payload
+  - 状态和按 ID 查询只读，返回冲突而非隐式修复
+  data_flows:
+  - 命令校验到短事务更新再到可重试投影；发布失败不否定已接受结果
+  - 显式导入经过内容哈希、结构语义、历史不可变与共同基线校验
+  state_and_concurrency:
+  - 本机 revision 只用于本机乐观并发，历史回执不重新编号
+  - Q-002 已批准显式交换时短暂 Git index 协作锁；日常命令不锁 Git，异常遗留锁人工核实
+  failure_paths:
+  - 重复命令原回执返回；载荷冲突和旧 revision 明确拒绝
+  - 外部非协作 Git 操作不承诺事务保证；遗留 Git 锁不自动删除
+  security_and_privacy:
+  - my_lunwen 只读；合成测试数据和临时配置均在外部验证目录
+  - 不把哈希通过当作语义正确或授权，不自动改动 Git 仓库历史
+  observability:
+  - 记录操作 ID、版本、失败分类、待发布状态和精确恢复步骤
+  deployment_and_compatibility:
+  - 仅显式迁移的新格式项目使用新写入路径；实际安装迁移仍另行授权
+  open_questions:
+  - Q-001

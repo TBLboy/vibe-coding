@@ -1,3 +1,4 @@
+import json
 import sys
 import tempfile
 import unittest
@@ -27,7 +28,9 @@ class ProjectInitAgentsTests(unittest.TestCase):
         self.assertIn(ipa.GENERAL_END, content)
         self.assertIn("## 项目级规则", content)
         self.assertIn(ipa.PROJECT_RULES_EMPTY_HINT, content)
-        self.assertTrue((self.target / ".project-log" / "workflow.yaml").exists())
+        marker = self.target / ".project-log" / "state-format.json"
+        self.assertTrue(marker.exists())
+        self.assertEqual(json.loads(marker.read_text(encoding="utf-8"))["format"], 2)
 
     def test_create_with_project_rules(self):
         rules = "## 模块边界\n\n- 主线只修改 dexbot_bringup。"

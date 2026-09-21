@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -14,6 +15,10 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 INSTALLER = ROOT / "scripts/global_installer.py"
 BOOTSTRAP = ROOT / "scripts/bootstrap_vibe_python.py"
+if str(ROOT / "runtime" / "scripts") not in sys.path:
+    sys.path.insert(0, str(ROOT / "runtime" / "scripts"))
+
+from framework_info import VERSION  # noqa: E402
 
 
 def run_installer(*arguments: str, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
@@ -89,6 +94,14 @@ def write_fake_conda(directory: Path, name: str, created: Path) -> Path:
         "    raise SystemExit(0)\n"
         "raise SystemExit(1)\n",
     )
+
+
+def load_bootstrap():
+    """Import the bootstrap script so its resolution helpers can be tested directly."""
+    spec = importlib.util.spec_from_file_location("bootstrap_vibe_python_under_test", BOOTSTRAP)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 class InstallerTests(unittest.TestCase):
@@ -575,7 +588,7 @@ class InstallerTests(unittest.TestCase):
             )
             self.assertEqual(update.returncode, 0, update.stdout)
             state = json.loads((home / ".vibe-codex-installation-state.json").read_text(encoding="utf-8"))
-            self.assertEqual(state["package_version"], "0.4.1")
+            self.assertEqual(state["package_version"], VERSION)
             self.assertTrue((home / "vibe-workflow/scripts/loopctl.py").is_file())
 
     def test_without_hooks_can_still_set_access_profile(self) -> None:
@@ -702,6 +715,87 @@ class InstallerTests(unittest.TestCase):
             parsed = tomllib.loads(raw)
             self.assertEqual(parsed["model_providers"]["custom"]["base_url"], "http://127.0.0.1:15721/v1")
             self.assertEqual(parsed["mcp_servers"]["codegraph"]["command"], "npx")
+
+
+class BootstrapInterpreterResolutionTests(unittest.TestCase):
+    """reviewer-031 X3: a manager that exits 0 while printing an error is not a path."""
+
+    def test_env_python_rejects_manager_error_text_with_zero_exit(self) -> None:
+        bootstrap = load_bootstrap()
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = Path(temporary)
+            manager = write_test_executable(
+                workspace,
+                "conda-error-zero",
+                "print('CommandNotFoundError: Your shell has not been properly configured')\n"
+                "raise SystemExit(0)\n",
+            )
+
+            python, output = bootstrap.env_python(str(manager), "vibe-coding")
+
+            self.assertIsNone(python, output)
+            self.assertIn("CommandNotFoundError", output)
+
+    def test_env_python_resolves_a_multi_line_manager_output(self) -> None:
+        bootstrap = load_bootstrap()
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = Path(temporary)
+            manager = write_test_executable(
+                workspace,
+                "conda-chatty",
+                "import sys\n"
+                "print('WARNING: environment variables are not set')\n"
+                f"print({str(Path(sys.executable).resolve())!r})\n"
+                "raise SystemExit(0)\n",
+            )
+
+            python, _output = bootstrap.env_python(str(manager), "vibe-coding")
+
+            self.assertEqual(python, str(Path(sys.executable).resolve()))
+
+    def test_env_python_reports_a_missing_manager_without_raising(self) -> None:
+        bootstrap = load_bootstrap()
+        with tempfile.TemporaryDirectory() as temporary:
+            missing = Path(temporary) / "no-such-conda"
+
+            python, output = bootstrap.env_python(str(missing), "vibe-coding")
+
+            self.assertIsNone(python)
+            self.assertTrue(output.strip())
+
+    def test_bootstrap_surfaces_manager_output_instead_of_a_spawn_error(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = Path(temporary)
+            home = workspace / "codex-home"
+            home.mkdir(parents=True)
+            config = home / "vibe-python"
+            config.write_text(str(workspace / "gone-python") + "\n", encoding="utf-8")
+            manager = write_test_executable(
+                workspace,
+                "conda-error-zero",
+                "print('CommandNotFoundError: Your shell has not been properly configured')\n"
+                "raise SystemExit(0)\n",
+            )
+            env = os.environ.copy()
+            env.pop("VIBE_PYTHON", None)
+            env["VIBE_PYTHON_REPAIR"] = "1"
+            env["CONDA_EXE"] = str(manager)
+
+            result = subprocess.run(
+                [
+                    sys.executable, str(BOOTSTRAP),
+                    "--codex-home", str(home),
+                    "--requirements", str(ROOT / "runtime/scripts/requirements.txt"),
+                    "--print-python",
+                ],
+                env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False,
+            )
+
+            self.assertNotEqual(result.returncode, 0, result.stdout)
+            self.assertIn("CommandNotFoundError", result.stdout)
+            self.assertIn("did not print a usable interpreter path", result.stdout)
+            self.assertNotIn("No such file or directory", result.stdout)
+            self.assertEqual(config.read_text(encoding="utf-8"), str(workspace / "gone-python") + "\n")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,958 @@
+version: "0.2"
+source_of_truth: true
+atoms:
+- id: BL-WFOPT-001
+  title: 恢复状态准确反映可执行性
+  kind: state-transition
+  domain: workflow-optimization
+  status: active
+  authority: evidence-derived
+  source:
+    type: document
+    reference: .project-log/docs/workflow-optimization-technical-selection.md
+  description: 四项目标的验收细化草案；TASK-014 冻结，不能视为所有边界语义已获批准。
+  trigger: 选择或恢复任务时
+  rule:
+    statement: Goal、Task、Run、阻塞事实和下一步不得互相矛盾；未绑定目标不能借用历史目标。
+  acceptance:
+  - id: AC-WFOPT-001
+    given: 任务等待 Q-021 且另有独立任务
+    when: 恢复执行上下文
+    then: 显示等待事项及独立可执行工作，不把被阻塞任务显示为可执行
+    method: runtime/scripts/loop_state.py + tests/test_loop_core.py + docs/workflow-optimization-cross-platform-acceptance.md
+    evidence: RUNBIND-028
+    status: passed
+  decision_refs:
+  - DEC-006
+  notes: 用户已授权实施，具体契约见 specs/workflow-optimization-contract.md；真实迁移仍单独授权。
+- id: BL-WFOPT-002
+  title: 一次业务操作维护一致状态和可重建摘要
+  kind: flow
+  domain: workflow-optimization
+  status: active
+  authority: evidence-derived
+  source:
+    type: document
+    reference: .project-log/docs/workflow-optimization-technical-selection.md
+  description: 四项目标的验收细化草案；TASK-014 冻结，不能视为所有边界语义已获批准。
+  trigger: 开始、阻塞或完成任务时
+  rule:
+    statement: 同一业务操作的权威状态一致提交，摘要可重建，重复请求不重复记账。
+  acceptance:
+  - id: AC-WFOPT-002
+    given: 完成请求重试且摘要生成中断
+    when: 重新提交相同请求
+    then: 只保留一次业务结果，摘要可恢复，跨对象状态一致
+    method: runtime/scripts/state_store.py + runtime/scripts/state_context.py + test_state_service.py
+    evidence: STATE020-SLICE
+    status: passed
+  decision_refs:
+  - DEC-006
+  notes: 用户已授权实施，具体契约见 specs/workflow-optimization-contract.md；真实迁移仍单独授权。
+- id: BL-WFOPT-003
+  title: 控制成本随任务风险分级
+  kind: rule
+  domain: workflow-optimization
+  status: active
+  authority: evidence-derived
+  source:
+    type: document
+    reference: .project-log/docs/workflow-optimization-technical-selection.md
+  description: 四项目标的验收细化草案；TASK-014 冻结，不能视为所有边界语义已获批准。
+  trigger: 收到新用户请求时
+  rule:
+    statement: 先读取最小必要约束再分流，低风险任务不得默认承担完整生命周期，关键风险不得静默降级。
+  acceptance:
+  - id: AC-WFOPT-003
+    given: 意图明确且无关键语义影响的小改动
+    when: 选择执行路径
+    then: 采用轻量记录和相关验证，不创建无关架构或决策记录
+    method: runtime/scripts/state_routing.py + test_state_routing.py
+    evidence: ROUTING-021
+    status: passed
+  decision_refs:
+  - DEC-006
+  notes: 用户已授权实施，具体契约见 specs/workflow-optimization-contract.md；真实迁移仍单独授权。
+- id: BL-WFOPT-004
+  title: 证据区分历史结果与当前版本适用性
+  kind: data-contract
+  domain: workflow-optimization
+  status: active
+  authority: evidence-derived
+  source:
+    type: document
+    reference: .project-log/docs/workflow-optimization-technical-selection.md
+  description: 四项目标的验收细化草案；TASK-014 冻结，不能视为所有边界语义已获批准。
+  trigger: 登记、引用证据或判断完成时
+  rule:
+    statement: 历史结果保留，当前适用性按明确输入和版本策略判断；无法确认时不作为当前完成依据。
+  acceptance:
+  - id: AC-WFOPT-004
+    given: 历史 PDF 已变化而数据计算输入未变
+    when: 核查相关证据
+    then: 旧 PDF 验证不背书当前产物，无关计算证据不因路径重叠被误伤
+    method: runtime/scripts/state_evidence.py + runtime/scripts/state_gate.py + runtime/scripts/loop_state.py + test_state_evidence.py + test_state_gate.py + tests/test_loop_core.py
+    evidence: HOOKINVALIDATE-029
+    status: passed
+  decision_refs:
+  - DEC-006
+  notes: 用户已授权实施，具体契约见 specs/workflow-optimization-contract.md；真实迁移仍单独授权。
+- id: BL-PROJECTINIT-001
+  title: .project-log 走现有创建链路且不覆盖已有内容
+  kind: rule
+  domain: project-init
+  status: deprecated
+  priority: high
+  risk: low
+  authority: user-confirmed
+  source:
+    type: user-statement
+    reference: 2026-08-15 项目初始化 skill 澄清（用户确认不动 init_project.py 链路）
+  description: 初始化项目时 .project-log 的创建必须复用现有 init_project.py 链路，已存在则不覆盖。
+  actors:
+  - user
+  - agent
+  trigger: 用户要求初始化项目（初始化项目/项目初始化/初始化该项目）
+  preconditions:
+  - 目标项目根目录已确认
+  inputs:
+  - 目标项目根目录
+  rule:
+    statement: 调用现有 init_project.py 创建 .project-log；已存在时跳过并报告，不覆盖。
+  outputs:
+  - .project-log 模板目录树
+  side_effects: []
+  exceptions:
+  - project-log-template 缺失时初始化失败并停止
+  failure_handling:
+  - 报告错误，不继续写入 AGENTS.md
+  invariants:
+  - 不修改 init_project.py 及 project-log-template 内容
+  acceptance:
+  - id: AC-PI-001
+    given: 目标目录无 .project-log
+    when: 执行项目初始化
+    then: 创建完整 .project-log 模板
+    method: null
+    evidence: null
+    status: not-verified
+  - id: AC-PI-002
+    given: 目标目录已有 .project-log
+    when: 再次执行项目初始化
+    then: 跳过创建并报告 skipped，原内容不变
+    method: null
+    evidence: null
+    status: not-verified
+  dependencies: []
+  baseline_refs: []
+  decision_refs:
+  - DEC-004
+  implementation_refs:
+  - skills/a-project-init/scripts/init_project_agents.py
+  test_refs:
+  - tests/test_project_init.py
+  supersedes: []
+  notes: 已被 BL-FRAMELAND-001 取代（2026-09-21 用户要求新框架彻底落地）：其“默认生成旧格式且不得改动 init_project.py”部分不再成立；其“初始化不覆盖已有 .project-log”的意图改由 BL-FRAMELAND-001 的 AC-FL-002 承载。
+  created_at: '2026-08-15T10:20:00+08:00'
+  updated_at: null
+  last_verified_at: null
+
+# --- 新框架彻底落地（BL-FRAMELAND，2026-09-21 用户确认）--- #
+# 方向由用户明确确认（“要按新框架彻底落地，替换旧框架，不停留在 experimental”）。
+# 以下 acceptance 是把已确认方向细化为可验证条目，作为任务拆解输入；实现前由 TASK-034
+# 冻结契约，未冻结前不得当作最终语义，也不得据此宣称行为已实现。
+
+- id: BL-FRAMELAND-001
+  title: 新项目初始化默认生成新格式工程记录
+  kind: rule
+  domain: framework-landing
+  status: active
+  priority: critical
+  risk: high
+  authority: user-confirmed
+  source:
+    type: user-statement
+    reference: 2026-09-21 用户要求“新框架彻底落地”“不再使用老版本格式”
+  description: 新框架（format 2）不再停留在实验阶段；对一个尚无可识别 .project-log 的目录初始化时，默认产物必须是新格式，而不是复制旧格式模板。
+  actors:
+  - user
+  - agent
+  trigger: 用户要求初始化项目，或执行统一初始化入口
+  preconditions:
+  - 目标项目根目录已确认
+  - 目标目录尚无可识别的 .project-log
+  inputs:
+  - 目标项目根目录
+  rule:
+    statement: 无 .project-log 的项目初始化默认生成 format 2 状态标记及其运行时结构，不需要 --experimental 之类的实验开关；旧格式不再是默认产物。
+  outputs:
+  - 新格式状态标记与对应运行时结构
+  side_effects: []
+  exceptions:
+  - 目标目录已有 format 1 或 format 2 记录时不覆盖，分别进入兼容或迁移路径
+  failure_handling:
+  - 前置条件（如 Git 工作树）不满足时 fail-closed 并报告原因，不得静默回落到旧格式
+  invariants:
+  - 默认初始化不会同时产出 format 1 与 format 2 两套结构化状态
+  acceptance:
+  - id: AC-FL-001
+    given: 一个无 .project-log 的目录
+    when: 执行默认项目初始化
+    then: 生成 format 2 状态且无需实验开关，不生成旧格式结构化状态文件
+    method: null
+    evidence: null
+    status: not-verified
+  - id: AC-FL-002
+    given: 目标目录已有可识别的 .project-log
+    when: 重复执行初始化
+    then: 不覆盖既有记录，报告 skipped 且保持幂等
+    method: null
+    evidence: null
+    status: not-verified
+  dependencies: []
+  baseline_refs:
+  - REQ-001
+  decision_refs:
+  - DEC-009
+  implementation_refs:
+  - runtime/scripts/init_project.py
+  - runtime/scripts/vibe.py
+  test_refs: []
+  supersedes:
+  - BL-PROJECTINIT-001
+  notes: 取代 BL-PROJECTINIT-001 的默认格式与“不得改动初始化链路”约束；该原子“不覆盖已有内容”的意图由 AC-FL-002 保留。
+  created_at: '2026-09-21T05:30:00Z'
+  updated_at: null
+  last_verified_at: null
+
+- id: BL-FRAMELAND-002
+  title: 新格式是唯一结构化事实源且旧格式写入 fail-closed
+  kind: data-contract
+  domain: framework-landing
+  status: active
+  priority: critical
+  risk: high
+  authority: user-confirmed
+  source:
+    type: user-statement
+    reference: 2026-09-21 用户要求彻底替换旧框架
+  description: format 2 项目中，结构化状态只能由新格式写入路径产生；旧格式文件不得被继续写入，避免出现第二份互相矛盾的事实源。
+  actors:
+  - agent
+  - runtime
+  trigger: 任一写入状态、任务、目标、证据或阻塞的入口被调用
+  preconditions:
+  - 项目已声明 format 2
+  inputs:
+  - 写入请求
+  rule:
+    statement: format 2 项目只允许新格式写入路径修改结构化状态；旧格式写入入口必须明确拒绝并给出新入口指引，不得静默写旧文件或双写。
+  outputs:
+  - 单一结构化事实源
+  side_effects: []
+  exceptions:
+  - 读取与只读展示仍可同时支持新旧格式，用于迁移对比与审计
+  failure_handling:
+  - 命中旧写入入口时以可读错误结束，说明应使用的新命令
+  invariants:
+  - 同一项目任一时刻只有一个结构化事实源
+  - 不因兼容旧入口而回写旧 YAML
+  acceptance:
+  - id: AC-FL-003
+    given: 一个 format 2 项目
+    when: 调用旧格式写入入口尝试修改任务或目标
+    then: 操作被拒绝并提示新格式入口，旧文件字节不变
+    method: null
+    evidence: null
+    status: not-verified
+  - id: AC-FL-004
+    given: 一个 format 2 项目
+    when: 通过新格式入口完成一次状态变更
+    then: 只有新格式存储被写入，旧格式文件不出现该事实
+    method: null
+    evidence: null
+    status: not-verified
+  dependencies: []
+  baseline_refs:
+  - REQ-001
+  decision_refs:
+  - DEC-009
+  implementation_refs:
+  - runtime/scripts/state_context.py
+  - runtime/scripts/loopctl.py
+  test_refs: []
+  supersedes: []
+  notes: null
+  created_at: '2026-09-21T05:30:00Z'
+  updated_at: null
+  last_verified_at: null
+
+- id: BL-FRAMELAND-003
+  title: 结构化状态覆盖完整生命周期实体与关系
+  kind: data-contract
+  domain: framework-landing
+  status: active
+  priority: high
+  risk: high
+  authority: user-confirmed
+  source:
+    type: user-statement
+    reference: 2026-09-21 用户要求新框架彻底落地（整体改造方案已获认可）
+  description: 新格式必须能承载完整生命周期：Goal、Task、Run、Blocker、Evidence、Review、业务原子、需求基线、决策、架构、研究、对齐、复盘与蒸馏，并表达它们之间的引用关系。
+  actors:
+  - agent
+  trigger: 任一生命周期产物需要被记录、查询或引用
+  preconditions:
+  - 项目已声明 format 2
+  inputs:
+  - 各生命周期产物
+  rule:
+    statement: 完整生命周期的实体与关系可由新格式记录并跨引用；不得因为缺少实体而把状态回落到旧 YAML 或自由文本。
+  outputs:
+  - 可查询、可交叉引用的生命周期状态
+  side_effects: []
+  exceptions:
+  - 面向人的长正文仍以 Git/Markdown 保存，结构化存储保留引用与版本
+  failure_handling:
+  - 未支持的实体类型必须显式报错，不得静默降级为自由文本
+  invariants:
+  - 实体 ID 与引用在导入导出后保持稳定
+  acceptance:
+  - id: AC-FL-005
+    given: 一个 format 2 项目
+    when: 记录业务原子、需求、决策、证据与复核结果
+    then: 各实体可写入、可查询且引用可校验，无需旧 YAML 参与
+    method: null
+    evidence: null
+    status: not-verified
+  - id: AC-FL-006
+    given: 一个 format 2 项目
+    when: 请求记录尚未支持的实体类型
+    then: 明确报错并指出缺失能力，不写入自由文本兜底
+    method: null
+    evidence: null
+    status: not-verified
+  dependencies:
+  - BL-FRAMELAND-002
+  baseline_refs:
+  - REQ-001
+  decision_refs:
+  - DEC-009
+  implementation_refs:
+  - runtime/scripts/state_store.py
+  test_refs: []
+  supersedes: []
+  notes: null
+  created_at: '2026-09-21T05:30:00Z'
+  updated_at: null
+  last_verified_at: null
+
+- id: BL-FRAMELAND-004
+  title: 任务与目标完成由绑定证据和独立复核门禁裁决
+  kind: constraint
+  domain: framework-landing
+  status: active
+  priority: critical
+  risk: high
+  authority: user-confirmed
+  source:
+    type: user-statement
+    reference: 2026-09-21 用户要求彻底落地，并要求按框架既有验证纪律交付
+  description: 新格式把“已完成”作为需要证据支撑的裁决结果，而不是写入方能自行声明的状态。
+  actors:
+  - agent
+  - runtime
+  trigger: 声明任务完成、目标完成或发布结果时
+  preconditions:
+  - 项目已声明 format 2
+  inputs:
+  - 任务/目标的完成请求及其证据引用
+  rule:
+    statement: 任务与目标不得在缺少绑定证据时被标记完成；高风险或严格等级任务还需要独立复核结论，未满足时保持未完成并说明缺哪一项。
+  outputs:
+  - 带证据引用的完成裁决
+  side_effects: []
+  exceptions:
+  - 明确记录为 not-applicable 的检查项不阻塞完成，但必须说明理由
+  failure_handling:
+  - 证据缺失、失效或绑定到旧版本时拒绝完成并给出精确原因
+  invariants:
+  - 覆盖产物变化后，原证据转为失效而不是继续背书
+  acceptance:
+  - id: AC-FL-007
+    given: 一个任务声明完成但没有有效证据
+    when: 执行完成判定
+    then: 判定不通过并列明缺失的证据或复核
+    method: null
+    evidence: null
+    status: not-verified
+  - id: AC-FL-008
+    given: 任务覆盖的产物在验证后发生变化
+    when: 再次判断任务是否完成
+    then: 旧证据失效，任务回到未完成状态直到重新验证
+    method: null
+    evidence: null
+    status: not-verified
+  dependencies:
+  - BL-FRAMELAND-003
+  baseline_refs:
+  - REQ-001
+  decision_refs:
+  - DEC-009
+  implementation_refs:
+  - runtime/scripts/state_gate.py
+  - runtime/scripts/state_evidence.py
+  test_refs: []
+  supersedes: []
+  notes: null
+  created_at: '2026-09-21T05:30:00Z'
+  updated_at: null
+  last_verified_at: null
+
+- id: BL-FRAMELAND-005
+  title: 旧格式迁移显式、无损、可回退、可续跑
+  kind: flow
+  domain: framework-landing
+  status: active
+  priority: critical
+  risk: critical
+  authority: user-confirmed
+  source:
+    type: user-statement
+    reference: 2026-09-21 用户确认整体改造方案（旧格式兼容与迁移路径包含在方案内）
+  description: 存量旧格式项目需要通过一条显式、可审计的迁移路径进入新格式；迁移不得丢失历史，也不得把新写入回滚掉。
+  actors:
+  - user
+  - agent
+  - runtime
+  trigger: 用户对某个旧格式项目显式发起迁移
+  preconditions:
+  - 目标项目已确认
+  - 已产出迁移预览与备份
+  inputs:
+  - 旧格式项目记录
+  rule:
+    statement: 迁移先预览、再备份、再生成、再校验、最后原子切换；中断可续跑，失败可回退，且回退不得丢失迁移后的新写入。
+  outputs:
+  - 迁移后的新格式项目记录
+  - 可复现的预览、备份与回退产物
+  side_effects:
+  - 目标项目记录在切换点被替换为新格式
+  exceptions:
+  - 预览发现冲突、缺引用或不可映射历史时停止切换并保留原状
+  failure_handling:
+  - 任一阶段失败都保留原记录与已生成产物，报告精确恢复步骤
+  invariants:
+  - 不静默迁移：没有显式授权不发生写入
+  - 不删除历史证据，无法映射的历史进入显式保留区
+  acceptance:
+  - id: AC-FL-009
+    given: 一个旧格式项目且用户未发起迁移
+    when: 执行常规命令
+    then: 项目记录字节不变，不产生新格式结构
+    method: null
+    evidence: null
+    status: not-verified
+  - id: AC-FL-010
+    given: 用户显式发起迁移且预览无阻塞
+    when: 执行迁移
+    then: 生成新格式记录且旧记录可完整找回；中途中断后可续跑或回退
+    method: null
+    evidence: null
+    status: not-verified
+  - id: AC-FL-011
+    given: 迁移后项目已有新写入
+    when: 执行回退
+    then: 回退保留新写入内容，不静默丢弃迁移后的数据
+    method: null
+    evidence: null
+    status: not-verified
+  dependencies:
+  - BL-FRAMELAND-003
+  baseline_refs:
+  - REQ-001
+  decision_refs:
+  - DEC-009
+  implementation_refs:
+  - runtime/scripts/state_migrate.py
+  test_refs: []
+  supersedes: []
+  notes: null
+  created_at: '2026-09-21T05:30:00Z'
+  updated_at: null
+  last_verified_at: null
+
+- id: BL-FRAMELAND-006
+  title: 旧格式进入只读兼容并沿可审计路线淘汰
+  kind: rule
+  domain: framework-landing
+  status: active
+  priority: high
+  risk: high
+  authority: user-confirmed
+  source:
+    type: user-statement
+    reference: 2026-09-21 用户要求“老版本后面肯定就要慢慢淘汰了”
+  description: 旧格式在迁移期保留只读兼容能力，但不再作为可增长的目标格式；其退役时间线与最终停止支持必须有明确、可审计的关口。
+  actors:
+  - user
+  - agent
+  trigger: 制定版本政策、安装升级或评估旧格式支持范围时
+  preconditions:
+  - 新格式已成为默认
+  inputs:
+  - 旧格式使用情况
+  rule:
+    statement: 旧格式只保留只读兼容与迁移支持；停止写入、停止读取、停止发布的每一步都必须先文档化并有用户确认的关口，不得突然中断存量项目。
+  outputs:
+  - 明确的旧格式淘汰阶段与用户可见说明
+  side_effects: []
+  exceptions:
+  - 安全问题时可以提前收紧支持，但必须显式说明影响与替代路径
+  failure_handling:
+  - 无法读取的旧格式项目给出迁移指引而不是静默失败
+  invariants:
+  - 淘汰过程中不删除历史记录
+  acceptance:
+  - id: AC-FL-012
+    given: 一个旧格式项目
+    when: 在新框架下执行只读命令
+    then: 仍可读取并得到迁移指引，不被静默改写
+    method: null
+    evidence: null
+    status: not-verified
+  - id: AC-FL-013
+    given: 旧格式退役阶段推进
+    when: 检查版本政策
+    then: 每个阶段的支持范围与用户确认关口都有记录
+    method: null
+    evidence: null
+    status: not-verified
+  dependencies:
+  - BL-FRAMELAND-002
+  baseline_refs:
+  - REQ-001
+  decision_refs:
+  - DEC-009
+  implementation_refs: []
+  test_refs: []
+  supersedes: []
+  notes: null
+  created_at: '2026-09-21T05:30:00Z'
+  updated_at: null
+  last_verified_at: null
+
+- id: BL-FRAMELAND-007
+  title: 统一命令入口与规则资产指向同一事实源
+  kind: integration
+  domain: framework-landing
+  status: active
+  priority: high
+  risk: medium
+  authority: user-confirmed
+  source:
+    type: user-statement
+    reference: 2026-09-21 用户确认整体改造方案（统一入口包含在方案内）
+  description: 用户与代理面对的命令、Hooks、Skills、全局规则、模板与文档必须指向同一入口与同一状态源，避免出现多套互相漂移的操作方式。
+  actors:
+  - user
+  - agent
+  - runtime
+  trigger: 用户或代理执行 Vibe 操作、读取规则或按文档操作时
+  preconditions:
+  - 新格式已成为默认
+  inputs:
+  - 命令入口与规则资产
+  rule:
+    statement: 存在一个正式命令入口承担读写与恢复；旧入口只作为兼容适配并明确标注；Hooks、Skills、全局规则、模板与文档不得描述与新入口冲突的操作。
+  outputs:
+  - 一致的操作文档与规则资产
+  side_effects: []
+  exceptions:
+  - 兼容入口可以保留旧参数，但行为必须落到同一实现
+  failure_handling:
+  - 兼容入口遇到不支持的旧行为时明确报错，不自行 invent 新语义
+  invariants:
+  - 同一操作在正式入口与兼容入口下产生同等状态结果
+  acceptance:
+  - id: AC-FL-014
+    given: 同一状态操作
+    when: 分别通过正式入口与兼容入口执行
+    then: 结果一致，且写入同一事实源
+    method: null
+    evidence: null
+    status: not-verified
+  - id: AC-FL-015
+    given: 更新后的规则资产与文档
+    when: 按文档执行一次端到端流程
+    then: 文档描述与实际入口、状态源一致，无遗留实验性或已废弃指引
+    method: null
+    evidence: null
+    status: not-verified
+  dependencies:
+  - BL-FRAMELAND-002
+  baseline_refs:
+  - REQ-001
+  decision_refs:
+  - DEC-009
+  implementation_refs:
+  - runtime/scripts/vibe.py
+  - prompts/vibe-global-agent.md
+  test_refs: []
+  supersedes: []
+  notes: null
+  created_at: '2026-09-21T05:30:00Z'
+  updated_at: null
+  last_verified_at: null
+
+- id: BL-FRAMELAND-008
+  title: 长正文留在 Git 与 Markdown，结构化存储只保存状态与版本引用
+  kind: data-contract
+  domain: framework-landing
+  status: active
+  priority: medium
+  risk: medium
+  authority: user-confirmed
+  source:
+    type: user-statement
+    reference: 2026-09-21 用户确认整体改造方案（结构化状态与长文档分工包含在方案内）
+  description: 需求书、架构说明、研究、复核报告等长正文继续以 Git 管理的 Markdown 保存；结构化存储保存其状态、关系与版本引用，避免同一事实出现两份可独立漂移的正文。
+  actors:
+  - agent
+  - runtime
+  trigger: 记录长文档类产物或判断其是否仍然有效时
+  preconditions:
+  - 项目已声明 format 2
+  inputs:
+  - 长文档产物
+  rule:
+    statement: 长正文以 Git/Markdown 为唯一正文来源；结构化存储只保存标识、关系与版本引用，正文变化通过版本引用使相关证据失效，而不是复制一份正文进数据库。
+  outputs:
+  - 可追溯的文档版本引用
+  side_effects: []
+  exceptions:
+  - 状态类短字段（如标题、状态、时间）仍可结构化保存
+  failure_handling:
+  - 引用缺失或被改动时标记为失效并说明原因
+  invariants:
+  - 不把长文档正文同时存进结构化存储作为第二事实源
+  acceptance:
+  - id: AC-FL-016
+    given: 一份被引用的长文档
+    when: 该文档内容发生变化
+    then: 结构化存储中的引用版本可判定变化并使相关证据失效
+    method: null
+    evidence: null
+    status: not-verified
+  - id: AC-FL-017
+    given: 同一份长文档
+    when: 检查结构化存储内容
+    then: 只存在引用与元数据，不存在可独立漂移的正文副本
+    method: null
+    evidence: null
+    status: not-verified
+  dependencies:
+  - BL-FRAMELAND-003
+  baseline_refs:
+  - REQ-001
+  decision_refs:
+  - DEC-009
+  implementation_refs:
+  - runtime/scripts/state_views.py
+  test_refs: []
+  supersedes: []
+  notes: null
+  created_at: '2026-09-21T05:30:00Z'
+  updated_at: null
+  last_verified_at: null
+
+- id: BL-FRAMELAND-009
+  title: 跨平台、分支与 worktree 下行为一致且可验证
+  kind: constraint
+  domain: framework-landing
+  status: active
+  priority: high
+  risk: high
+  authority: user-confirmed
+  source:
+    type: user-statement
+    reference: 2026-09-21 用户要求彻底落地并进行测试
+  description: 新框架必须在目标平台上有一致行为；分支切换与 worktree 场景不得让状态错配、丢失或跨项目污染。
+  actors:
+  - agent
+  - runtime
+  trigger: 在 Windows 或 Linux 上运行命令、切换分支或使用 worktree
+  preconditions:
+  - 新格式已成为默认
+  inputs:
+  - 平台与 Git 上下文
+  rule:
+    statement: 关键操作在 Windows（PowerShell 5.1 与 7）和 Linux/WSL 上语义一致；分支与 worktree 切换后状态上下文明确，不出现跨分支错配或静默丢失。
+  outputs:
+  - 跨平台与多工作树一致的运行结果
+  side_effects: []
+  exceptions:
+  - 平台固有差异（路径、宿主参数解析）必须显式记录，不作为静默行为差异
+  failure_handling:
+  - 上下文不明确时拒绝写入并说明期望上下文
+  invariants:
+  - 同名实体在不同分支/工作树之间不互相覆盖
+  acceptance:
+  - id: AC-FL-018
+    given: 同一项目在 Windows 与 Linux 上
+    when: 执行同一组关键命令
+    then: 语义结果一致，差异均有显式记录
+    method: null
+    evidence: null
+    status: not-verified
+  - id: AC-FL-019
+    given: 同一项目存在多个分支或多个工作树
+    when: 在各上下文之间切换并继续操作
+    then: 状态上下文判定正确，不跨上下文覆盖，冲突时明确拒绝
+    method: null
+    evidence: null
+    status: not-verified
+  dependencies:
+  - BL-FRAMELAND-002
+  baseline_refs:
+  - REQ-001
+  decision_refs:
+  - DEC-009
+  implementation_refs: []
+  test_refs: []
+  supersedes: []
+  notes: null
+  created_at: '2026-09-21T05:30:00Z'
+  updated_at: null
+  last_verified_at: null
+- id: BL-PROJECTLOG-001
+  title: 长 Markdown 摘要遵守最新在最上、头部快照、超限归档、单一事实源
+  kind: rule
+  domain: project-log
+  status: active
+  priority: high
+  risk: low
+  authority: user-confirmed
+  source:
+    type: user-statement
+    reference: boss_electrics/.project-log/docs/log-file-organization-task.md（用户确认只优化 vibe-coding 框架源码）
+  description: current-session.md 与 progress.md 是面向人的长摘要；最新内容在最上，顶部维护稳定的当前状态快照，超限时旧段落归档到 docs/archive/，精确下一步以 loop 状态文件为单一事实源。
+  actors:
+  - user
+  - agent
+  trigger: 初始化项目日志、更新 current-session.md/progress.md 或将长文档归档
+  preconditions:
+  - .project-log 已初始化
+  inputs:
+  - current-session.md
+  - progress.md
+  - loop/active-run.yaml
+  - loop/handoff.md
+  rule:
+    statement: current-session.md 最新会话区块在顶部、progress.md 按日期倒序；两部文档顶部“当前状态”区块每次覆盖更新；文件超过约 50-100 KB 或会话区块约 10 条时，旧段落移动到 .project-log/docs/archive/；精确状态和下一步以 loop/active-run.yaml、loop/handoff.md 为准；机器维护的结构化状态文件不手工重排。
+  outputs:
+  - 可快速恢复的 current-session.md/progress.md
+  - 可检索的 .project-log/docs/archive/ 归档文件
+  side_effects: []
+  exceptions:
+  - 机器维护文件异常需要修复时，按运行时提供的方式处理
+  failure_handling:
+  - 归档时先校验引用完整性，不删除任何已记录事实
+  invariants:
+  - 不手工重排 loop/events.jsonl、loop/active-run.yaml、loop/handoff.md、verification/evidence.yaml
+  acceptance:
+  - id: AC-PROJECTLOG-001
+    given: 新项目初始化
+    when: 查看 current-session.md/progress.md
+    then: 顶部存在“当前状态”快照，且文档写明最新在最上与归档约定
+    method: tests/test_project_templates.py
+    evidence: DOC-CONV-001
+    status: not-verified
+  dependencies: []
+  baseline_refs: []
+  decision_refs:
+  - DEC-005
+  implementation_refs:
+  - runtime/project-log-template/current-session.md
+  - runtime/project-log-template/progress.md
+  - skills/a-project-log/SKILL.md
+  - skills/a-project-log/REFERENCE.md
+  - skills/a-session-handoff/SKILL.md
+  test_refs:
+  - tests/test_project_templates.py
+  supersedes: []
+  notes: null
+  created_at: '2026-08-20T17:45:00+08:00'
+  updated_at: null
+  last_verified_at: null
+- id: BL-PROJECTINIT-002
+  title: 新建 AGENTS.md 时生成通用规则区与项目级规则区
+  kind: rule
+  domain: project-init
+  status: active
+  priority: high
+  risk: medium
+  authority: user-confirmed
+  source:
+    type: user-statement
+    reference: 2026-08-15 项目初始化 skill 澄清（模板 6 条与 README 提取规则确认）
+  description: 目标目录无 AGENTS.md 时，生成文件：先写通用开发规则区块（标记包裹），再写项目级规则区。
+  actors:
+  - user
+  - agent
+  trigger: 项目初始化且目标目录无 AGENTS.md
+  preconditions:
+  - 通用规则模板存在于 skill 内部
+  inputs:
+  - 项目级规则文本（可空）
+  rule:
+    statement: AGENTS.md = 通用规则区块（VIBE-PROJECT-GENERAL 标记包裹） + 项目级规则区；项目级规则来自 README/docs 凝炼，无则写入占位提示。
+  outputs:
+  - 根目录 AGENTS.md
+  side_effects: []
+  exceptions:
+  - README/docs 不存在或不足以提炼项目规则
+  failure_handling:
+  - 项目级区保留占位提示，并向用户说明可手动补充
+  invariants:
+  - 通用规则模板内容原样注入，不裁剪
+  acceptance:
+  - id: AC-PI-003
+    given: 目标目录无 AGENTS.md 且有 README 提炼出的项目规则
+    when: 执行项目初始化
+    then: 生成含通用区块与项目级规则的 AGENTS.md
+    method: null
+    evidence: null
+    status: not-verified
+  - id: AC-PI-004
+    given: 目标目录无 AGENTS.md 且无 README/docs
+    when: 执行项目初始化
+    then: 项目级区写入占位提示
+    method: null
+    evidence: null
+    status: not-verified
+  dependencies: []
+  baseline_refs: []
+  decision_refs:
+  - DEC-004
+  implementation_refs:
+  - skills/a-project-init/templates/general-rules.md
+  - skills/a-project-init/scripts/init_project_agents.py
+  test_refs:
+  - tests/test_project_init.py
+  supersedes: []
+  notes: null
+  created_at: '2026-08-15T10:20:00+08:00'
+  updated_at: null
+  last_verified_at: null
+- id: BL-PROJECTINIT-003
+  title: 已有 AGENTS.md 时只安全注入通用规则且幂等
+  kind: rule
+  domain: project-init
+  status: active
+  priority: high
+  risk: high
+  authority: user-confirmed
+  source:
+    type: user-statement
+    reference: 2026-08-15 项目初始化 skill 澄清（原内容视为项目级规则，只注入通用区）
+  description: 目标目录已有 AGENTS.md 时，原内容一字不动保留（视为项目级规则），仅在文件最前注入通用规则区块；检测到标记则跳过。
+  actors:
+  - user
+  - agent
+  trigger: 项目初始化且目标目录已有 AGENTS.md
+  preconditions:
+  - AGENTS.md 可读
+  inputs:
+  - 现有 AGENTS.md 内容
+  rule:
+    statement: 若文件中无 VIBE-PROJECT-GENERAL:BEGIN 标记，则在最前注入通用区块并保留原内容；已有标记则跳过，不重复注入。
+  outputs:
+  - 更新后的 AGENTS.md
+  side_effects: []
+  exceptions:
+  - 文件编码不可读
+  failure_handling:
+  - 报告错误，不修改文件
+  invariants:
+  - 原 AGENTS.md 内容不被删除或改写
+  - 重复初始化不叠加通用区块
+  acceptance:
+  - id: AC-PI-005
+    given: 已有无标记的 AGENTS.md
+    when: 执行项目初始化
+    then: 通用区块注入到最前，原内容完整保留
+    method: null
+    evidence: null
+    status: not-verified
+  - id: AC-PI-006
+    given: AGENTS.md 已含通用标记
+    when: 再次执行项目初始化
+    then: 跳过注入，文件内容不变
+    method: null
+    evidence: null
+    status: not-verified
+  dependencies: []
+  baseline_refs: []
+  decision_refs:
+  - DEC-004
+  implementation_refs:
+  - skills/a-project-init/scripts/init_project_agents.py
+  test_refs:
+  - tests/test_project_init.py
+  supersedes: []
+  notes: null
+  created_at: '2026-08-15T10:20:00+08:00'
+  updated_at: null
+  last_verified_at: null
+- id: BL-PROJECTINIT-004
+  title: 通用开发规则模板以 skill 内部文件为唯一来源
+  kind: rule
+  domain: project-init
+  status: active
+  priority: medium
+  risk: low
+  authority: user-confirmed
+  source:
+    type: user-statement
+    reference: 2026-08-15 项目初始化 skill 澄清（规则记录在 skill 内部，避免丢失失真）
+  description: 通用开发规则只存放在 a-project-init skill 的 templates/general-rules.md，初始化脚本读取该模板渲染；用户新增通用规则通过修改该模板实现。
+  actors:
+  - user
+  - agent
+  trigger: 初始化 AGENTS.md 或用户修改通用规则
+  preconditions:
+  - 模板文件存在
+  inputs: []
+  rule:
+    statement: 通用规则唯一来源为 skill 内部模板；脚本不得内嵌重复规则文本，项目内不维护第二份通用规则。
+  outputs:
+  - 注入到 AGENTS.md 的通用规则
+  side_effects: []
+  exceptions:
+  - 模板缺失
+  failure_handling:
+  - 初始化失败并报告模板路径
+  invariants:
+  - 修改模板后，新注入或新建项目使用新规则
+  acceptance:
+  - id: AC-PI-007
+    given: 修改 skill 内通用规则模板
+    when: 对无标记项目重新初始化
+    then: 注入的是修改后的规则
+    method: null
+    evidence: null
+    status: not-verified
+  dependencies: []
+  baseline_refs: []
+  decision_refs:
+  - DEC-004
+  implementation_refs:
+  - skills/a-project-init/templates/general-rules.md
+  test_refs:
+  - tests/test_project_init.py
+  supersedes: []
+  notes: null
+  created_at: '2026-08-15T10:20:00+08:00'
+  updated_at: null
+  last_verified_at: null

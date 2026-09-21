@@ -16,10 +16,10 @@ metadata:
 在当前项目根目录找不到 `.project-log/` 时，先初始化，不能把全局工作流目录当作项目日志。
 
 1. 确认当前工作目录是目标项目根目录。
-2. 使用全局运行时脚本创建模板，且不覆盖已有项目文件：
+2. 使用全局运行时的正式入口创建 format 2 项目，且不覆盖已有项目文件：
 
 ```bash
-python3 "${CODEX_HOME:-$HOME/.codex}/vibe-workflow/scripts/init_project.py" --target .
+python3 "${CODEX_HOME:-$HOME/.codex}/vibe-workflow/scripts/vibe.py" --root . init
 ```
 
 3. 运行校验依赖安装和项目校验；若全局运行时安装在其他目录，使用实际路径替换上述脚本路径。
@@ -33,21 +33,9 @@ python3 "${CODEX_HOME:-$HOME/.codex}/vibe-workflow/scripts/init_project.py" --ta
 
 ## 记录分层
 
-- `business-logic/atoms.yaml`：系统应该怎样工作；
-- `business-logic/clarification.yaml`：功能业务逻辑、技术业务逻辑及双向对齐；
-- `goals/active-goal.yaml`：项目级成功条件、非目标、约束和必需证据；
-- `requirements/baseline.yaml`：本次增量批准了什么；
-- `research/solution-research.yaml`：技术选型证据；
-- `architecture/architecture.yaml`：职责、接口、数据和故障边界；
-- `tasks/task-list.yaml`：当前要做什么；
-- `progress.md`：面向人读的阶段进度摘要，保持与 task-list 同步；
-- `decisions/decision-log.yaml`：为何这样选择及结果；
-- `verification/evidence.yaml`：如何证明完成；
-- `alignment/findings.yaml`：业务、代码和测试的差异；
-- `work-trace/trace.yaml`：高信号思维-行动-结果链；
-- `retrospective/`、`distillation/`：如何改进工作方式；
-- `current-session.md`：下一次一分钟恢复。
-- `loop/active-run.yaml`、`events.jsonl`、`evidence-index.yaml`、`handoff.md`：Loop 快照、历史、证据有效性和恢复视图。
+- format 2：`records` 保存业务原子、需求基线、决策、架构、研究、对齐、复盘与蒸馏；`evidence` 保存证据状态、覆盖范围与哈希绑定；`reviews` 保存独立复核；状态库按 Git 分支上下文隔离。
+- 旧格式：`business-logic/`、`requirements/`、`research/`、`architecture/`、`tasks/`、`decisions/`、`verification/`、`alignment/`、`work-trace/`、`retrospective/`、`distillation/` 仍按 YAML 分层读取。
+- `progress.md`、`current-session.md`、生成的 `handoff.md` 是面向人的摘要；format 2 的精确状态以状态库为单一事实源。
 - `docs/archive/`：长 Markdown 摘要的旧段落归档位置。
 
 ## 更新纪律

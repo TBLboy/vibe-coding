@@ -54,15 +54,18 @@ def explicit_project_root(payload: dict[str, Any]) -> Path | None:
 
 
 def find_project_root(start: Path) -> Path:
+    """Only the current directory's Project Log counts; ancestors only contribute a Git root.
+
+    Otherwise a brand-new directory inside an existing project would silently inherit the
+    parent's Project Log instead of starting its own.
+    """
     from state_context import is_transactional
 
     current = start if start.is_dir() else start.parent
     git_root: Path | None = None
+    if is_transactional(current) or (current / ".project-log").is_dir():
+        return current
     for candidate in (current, *current.parents):
-        if is_transactional(candidate):
-            return candidate
-        if candidate == current and (candidate / ".project-log").is_dir():
-            return candidate
         if git_root is None and (candidate / ".git").exists():
             git_root = candidate
     if git_root is not None:
@@ -78,6 +81,9 @@ def ensure_project(payload: dict[str, Any]) -> Path:
         return root
     if not project_log(root).is_dir():
         initialize_project(root)
+    if is_transactional(root):
+        # Format 2 is the default now: legacy loop files must not be created beside it.
+        return root
     initialize_loop(root)
     return root
 
@@ -133,6 +139,10 @@ def compact_context(root: Path, refresh_handoff: bool = False) -> str:
     from state_context import compact_context as transactional_context, is_transactional
 
     if is_transactional(root):
+        if refresh_handoff:
+            from state_context import refresh_views
+
+            refresh_views(root)
         return transactional_context(root)
     state = load_active_run(root)
     if refresh_handoff:

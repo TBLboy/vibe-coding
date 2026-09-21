@@ -37,7 +37,7 @@ class LoopCoreTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary.name)
-        initialize_project(self.root)
+        initialize_project(self.root, format=1)
 
     def tearDown(self) -> None:
         self.temporary.cleanup()
@@ -404,6 +404,7 @@ class HookTests(unittest.TestCase):
     def test_session_and_compact_hooks_emit_context(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             project = Path(temporary)
+            initialize_project(project, format=1)
             payload = json.dumps({"cwd": str(project)})
             for script in ("session_start.py", "pre_compact.py"):
                 result = subprocess.run(
@@ -424,6 +425,7 @@ class HookTests(unittest.TestCase):
     def test_fresh_project_is_rendered_as_idle(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             project = Path(temporary)
+            initialize_project(project, format=1)
             result = subprocess.run(
                 [sys.executable, str(ROOT / "runtime/hooks/session_start.py")],
                 input=json.dumps({"cwd": str(project)}),
@@ -440,7 +442,7 @@ class HookTests(unittest.TestCase):
     def test_session_start_does_not_append_handoff_event(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             project = Path(temporary)
-            initialize_project(project)
+            initialize_project(project, format=1)
             events = project / ".project-log/loop/events.jsonl"
             before = events.read_text(encoding="utf-8")
             result = subprocess.run(
@@ -457,7 +459,7 @@ class HookTests(unittest.TestCase):
     def test_pre_compact_persists_handoff(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             project = Path(temporary)
-            initialize_project(project)
+            initialize_project(project, format=1)
             events = project / ".project-log/loop/events.jsonl"
             result = subprocess.run(
                 [sys.executable, str(ROOT / "runtime/hooks/pre_compact.py")],
@@ -473,7 +475,7 @@ class HookTests(unittest.TestCase):
     def test_completed_run_is_not_restored_as_active_work(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             project = Path(temporary)
-            initialize_project(project)
+            initialize_project(project, format=1)
             state = load_active_run(project)
             state["status"] = "complete"
             state["task_id"] = "TASK-OLD"
@@ -494,6 +496,9 @@ class HookTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             workspace = Path(temporary)
             initialize_project(workspace)
+            parent_marker = json.loads(
+                (workspace / ".project-log/state-format.json").read_text(encoding="utf-8")
+            )
             new_project = workspace / "new-project"
             new_project.mkdir()
             result = subprocess.run(
@@ -505,9 +510,28 @@ class HookTests(unittest.TestCase):
                 check=False,
             )
             self.assertEqual(result.returncode, 0, result.stderr)
+            marker_path = new_project / ".project-log/state-format.json"
+            self.assertTrue(marker_path.is_file(), result.stdout)
+            marker = json.loads(marker_path.read_text(encoding="utf-8"))
+            self.assertEqual(marker["format"], 2)
+            self.assertNotEqual(marker["project_id"], parent_marker["project_id"])
+
+    def test_format_two_project_emits_transactional_context(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            project = Path(temporary)
+            result = subprocess.run(
+                [sys.executable, str(ROOT / "runtime/hooks/session_start.py")],
+                input=json.dumps({"cwd": str(project)}),
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
             context = json.loads(result.stdout)["hookSpecificOutput"]["additionalContext"]
-            self.assertIn(f"Project root: {new_project}", context)
-            self.assertTrue((new_project / ".project-log").is_dir())
+            self.assertIn("transactional", context)
+            self.assertTrue((project / ".project-log/state-format.json").is_file())
+            self.assertFalse((project / ".project-log/loop/active-run.yaml").exists())
 
     def test_explicit_workspace_root_wins_over_cwd(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -524,8 +548,10 @@ class HookTests(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 0, result.stderr)
             context = json.loads(result.stdout)["hookSpecificOutput"]["additionalContext"]
-            self.assertIn(f"Project root: {workspace}", context)
-            self.assertTrue((workspace / ".project-log").is_dir())
+            self.assertIn("transactional", context)
+            self.assertTrue((workspace / ".project-log/state-format.json").is_file())
+            self.assertFalse((child / ".project-log").exists())
+
     def test_hooks_tolerate_non_ascii_payloads(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             project = Path(temporary)

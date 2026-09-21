@@ -12,7 +12,7 @@ metadata:
 
 ## Purpose
 
-初始化项目：在目标项目根目录创建 `.project-log/`（走现有 `init_project.py` 链路，不改动它），并建立或安全更新根目录 `AGENTS.md`。`AGENTS.md` 由两部分组成：
+初始化项目：在目标项目根目录通过正式 `vibe init` 入口创建 format 2 的 `.project-log/`，并建立或安全更新根目录 `AGENTS.md`。`AGENTS.md` 由两部分组成：
 
 - 通用开发规则：来自本 skill 内部模板 `templates/general-rules.md`，以固定标记区块注入，幂等。
 - 项目级规则：从项目根目录 `README.md` 和 `docs/` 主要说明文档凝炼提取；无文档则留空并提示用户补充。
@@ -28,7 +28,7 @@ metadata:
    - 运行 `git -C <project-root> rev-parse --is-inside-work-tree` 判断目标是否已在 Git 仓库中。
    - 不在任何 Git 仓库中：询问用户是否需要初始化 Git 仓库；用户同意才执行 `git init`，不要未经确认就初始化。
    - 已在 Git 仓库中（含刚初始化的仓库）：询问用户该仓库属于“个人仓库”还是“团队协作仓库”，得到明确答复后再继续。
-3. 运行确定性脚本（脚本内部会先调用现有 `.project-log` 创建链路）：
+3. 运行确定性脚本（脚本内部会调用默认 format 2 的 `.project-log` 创建链路）：
    ```bash
    VIBE_RUNTIME="${CODEX_HOME:-$HOME/.codex}/vibe-workflow"
    python3 "$VIBE_RUNTIME/scripts/init_project_agents.py" \
@@ -53,4 +53,4 @@ metadata:
 ## Maintenance
 
 - 通用开发规则唯一来源：`templates/general-rules.md`。用户新增或修改通用规则时，直接修改该模板；不要在每个项目的 `AGENTS.md` 里分别改。
-- 本 skill 不修改 `.project-log` 创建逻辑，只编排与调用。
+- 本 skill 不修改 `.project-log` 创建逻辑，只编排与调用；新建项目默认生成 format 2，存量旧格式通过 `vibe migrate` 显式迁移。

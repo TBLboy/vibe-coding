@@ -1,0 +1,2578 @@
+version: '0.2'
+active_goal: GOAL-002
+tasks:
+- id: TASK-033
+  title: 记录新框架彻底落地的业务逻辑与任务拆解
+  kind: task
+  phase: task-decomposition
+  goal: 把用户已确认的“format 2 彻底落地、替换旧框架”方向固化为业务原子、需求基线、决策和依赖明确的任务图，不修改运行时代码
+  status: done
+  authority: B
+  risk: medium
+  tags:
+  - framework-landing
+  - user-approved-direction
+  related_business_logic:
+  - BL-FRAMELAND-001
+  - BL-FRAMELAND-002
+  - BL-FRAMELAND-003
+  - BL-FRAMELAND-004
+  - BL-FRAMELAND-005
+  - BL-FRAMELAND-006
+  - BL-FRAMELAND-007
+  - BL-FRAMELAND-008
+  - BL-FRAMELAND-009
+  related_decisions:
+  - DEC-009
+  depends_on: []
+  blocked_by_questions: []
+  inputs:
+  - 2026-09-21 用户确认消息（“按新框架彻底落地来进行改造和测试”）
+  - 当前源码事实（init_project.py、state_context.py、state_store.py、state_migrate.py、validate_project.py、post_tool_use.py、docs/USAGE.md）
+  - .project-log/goals/archive/GOAL-001.yaml
+  outputs:
+  - .project-log/business-logic/atoms.yaml（新增 BL-FRAMELAND-001..009）
+  - .project-log/decisions/decision-log.yaml（DEC-009）
+  - .project-log/requirements/baseline.yaml（REQ-001）
+  - .project-log/goals/active-goal.yaml（GOAL-002）
+  - .project-log/tasks/task-list.yaml（TASK-034..TASK-046）
+  plan:
+  - 只记录业务逻辑与拆解任务：不实现、不迁移、不改运行时代码
+  - 对照源码事实标注现状缺陷，只把已确认方向写成原子；验收细化标注为待 TASK-034 冻结
+  done_when:
+  - 已确认方向有原子业务逻辑、需求基线、决策与活动目标承载
+  - 实施任务依赖无环，全部为 pending，覆盖每条原子的验收
+  - 真实项目迁移与旧格式退役关口单独保留为用户授权项
+  - 项目日志、循环状态与包校验保持通过
+  verification:
+    status: passed
+    commands:
+    - PY=$(cat "${CODEX_HOME:-$HOME/.codex}/vibe-python"); "$PY" runtime/scripts/validate_project.py --root . -> Validation passed
+    - PY=$(cat "${CODEX_HOME:-$HOME/.codex}/vibe-python"); "$PY" runtime/scripts/validate_package.py --root . -> Package validation passed
+    - PY=$(cat "${CODEX_HOME:-$HOME/.codex}/vibe-python"); "$PY" -m unittest discover -s tests -p 'test_*.py' -q -> Ran 57 tests, OK (skipped=1)
+    - PY=$(cat "${CODEX_HOME:-$HOME/.codex}/vibe-python"); "$PY" runtime/scripts/loopctl.py --root . --json validate -> passed true, errors []
+    evidence:
+    - LANDING-033
+    limitations:
+    - 本轮只交付规划产物；BL-FRAMELAND 的验收条目尚未被任何实现验证，全部为 not-verified
+  result:
+    summary: 记录 9 条 BL-FRAMELAND 原子业务逻辑与 DEC-009 决策，冻结 REQ-001 需求基线，建立 GOAL-002 活动目标，并拆解 TASK-034..TASK-046 的实施与验收任务。
+    changed_files:
+    - .project-log/business-logic/atoms.yaml
+    - .project-log/decisions/decision-log.yaml
+    - .project-log/requirements/baseline.yaml
+    - .project-log/goals/active-goal.yaml
+    - .project-log/goals/archive/GOAL-001.yaml
+    - .project-log/workflow.yaml
+    - .project-log/tasks/task-list.yaml
+    - .project-log/verification/evidence.yaml
+    - .project-log/current-session.md
+    - .project-log/progress.md
+    deviations:
+    - 把 BL-PROJECTINIT-001 置为 deprecated：其“默认旧格式且不得改动初始化链路”约束与用户新要求冲突，已由 BL-FRAMELAND-001 取代，冲突显式记录而非静默覆盖
+    follow_ups:
+    - TASK-034 冻结 BL-FRAMELAND 的验收细则与生产契约
+  created_at: '2026-09-21T05:20:00Z'
+  updated_at: '2026-09-21T06:00:00Z'
+- id: TASK-034
+  title: 冻结 format 2 生产契约（实体、长文档边界、门禁与 CLI 面）
+  kind: task
+  phase: engineering-spec
+  goal: 把 BL-FRAMELAND-001..009 转成不需实现者猜测的契约，明确数据模型、接口、失败语义与迁移状态机
+  status: done
+  authority: B
+  risk: high
+  tags:
+  - framework-landing
+  related_business_logic:
+  - BL-FRAMELAND-001
+  - BL-FRAMELAND-002
+  - BL-FRAMELAND-003
+  - BL-FRAMELAND-004
+  - BL-FRAMELAND-005
+  - BL-FRAMELAND-006
+  - BL-FRAMELAND-007
+  - BL-FRAMELAND-008
+  - BL-FRAMELAND-009
+  related_decisions:
+  - DEC-009
+  depends_on:
+  - TASK-033
+  blocked_by_questions: []
+  inputs:
+  - .project-log/requirements/baseline.yaml（REQ-001）
+  - runtime/scripts/state_store.py
+  - runtime/scripts/state_context.py
+  - runtime/scripts/state_migrate.py
+  - runtime/scripts/vibe.py
+  outputs:
+  - .project-log/specs/framework-landing-contract.md
+  - .project-log/architecture/architecture.yaml 更新
+  plan:
+  - 先冻结实体清单、字段、ID 规则与关系，再冻结长文档引用与失效规则
+  - 冻结 CLI 正式面与兼容面，最后冻结迁移状态机与门禁语义
+  - 无法在实现前决定的语义升级为用户问题，不靠实现者补默认值
+  done_when:
+  - format 2 实体清单、字段、关系与 ID 规则明确
+  - 长文档正文与结构化状态的分工、版本引用与失效规则明确
+  - 正式入口与兼容入口的命令面、参数与失败语义明确
+  - 迁移状态机（预览、备份、生成、校验、切换、续跑、回退）的每一步与失败处置明确
+  - 证据与独立复核门禁的判定条件明确
+  - 每条 BL-FRAMELAND 原子都有对应的可执行验收条目
+  verification:
+    status: passed
+    commands:
+    - PY=$(cat "${CODEX_HOME:-$HOME/.codex}/vibe-python"); "$PY" runtime/scripts/validate_project.py --root . -> Validation passed
+    - PY=$(cat "${CODEX_HOME:-$HOME/.codex}/vibe-python"); "$PY" runtime/scripts/validate_package.py --root . -> Package validation passed
+    - 结构检查：契约 10 个小节、AC-FL-001..019、8 类文档实体、7 个新增动作全部存在；文档 14,108 字节
+    evidence:
+    - CONTRACT-034
+    limitations:
+    - 契约冻结不等于实现；AC-FL-001..019 的验收仍待 TASK-035..TASK-044 执行
+    - records/evidence/reviews 的表结构是设计冻结，尚未写入 state_store.py
+  result:
+    summary: 冻结 format 2 生产契约：标记与布局、状态机实体与文档型实体模型、ID 规则、长文档 doc_ref 边界、命令信封与门禁、
+      CLI 正式面与兼容面、退出码、迁移状态机与冲突判定、跨平台约束，并把 AC-FL-001..019 映射到具体验收任务。
+    changed_files:
+    - .project-log/specs/framework-landing-contract.md
+    - .project-log/architecture/architecture.yaml
+    deviations:
+    - 迁移对“不可映射历史”改为保留到 legacy/unmapped 而非中止，理由与影响写入契约第 7.6 节，并同步细化了 TASK-040 的 done_when
+    - 文档型实体采用 records + record_links 单表加 kind 判别，而非 8 张专用表，理由写入契约第 3.2 节
+    follow_ups: []
+  created_at: '2026-09-21T05:50:00Z'
+  updated_at: null
+- id: TASK-035
+  title: 新项目默认初始化为 format 2 并提供正式初始化入口
+  kind: task
+  phase: implementation
+  goal: 无 .project-log 的项目默认生成新格式，不再需要实验开关，也不再默认复制旧格式模板
+  status: done
+  authority: C
+  risk: high
+  tags:
+  - framework-landing
+  - user-approved-dec-009
+  related_business_logic:
+  - BL-FRAMELAND-001
+  related_decisions:
+  - DEC-009
+  depends_on:
+  - TASK-034
+  blocked_by_questions: []
+  inputs:
+  - .project-log/specs/framework-landing-contract.md
+  - runtime/scripts/init_project.py
+  - runtime/scripts/state_context.py
+  - runtime/project-log-template/
+  outputs:
+  - 默认初始化路径改为 format 2
+  - 正式初始化命令与旧入口的兼容适配
+  - 初始化回归测试（新建、幂等、已有记录不覆盖、前置条件不满足时 fail-closed）
+  plan:
+  - 先按契约写失败测试，再改初始化路径
+  - 同步更新 a-project-init skill 的调用链，但保留 AGENTS.md 幂等注入部分
+  done_when:
+  - 无 .project-log 的目录默认初始化出 format 2，且不需要 --experimental
+  - 已有可识别 .project-log 时不覆盖、不混合两套结构化状态
+  - Git 工作树等前置条件不满足时 fail-closed 并给出可执行提示
+  - DEC-004 中与本方向冲突的“不得改动初始化链路”约束已显式更新
+  verification:
+    status: passed
+    commands:
+    - PY=$(cat "${CODEX_HOME:-$HOME/.codex}/vibe-python"); "$PY" -m unittest discover -s tests -p 'test_*.py' -q -> Ran 70 tests, OK (skipped=1)
+    - PY=$(cat "${CODEX_HOME:-$HOME/.codex}/vibe-python"); "$PY" runtime/scripts/validate_package.py --root . -> Package validation passed
+    - PY=$(cat "${CODEX_HOME:-$HOME/.codex}/vibe-python"); "$PY" runtime/scripts/validate_project.py --root . -> Validation passed
+    - Falsification on pristine e236fda (/tmp/vibe-falsify-035-HesH) -> tests/test_project_log_init.py 8/8 fail
+    evidence:
+    - INIT-035B
+    limitations:
+    - 只验证本机 Linux；Windows 矩阵由 TASK-043 覆盖
+    - format 1 仍可用 --format 1 显式生成，用于迁移窗口与旧循环回归测试，尚未退役
+    - Hook 的 format 2 会话恢复仍是最小实现，完整改造属 TASK-039
+  result:
+    summary: 默认初始化改为 format 2：新增 vibe init（无需实验开关），state-init 成为兼容别名；标记不再写 experimental 且仍能读取转正前的标记；
+      初始化同时铺好长文档种子与归档说明，不再复制旧格式模板；旧格式入口只在显式 --format 1 时使用。
+    changed_files:
+    - runtime/scripts/init_project.py
+    - runtime/scripts/state_context.py
+    - runtime/scripts/vibe.py
+    - runtime/hooks/hook_common.py
+    - tests/test_project_log_init.py
+    - tests/test_project_init.py
+    - tests/test_loop_core.py
+    - docs/USAGE.md
+    deviations:
+    - Hook 的 find_project_root 改为只认当前目录的 .project-log（祖先只提供 Git root），否则 format 2 项目下的新目录会静默继承父项目日志；非 Git 父项目下的子目录不再被识别，属既有旧格式行为
+    - 长文档种子沿用 runtime/project-log-template 的两个摘要与归档说明，避免出现两份会漂移的约定文本
+    follow_ups: []
+  created_at: '2026-09-21T05:50:00Z'
+  updated_at: null
+- id: TASK-036
+  title: 补齐 format 2 生命周期实体、关系与命令
+  kind: task
+  phase: implementation
+  goal: 新格式可承载完整生命周期实体并表达交叉引用，不因缺实体回落旧 YAML 或自由文本
+  status: done
+  authority: B
+  risk: high
+  tags:
+  - framework-landing
+  related_business_logic:
+  - BL-FRAMELAND-003
+  - BL-FRAMELAND-008
+  related_decisions:
+  - DEC-009
+  depends_on:
+  - TASK-034
+  blocked_by_questions: []
+  inputs:
+  - .project-log/specs/framework-landing-contract.md
+  - runtime/scripts/state_store.py
+  - runtime/scripts/state_context.py
+  - runtime/scripts/state_views.py
+  outputs:
+  - 生命周期实体的存储、查询与投影
+  - 长文档版本引用的记录与校验
+  - 实体与引用完整性回归测试
+  plan:
+  - 复用现有事务与账本机制扩展实体，不新起第二套存储
+  - 未知实体类型显式报错，不提供自由文本兜底
+  done_when:
+  - Goal、Task、Run、Blocker、Evidence、Review、业务原子、需求基线、决策、架构、研究、对齐、复盘与蒸馏可记录、查询并互相引用
+  - 长文档只在结构化存储中保存引用与元数据，正文保持在 Git/Markdown
+  - 导入导出后实体 ID 与引用保持稳定
+  - 不支持的实体类型给出显式错误
+  verification:
+    status: passed
+    commands:
+    - python -m unittest discover -s tests -p 'test_*.py' -q
+    evidence:
+    - RECORDS-036C
+    limitations: []
+  result:
+    summary: format 2 已具备 records/record_links/evidence/reviews 实体、关系与命令；支持读取、导出导入、账本重放和长文档引用边界。
+    changed_files:
+    - runtime/scripts/state_store.py
+    - runtime/scripts/vibe.py
+    - tests/test_state_records.py
+    deviations: []
+    follow_ups: []
+  created_at: '2026-09-21T05:50:00Z'
+  updated_at: '2026-09-21T06:03:04Z'
+- id: TASK-037
+  title: 把证据、独立复核与完成门禁接入新格式
+  kind: task
+  phase: implementation
+  goal: 任务与目标完成由绑定证据和独立复核裁决，产物变化使证据失效
+  status: done
+  authority: B
+  risk: high
+  tags:
+  - framework-landing
+  related_business_logic:
+  - BL-FRAMELAND-004
+  related_decisions:
+  - DEC-009
+  depends_on:
+  - TASK-036
+  blocked_by_questions: []
+  inputs:
+  - .project-log/specs/framework-landing-contract.md
+  - runtime/scripts/state_evidence.py
+  - runtime/scripts/state_gate.py
+  outputs:
+  - 完成判定与证据适用性接入新格式
+  - 高风险任务的独立复核要求与负例测试
+  plan:
+  - 先写“无证据不得完成”“产物变化后回退为未完成”的失败测试
+  - 保持与既有风险分级、证据状态词表一致，不新增平行语义
+  done_when:
+  - 缺少绑定证据时任务与目标不能被标记完成，并说明缺哪一项
+  - 覆盖产物变化后原证据转为失效，任务回到未完成
+  - 高风险或严格任务缺少独立复核时完成判定不通过
+  - not-applicable 检查项有显式理由，不静默豁免
+  verification:
+    status: passed
+    commands:
+    - python -m unittest discover -s tests -p 'test_*.py' -q
+    evidence:
+    - GATES-037C
+    limitations: []
+  result:
+    summary: task.finish 与 goal.complete 已由新格式证据、独立复核和显式 not-applicable 理由裁决；覆盖文件变化可经 refresh_evidence 写入失效证据。
+    changed_files:
+    - runtime/scripts/state_store.py
+    - runtime/scripts/state_context.py
+    - runtime/scripts/vibe.py
+    - tests/test_state_gates.py
+    deviations: []
+    follow_ups: []
+  created_at: '2026-09-21T05:50:00Z'
+  updated_at: '2026-09-21T06:03:04Z'
+- id: TASK-038
+  title: 统一命令入口并保护旧格式写入口
+  kind: task
+  phase: implementation
+  goal: 一个正式入口承担读写与恢复；旧入口只作兼容适配且不得产生第二事实源
+  status: done
+  authority: B
+  risk: high
+  tags:
+  - framework-landing
+  related_business_logic:
+  - BL-FRAMELAND-002
+  - BL-FRAMELAND-007
+  related_decisions:
+  - DEC-009
+  depends_on:
+  - TASK-035
+  - TASK-036
+  blocked_by_questions: []
+  inputs:
+  - .project-log/specs/framework-landing-contract.md
+  - runtime/scripts/vibe.py
+  - runtime/scripts/loopctl.py
+  - runtime/scripts/state_context.py
+  outputs:
+  - 正式命令面与参数
+  - 兼容入口的适配层与 fail-closed 保护
+  - 入口一致性回归测试
+  plan:
+  - 先固定正式入口的命令面，再让兼容入口落到同一实现
+  - 旧格式写入口在 format 2 项目下拒绝写入并给出新命令提示
+  done_when:
+  - 同一操作经正式入口与兼容入口得到一致结果，落到同一事实源
+  - format 2 项目下旧写入入口 fail-closed，旧文件字节不变
+  - 兼容入口不 invent 新语义，不支持的行为明确报错
+  - 正式入口退出码与错误信息可被脚本稳定判断
+  verification:
+    status: passed
+    commands:
+    - python -m unittest discover -s tests -p 'test_*.py' -q
+    evidence:
+    - SURFACE-038B
+    limitations: []
+  result:
+    summary: vibe 正式入口新增 task/render/route/context/exchange/migrate 命令面；format 2 下 loopctl 的受支持读写映射到同一存储，旧写入入口明确 fail-closed。
+    changed_files:
+    - runtime/scripts/vibe.py
+    - runtime/scripts/loopctl.py
+    - runtime/scripts/state_context.py
+    - runtime/scripts/state_store.py
+    - tests/test_command_surface.py
+    deviations: []
+    follow_ups: []
+  created_at: '2026-09-21T05:50:00Z'
+  updated_at: '2026-09-21T06:08:00Z'
+- id: TASK-039
+  title: 改造 Hooks 与会话恢复到新格式
+  kind: task
+  phase: implementation
+  goal: 新格式项目下的 Hook 与会话恢复读取同一事实源，不再短路或依赖旧 YAML
+  status: done
+  authority: B
+  risk: high
+  tags:
+  - framework-landing
+  related_business_logic:
+  - BL-FRAMELAND-002
+  - BL-FRAMELAND-004
+  - BL-FRAMELAND-007
+  related_decisions:
+  - DEC-009
+  depends_on:
+  - TASK-038
+  blocked_by_questions: []
+  inputs:
+  - .project-log/specs/framework-landing-contract.md
+  - runtime/hooks/post_tool_use.py
+  - runtime/hooks/session_start.py
+  - runtime/hooks/pre_compact.py
+  outputs:
+  - Hook 的格式感知与精确证据失效接入
+  - 会话恢复读取新事实源并保持快速摘要
+  - Hook 回归测试
+  plan:
+  - 保持 Hook 失败不阻塞用户工具调用的既有边界，同时保证状态不被悄悄写坏
+  - 摘要类长文档继续遵守最新在最上、头部快照、超限归档与单一事实源
+  done_when:
+  - format 2 项目的 PostToolUse 不再整体短路，按记录哈希精确失效证据
+  - 会话恢复从新事实源读回目标、任务、阻塞、证据有效性与精确下一步
+  - Hook 异常有可诊断输出且不产生半写入
+  - 长文档摘要与循环状态不出现互相矛盾的下一步
+  verification:
+    status: passed
+    commands:
+    - python -m unittest discover -s tests -p 'test_*.py' -q
+    evidence:
+    - HOOKS-039C
+    limitations: []
+  result:
+    summary: format 2 的 PostToolUse 按记录哈希精确失效证据；SessionStart/PreCompact 从新存储恢复目标、任务、阻塞、证据有效性与下一步，不再创建旧 YAML。
+    changed_files:
+    - runtime/hooks/post_tool_use.py
+    - runtime/hooks/hook_common.py
+    - runtime/scripts/state_context.py
+    - runtime/scripts/state_store.py
+    - tests/test_transactional_hooks.py
+    deviations: []
+    follow_ups: []
+  created_at: '2026-09-21T05:50:00Z'
+  updated_at: '2026-09-21T06:10:00Z'
+- id: TASK-040
+  title: 实现可执行的旧格式迁移、续跑与回退
+  kind: task
+  phase: implementation
+  goal: 旧格式项目可经显式、无损、可审计的路径迁移到 format 2，并可续跑或回退
+  status: done
+  authority: B
+  risk: critical
+  tags:
+  - framework-landing
+  - data-migration
+  related_business_logic:
+  - BL-FRAMELAND-005
+  related_decisions:
+  - DEC-009
+  depends_on:
+  - TASK-034
+  - TASK-036
+  blocked_by_questions: []
+  inputs:
+  - .project-log/specs/framework-landing-contract.md
+  - runtime/scripts/state_migrate.py
+  outputs:
+  - 迁移编排：预览、备份、生成、校验、原子切换、续跑、回退
+  - 无法映射历史的显式保留区
+  - 迁移回归测试与演练报告
+  plan:
+  - 复用已有 preview 与 rollback bundle，补足生成、校验与原子切换
+  - 未显式授权时绝不对项目写入；每次演练在源码树之外的副本上进行
+  done_when:
+  - 未授权时旧格式项目字节不变，不产生新格式结构
+  - 迁移在预览无阻塞后执行，全程可审计且可中断续跑
+  - 重复 ID、悬空引用或源摘要不一致导致停止切换并保留原状
+  - 不可映射的历史字段进入 .project-log/legacy/unmapped 并附清单，不中止迁移也不丢弃内容（见契约第 7.6 节）
+  - 回退保留迁移后的新写入，不静默丢弃
+  - 迁移前后历史事实与证据引用可逐项对账
+  verification:
+    status: passed
+    commands:
+    - python -m unittest discover -s tests -p 'test_*.py' -q
+    evidence:
+    - MIGRATE-040C
+    limitations: []
+  result:
+    summary: 旧格式迁移支持 preview 确认、显式 apply、中断续跑、原子切换与保留新写入的回退；不可映射字段进入 legacy/unmapped。
+    changed_files:
+    - runtime/scripts/state_migrate.py
+    - runtime/scripts/vibe.py
+    - tests/test_migration_apply.py
+    deviations: []
+    follow_ups: []
+  created_at: '2026-09-21T05:50:00Z'
+  updated_at: '2026-09-21T06:18:00Z'
+- id: TASK-041
+  title: 重写新格式项目校验与包校验
+  kind: task
+  phase: implementation
+  goal: 校验器覆盖新格式实体、引用、门禁与迁移状态，并能对缺陷负例失败
+  status: done
+  authority: B
+  risk: medium
+  tags:
+  - framework-landing
+  related_business_logic:
+  - BL-FRAMELAND-002
+  - BL-FRAMELAND-003
+  - BL-FRAMELAND-004
+  - BL-FRAMELAND-005
+  related_decisions:
+  - DEC-009
+  depends_on:
+  - TASK-035
+  - TASK-036
+  blocked_by_questions: []
+  inputs:
+  - .project-log/specs/framework-landing-contract.md
+  - runtime/scripts/validate_project.py
+  - runtime/scripts/validate_package.py
+  outputs:
+  - 新格式项目校验器
+  - 包校验对模板与规则资产的覆盖
+  - 正负例测试
+  plan:
+  - 负例必须证明校验器真的会失败，避免“永远通过”的校验
+  - 旧格式只读兼容路径保持可校验
+  done_when:
+  - 新格式项目校验覆盖实体完整性、引用有效性、门禁状态与迁移状态
+  - 包校验覆盖新模板与规则资产，缺失或改坏时失败
+  - 至少每组关键规则有对应失败负例
+  - 校验失败信息定位到具体实体与字段
+  verification:
+    status: passed
+    commands:
+    - python -m unittest discover -s tests -p 'test_*.py' -q
+    - python runtime/scripts/validate_package.py --root .
+    evidence:
+    - VALIDATE-041C
+    limitations: []
+  result:
+    summary: 新格式校验覆盖账本、门禁、长文档边界与迁移日志状态；包校验覆盖事务运行时资产，并有对应失败负例。
+    changed_files:
+    - runtime/scripts/state_store.py
+    - runtime/scripts/validate_project.py
+    - tests/test_validate_format2.py
+    deviations: []
+    follow_ups: []
+  created_at: '2026-09-21T05:50:00Z'
+  updated_at: '2026-09-21T06:18:00Z'
+- id: TASK-042
+  title: 同步 Skills、全局规则、模板与文档到单一入口
+  kind: task
+  phase: implementation
+  goal: 用户可见的规则资产与实际入口、状态源一致，不再出现实验性或已废弃指引
+  status: done
+  authority: B
+  risk: medium
+  tags:
+  - framework-landing
+  - documentation
+  related_business_logic:
+  - BL-FRAMELAND-007
+  - BL-FRAMELAND-006
+  related_decisions:
+  - DEC-009
+  depends_on:
+  - TASK-038
+  - TASK-041
+  blocked_by_questions: []
+  inputs:
+  - .project-log/specs/framework-landing-contract.md
+  - docs/USAGE.md
+  - prompts/vibe-global-agent.md
+  - skills/a-project-init/
+  - skills/a-project-log/
+  - runtime/project-log-template/
+  outputs:
+  - 更新的全局规则、Skills、模板与用户指南
+  - 旧格式只读兼容与退役阶段说明
+  - 文档一致性回归测试
+  plan:
+  - 以正式入口为核心重写操作章节，删除实验性与已废弃指引
+  - 明确旧格式只读兼容、显式迁移与淘汰关口的用户可见说明
+  done_when:
+  - 规则资产与文档只描述同一正式入口与同一事实源
+  - 不再出现“新格式仅用于隔离测试项目”一类过期表述
+  - 文档可按步骤完成新建项目、日常操作、迁移与恢复
+  - 模板中的长文档约定与循环状态不矛盾
+  verification:
+    status: passed
+    commands:
+    - python -m unittest discover -s tests -p 'test_*.py' -q
+    evidence:
+    - DOCS-042B
+    limitations: []
+  result:
+    summary: USAGE、全局 Agent 提示词与 a-project-init/a-project-log Skills 已统一到 format 2 正式入口、证据门禁与显式迁移说明。
+    changed_files:
+    - docs/USAGE.md
+    - prompts/vibe-global-agent.md
+    - skills/a-project-init/SKILL.md
+    - skills/a-project-log/SKILL.md
+    - skills/a-project-log/REFERENCE.md
+    - tests/test_docs_consistency.py
+    deviations: []
+    follow_ups: []
+  created_at: '2026-09-21T05:50:00Z'
+  updated_at: '2026-09-21T06:22:00Z'
+- id: TASK-043
+  title: 跨平台、分支、worktree 与 Git 交换验收
+  kind: task
+  phase: verification
+  goal: 在目标平台与 Git 上下文下证明行为一致、上下文明确且无跨上下文污染
+  status: implemented-unverified
+  authority: B
+  risk: high
+  tags:
+  - framework-landing
+  - cross-platform
+  related_business_logic:
+  - BL-FRAMELAND-009
+  - BL-FRAMELAND-005
+  related_decisions:
+  - DEC-009
+  depends_on:
+  - TASK-037
+  - TASK-039
+  - TASK-040
+  - TASK-041
+  - TASK-042
+  blocked_by_questions: []
+  inputs:
+  - 冻结的实现修订
+  - .project-log/docs/workflow-optimization-cross-platform-acceptance.md（既有验收方法）
+  outputs:
+  - Windows（PowerShell 5.1 与 7）与 Linux/WSL 验收报告
+  - 分支、worktree、快照交换与中断恢复报告
+  - 反证记录
+  plan:
+  - 测试工程、临时安装与产物全部放在源码树之外
+  - 每个失败现场保留，不用“重跑通过”掩盖首次失败
+  done_when:
+  - 同一组关键命令在 Windows 与 Linux 上语义一致，差异有显式记录
+  - 分支与 worktree 切换后状态上下文判定正确，冲突时明确拒绝
+  - Git 快照交换在中断、分歧与强杀后仍可恢复或明确拒绝
+  - 关键修复有反证（回退修复后对应测试失败）
+  - 源码树未被测试产物污染
+  verification:
+    status: partial
+    commands:
+    - python -m unittest tests.test_cross_platform_surface -v
+    evidence:
+    - LINUX-043C
+    limitations:
+    - 本机无 Windows、PowerShell 5.1/7 或跨系统执行器；Windows 启动、路径、worktree、迁移原子替换与回退未实测
+  result:
+    summary: Linux 已通过 bash launcher、PowerShell 静态转发检查和 Git 分支上下文隔离测试；Windows 矩阵仍未执行。
+    changed_files:
+    - tests/test_cross_platform_surface.py
+    - .project-log/docs/framework-landing-cross-platform.md
+    deviations: []
+    follow_ups:
+    - 在 Windows PowerShell 5.1/7 上补跑 TASK-043 的完整矩阵并登记新证据
+  created_at: '2026-09-21T05:50:00Z'
+  updated_at: '2026-09-21T06:23:00Z'
+- id: TASK-044
+  title: 安装、升级、卸载与旧格式退役机制
+  kind: task
+  phase: implementation
+  goal: 安装链路发布新默认，并把旧格式退役阶段固化为带用户关口的文档化机制
+  status: done
+  authority: B
+  risk: high
+  tags:
+  - framework-landing
+  - release
+  related_business_logic:
+  - BL-FRAMELAND-006
+  - BL-FRAMELAND-001
+  related_decisions:
+  - DEC-009
+  depends_on:
+  - TASK-043
+  blocked_by_questions: []
+  inputs:
+  - .project-log/specs/framework-landing-contract.md
+  - install.ps1 / install.sh
+  - update.ps1 / update.sh
+  - uninstall.ps1 / uninstall.sh
+  - docs/USAGE.md
+  outputs:
+  - 安装/升级/卸载对新默认与旧格式兼容的一致处理
+  - 旧格式退役阶段与用户确认关口说明
+  - 版本与发布说明更新
+  plan:
+  - 保持既有解释器 fail-closed 与环境修复策略不变
+  - 退役阶段分为停止写入、停止读取与停止支持，每阶段单独关口
+  done_when:
+  - 安装、升级、卸载在目标平台上行为一致且可重复执行
+  - 旧格式项目在新安装下仍可按只读方式使用并得到迁移指引
+  - 退役阶段支持范围与用户确认关口写入发布说明
+  - 真实项目迁移与自身日志迁移仍保持单独的显式授权
+  verification:
+    status: passed
+    commands:
+    - python -m unittest tests.test_release_surface -v
+    - python -m unittest discover -s tests -p 'test_*.py' -q
+    - python runtime/scripts/validate_package.py --root .
+    - python runtime/scripts/validate_project.py --root .
+    evidence:
+    - RELEASE-044
+    - SUITE-044
+    limitations:
+    - 安装、升级、卸载只在 Linux 上实测；Windows 实机矩阵仍由 TASK-043 的未验证项承担
+    - 退役三阶段只固化为文档、CLI 输出与机器可读常量；真正执行任一阶段仍需用户单独确认
+  result:
+    summary: 版本号收敛到 framework_info.py 单一来源并升到 0.5.0；新增 vibe version/--version、旧格式只读指引与写入弃用提示、RELEASE-NOTES 退役三阶段与用户关口；安装/升级/卸载保持可重复执行且不改写任何项目 .project-log。
+    changed_files:
+    - runtime/scripts/framework_info.py
+    - runtime/scripts/vibe.py
+    - runtime/scripts/loopctl.py
+    - runtime/scripts/validate_package.py
+    - scripts/global_installer.py
+    - build_release.py
+    - docs/RELEASE-NOTES.md
+    - docs/USAGE.md
+    - README.md
+    - AI_INSTALL.md
+    - AI_UPGRADE.md
+    - tests/test_release_surface.py
+    - tests/test_installer.py
+    deviations: []
+    follow_ups: []
+  created_at: '2026-09-21T05:50:00Z'
+  updated_at: '2026-09-21T06:45:00Z'
+- id: TASK-045
+  title: 独立验收与发布评审
+  kind: task
+  phase: verification
+  goal: 由未参与实现的一方复核 GOAL-002 的成功条件与必需证据，给出 go/no-go
+  status: in-progress
+  authority: B
+  risk: high
+  tags:
+  - framework-landing
+  - independent-review
+  related_business_logic:
+  - BL-FRAMELAND-001
+  - BL-FRAMELAND-002
+  - BL-FRAMELAND-003
+  - BL-FRAMELAND-004
+  - BL-FRAMELAND-005
+  - BL-FRAMELAND-006
+  - BL-FRAMELAND-007
+  - BL-FRAMELAND-008
+  - BL-FRAMELAND-009
+  related_decisions:
+  - DEC-009
+  depends_on:
+  - TASK-044
+  blocked_by_questions: []
+  inputs:
+  - 冻结发布修订
+  - TASK-043 的跨平台验收记录
+  outputs:
+  - 独立复核报告（含反证与限制）
+  - GOAL-002 的 SC-001..SC-007 证据引用
+  plan:
+  - 实现方不得自证完成；复核方独立复算哈希并重放关键失败
+  - 复核不通过时保留失败现场并回到对应实现任务
+  done_when:
+  - 独立复核覆盖 SC-001..SC-007 并给出逐条结论
+  - 复核方独立复算冻结修订与关键产物哈希
+  - 证据绑定当前修订，失效证据不被沿用
+  - 发布结论已记录 GO
+  verification:
+    status: failed
+    commands: []
+    evidence:
+    - ROUND1-045
+    limitations:
+    - 第一轮独立复核结论为 NO-GO（D-001..D-006），实现已回到修复阶段；第二轮复核在修复修订上重跑
+    - 本机无 Windows / PowerShell 5.1 / 7，D-006 与 SC-006 只能保持 implemented-unverified
+  result:
+    summary: 第一轮独立复核（reviewer 在 /home/tbl/Project/vibe-review-1zBZCf 冻结副本上运行）给出 NO-GO：AC-FL-007/008/010/017 失败，AC-FL-016/018 部分未验证，另有迁移布局缺失；报告已作为 ROUND1-045 登记。
+    changed_files: []
+    deviations: []
+    follow_ups:
+    - TASK-047 修复 D-001..D-005 后，在冻结修订上重跑第二轮独立复核并给出最终 GO/NO-GO
+  created_at: '2026-09-21T05:50:00Z'
+  updated_at: '2026-09-21T07:05:00Z'
+- id: TASK-047
+  title: 修复第一轮独立复核发现的门禁、迁移与长文档边界缺陷
+  kind: task
+  phase: implementation
+  goal: 让 TASK-045 第一轮报告中的 D-001..D-005 在实现层真正关闭，并保留可复核证据
+  status: done
+  authority: B
+  risk: high
+  tags:
+  - framework-landing
+  - defect-fix
+  - independent-review
+  related_business_logic:
+  - BL-FRAMELAND-004
+  - BL-FRAMELAND-005
+  - BL-FRAMELAND-008
+  related_decisions:
+  - DEC-009
+  depends_on:
+  - TASK-036
+  - TASK-037
+  - TASK-040
+  blocked_by_questions: []
+  inputs:
+  - .project-log/specs/framework-landing-contract.md
+  - /home/tbl/Project/vibe-review-1zBZCf/REPORT.md（第一轮 NO-GO 报告）
+  outputs:
+  - 门禁、迁移与长文档边界的修复
+  - 复现第一轮缺陷的回归测试
+  plan:
+  - 先复现第一轮的每个最小复现，再改实现，最后用新测试锁住行为
+  - 修复必须落在契约语义上，不用放宽契约来让测试通过
+  done_when:
+  - D-001 高风险任务在缺少实现者身份或复核未绑定有效证据时拒绝完成
+  - D-002 覆盖产物变化后，未刷新的证据不再支撑任务与目标完成判定
+  - D-003 迁移任一步中断后可 resume 继续，不出现“声称 format 2 却没有状态库”
+  - D-004 记录载荷任意深度的长正文被拒绝
+  - D-005 迁移后具备 .state/、.gitignore、exchange/.gitattributes 布局，回退不残留迁移自建布局
+  verification:
+    status: passed
+    commands:
+    - python -m unittest discover -s tests -p 'test_*.py' -q
+    - python runtime/scripts/validate_package.py --root .
+    - python runtime/scripts/validate_project.py --root .
+    evidence:
+    - FIXES-047
+    limitations:
+    - D-006（Windows 实机矩阵）不在本任务范围，仍为 implemented-unverified
+    - AC-FL-016 只做到“校验器重算 doc_ref 哈希并报告”，未做到自动失效无关证据
+  result:
+    summary: 门禁改为按当前工作区字节重算证据适用性，高风险任务要求记录实现者且复核必须绑定有效且未失效的证据；记录载荷改为递归拒绝任意深度的长正文；迁移切换改为“状态库→旧文件→布局→标记”的幂等顺序并可从任意中断点 resume，回退清理迁移自建布局；长正文 docs/ 不再被迁移搬走。
+    changed_files:
+    - runtime/scripts/state_store.py
+    - runtime/scripts/state_migrate.py
+    - runtime/scripts/state_context.py
+    - tests/test_state_gates.py
+    - tests/test_state_records.py
+    - tests/test_migration_apply.py
+    - .project-log/specs/framework-landing-contract.md
+    deviations:
+    - 契约第 7 节原写“旧格式文件整体移动”，与第 4 节“长正文留在 .project-log/docs/**”冲突；已澄清为 docs/ 不移动，并在契约中记录
+    follow_ups:
+    - AC-FL-016 的“记录 doc_ref 变化自动失效相关证据”仍只做到校验器报告，留给后续增量
+  created_at: '2026-09-21T07:05:00Z'
+  updated_at: '2026-09-21T07:35:00Z'
+- id: TASK-046
+  title: 在显式授权下迁移 vibe-coding 自身 .project-log
+  kind: task
+  phase: implementation
+  goal: 用已验收的迁移工具把本仓库自身日志迁移到 format 2，且无损、可回退
+  status: pending
+  authority: C
+  risk: high
+  tags:
+  - framework-landing
+  - data-migration
+  - requires-user-authorization
+  related_business_logic:
+  - BL-FRAMELAND-005
+  - BL-FRAMELAND-002
+  related_decisions:
+  - DEC-009
+  depends_on:
+  - TASK-045
+  blocked_by_questions: []
+  inputs:
+  - 已独立验收的迁移工具
+  - .project-log/（本仓库现有旧格式记录）
+  - DEC-010（用户 2026-09-21 显式批准迁移本仓库自身日志）
+  outputs:
+  - 迁移预览与备份
+  - 迁移后的本仓库 .project-log
+  - 回退演练报告
+  plan:
+  - 仅在用户对本次迁移给出显式授权后执行
+  - 先预览并确认零冲突，再备份、迁移、校验，最后演练回退
+  done_when:
+  - 用户对 vibe-coding 自身日志迁移给出显式授权
+  - 迁移预览无阻塞项，迁移前后历史事实可逐项对账
+  - 迁移后校验通过，且回退路径经演练可保留迁移后的新写入
+  - 失败时任一步骤可停止并恢复原状
+  verification:
+    status: not-run
+    commands: []
+    evidence: []
+    limitations: []
+  result:
+    summary: null
+    changed_files: []
+    deviations: []
+    follow_ups: []
+  created_at: '2026-09-21T05:50:00Z'
+  updated_at: '2026-09-21T08:10:00Z'
+- id: TASK-012
+  title: 四项框架优化的技术选型与实现设计
+  kind: research
+  phase: solution-research
+  goal: 为恢复可信、记录一次、任务分流和证据版本适用性形成实现建议，不修改运行时代码或论文项目
+  status: done
+  authority: B
+  related_business_logic: []
+  depends_on: []
+  inputs:
+  - 用户提供的两份真实使用复盘材料
+  - D:/Project/my_lunwen/.project-log（只读案例）
+  - runtime/scripts/loop_state.py
+  outputs:
+  - .project-log/docs/workflow-optimization-technical-selection.md
+  - .project-log/research/solution-research.yaml
+  done_when:
+  - 对比状态存储与证据追踪候选并记录一手来源
+  - 给出四项优化的接口边界、失败处理、迁移和验收方案
+  - 区分推荐、待验证假设和需要用户批准的存储迁移
+  verification:
+    status: passed
+    commands:
+    - python runtime/scripts/validate_project.py --root . -> passed
+    - Document structure, eight source entries, local source paths and proposed-decision boundary checks -> passed
+    evidence:
+    - DESIGN-012
+    limitations:
+    - 本任务仅交付设计；没有实现或验证优化运行时
+  created_at: '2026-09-19T14:27:45Z'
+  updated_at: '2026-09-19T14:38:22Z'
+- id: TASK-013
+  title: 拆解四项优化的实施任务与验收关口
+  kind: task
+  phase: task-decomposition
+  goal: 只交付依赖明确的待执行任务计划，不启动实现、原型或迁移
+  status: done
+  authority: B
+  related_business_logic:
+  - BL-WFOPT-001
+  - BL-WFOPT-002
+  - BL-WFOPT-003
+  - BL-WFOPT-004
+  related_decisions:
+  - DEC-006
+  depends_on:
+  - TASK-012
+  inputs:
+  - 用户认可技术方向并要求暂不执行
+  - .project-log/docs/workflow-optimization-technical-selection.md
+  outputs:
+  - .project-log/docs/workflow-optimization-task-plan.md
+  - .project-log/tasks/task-list.yaml
+  done_when:
+  - 四项目标均有关联任务和可验证验收
+  - 依赖无环，原型与生产实现及真实部署关口分开
+  - 全部实施任务 pending，用户暂停要求明确保存
+  verification:
+    status: passed
+    commands:
+    - Plan-only checks of pending statuses, dependency DAG, objective coverage and G1/G2 dependencies -> passed
+    - python runtime/scripts/validate_project.py --root . -> passed
+    evidence:
+    - PLAN-013
+    limitations:
+    - 只检查计划；没有运行任何实现验收
+  created_at: '2026-09-19T14:44:01Z'
+  updated_at: '2026-09-19T14:44:01Z'
+- id: TASK-014
+  title: 冻结行为契约和最小回归案例
+  kind: task
+  phase: engineering-spec
+  goal: 把四项目标转为不需实现者猜测的行为契约
+  status: done
+  authority: B
+  risk: medium
+  tags:
+  - workflow-optimization
+  - approved-implementation
+  related_business_logic:
+  - BL-WFOPT-001
+  - BL-WFOPT-002
+  - BL-WFOPT-003
+  - BL-WFOPT-004
+  related_decisions:
+  - DEC-006
+  depends_on:
+  - TASK-013
+  inputs:
+  - .project-log/docs/workflow-optimization-task-plan.md
+  - 前置任务的已验证产物；按实施授权及 G1/G2 推进
+  outputs:
+  - .project-log/specs/workflow-optimization-contract.md
+  - 脱敏用例清单
+  plan:
+  - 计划验证：逐项对照四项业务草案和设计文档的十二类验收，标明未决语义。
+  - 只在用户后续要求开始且前置验收满足时执行；TASK-027 另需精确安装/迁移批准
+  done_when:
+  - 状态联动、快照冲突、分流、证据和旧规则兼容有明确预期
+  - 对照既有初始化/日志规则，需变更的语义先记录并批准，不静默覆盖
+  - 案例脱敏最小化，不复制整份论文或真实作者信息
+  verification:
+    status: passed
+    commands:
+    - Contract inspection of WF-1..4, twelve external fixture classes, compatibility and approval gates
+    - External linux-016-v1 package and project-record validation -> passed
+    evidence:
+    - CONTRACT-014
+    limitations:
+    - 契约验收不代表全部行为已实现；后续任务分别验证
+  result:
+    summary: null
+    changed_files: []
+    deviations: []
+    follow_ups: []
+- id: TASK-015
+  title: 修复 Git diff 字节绑定
+  kind: repair
+  phase: implementation
+  goal: 证据登记不再因系统文本解码失败
+  status: done
+  authority: B
+  risk: medium
+  tags:
+  - workflow-optimization
+  - approved-implementation
+  related_business_logic:
+  - BL-WFOPT-004
+  related_decisions:
+  - DEC-006
+  depends_on:
+  - TASK-014
+  inputs:
+  - .project-log/docs/workflow-optimization-task-plan.md
+  - 前置任务的已验证产物；按实施授权及 G1/G2 推进
+  outputs:
+  - runtime/scripts/loop_state.py 的最小修复
+  - Git 编码回归测试
+  plan:
+  - 计划验证：先复现原错误，再运行对应回归与既有 Loop 测试。
+  - 只在用户后续要求开始且前置验收满足时执行；TASK-027 另需精确安装/迁移批准
+  done_when:
+  - 非 UTF-8、数学字符、中文路径和二进制 diff 可登记
+  - 哈希基于原始 bytes，空 diff 与 Git 执行失败区分
+  - 保留文件绑定，非 Git 项目明确缺少提交上下文
+  verification:
+    status: passed
+    commands:
+    - External pre-fix-015 reproduces decoding and Git failure defects
+    - External launcher-016-v6 baseline 41 tests (1 skipped), binding 8 tests -> passed
+    - Independent reviewer-015/run-v2-20260919-232836 -> 28 passed
+    - External linux-016-v1 baseline and binding -> passed
+    evidence:
+    - BINDING-015
+    - REVIEW-015-FAILED
+    - REVIEW-015-V2
+    limitations:
+    - 首轮独立复核发现损坏引用误判，失败记录保留；修复后的第二轮通过
+  result:
+    summary: 原始 Git bytes 绑定，明确区分非 Git、unborn 与损坏仓库；外部回归和独立复核通过
+    changed_files:
+    - runtime/scripts/loop_state.py
+    deviations: []
+    follow_ups: []
+- id: TASK-016
+  title: 提供稳定的 Windows/Linux 解释器入口
+  kind: task
+  phase: implementation
+  goal: 框架命令始终通过明确配置的解释器执行
+  status: done
+  authority: B
+  risk: medium
+  tags:
+  - workflow-optimization
+  - approved-implementation
+  related_business_logic:
+  - BL-WFOPT-002
+  related_decisions:
+  - DEC-006
+  depends_on:
+  - TASK-014
+  inputs:
+  - .project-log/docs/workflow-optimization-task-plan.md
+  - 前置任务的已验证产物；按实施授权及 G1/G2 推进
+  outputs:
+  - Windows/Unix 薄入口与安装入口适配
+  - 解释器和参数转发测试
+  plan:
+  - 计划验证：Windows PowerShell 5.1/7 和 Linux 环境矩阵；无可用环境则记录未验证。
+  - 只在用户后续要求开始且前置验收满足时执行；TASK-027 另需精确安装/迁移批准
+  done_when:
+  - 配置存在时不依赖 py 或 python3 的 PATH 可用性
+  - 中文空格路径、参数转发和失效配置有明确行为，不静默切 WSL
+  - 首次安装 bootstrap 与运行期入口分开，保留现有 Conda 环境策略
+  verification:
+    status: passed
+    commands:
+    - External launcher-016-v13 -> baseline 41 tests (1 skip), binding 8, entry 13; source_unchanged true
+    - External linux-016-v4 -> 6 Unix entry checks and package/project checks passed
+    - Independent reviewer-016 REPORT-v3 final UTF8 -> Windows 42 passed 1 skip; Linux 41 passed 2 skips
+    - External ps5-016-v15 and powershell7-016-v3 -> each 16 entry tests passed; source_unchanged true
+    - Independent reviewer-016 followup REPORT-v4 -> 7 decisive methods with PS5 and PS7 subcases passed
+    evidence:
+    - LAUNCHERS-016-FINAL
+    - REVIEW-016-V3
+    - LAUNCHERS-016-PS57
+    - REVIEW-016-V4
+    limitations:
+    - 已测试 PS5 和外部便携 PS7.4.6；PS7 -File 带盘符等号参数存在宿主预拆限制，需分开传参；Linux 使用 WSL
+    - O016-01 原有安装器修复策略仍未批准改变，单独记为 Q-001；本验收不包含真实安装/迁移
+  result:
+    summary: 原生薄入口、精确参数传递、UTF8、统一解释器配置通过外部回归和限域独立复核
+    changed_files:
+    - runtime/vibe.ps1
+    - runtime/vibe.sh
+    - runtime/scripts/vibe_python.ps1
+    - runtime/scripts/vibe_python.sh
+    - scripts/bootstrap_vibe_python.py
+    - install.ps1
+    - install.sh
+    - update.ps1
+    - update.sh
+    - uninstall.ps1
+    - uninstall.sh
+    - .gitattributes
+    - docs/USAGE.md
+    deviations: []
+    follow_ups: []
+- id: TASK-017
+  title: 验证最小事务状态原型
+  kind: spike
+  phase: solution-research
+  goal: 在隔离环境证明 SQLite 事务闭环并保留单文档对照
+  status: done
+  authority: B
+  risk: high
+  tags:
+  - workflow-optimization
+  - approved-implementation
+  related_business_logic:
+  - BL-WFOPT-001
+  - BL-WFOPT-002
+  related_decisions:
+  - DEC-006
+  depends_on:
+  - TASK-014
+  inputs:
+  - .project-log/docs/workflow-optimization-task-plan.md
+  - 前置任务的已验证产物；按实施授权及 G1/G2 推进
+  outputs:
+  - 隔离状态原型
+  - 事务故障与对照报告
+  plan:
+  - 计划验证：临时目录故障注入、两个写者冲突、重复请求及分规模对照。
+  - 只在用户后续要求开始且前置验收满足时执行；TASK-027 另需精确安装/迁移批准
+  done_when:
+  - begin-block-resume-finish 同步更新 Task 与 Run
+  - 同 command_id 重试幂等，载荷变化与旧 revision 明确冲突
+  - 强杀或异常不产生半状态；编译和哈希计算不占用写事务
+  - 与单文档对照记录延迟、调用数、恢复行为，不接管真实项目
+  verification:
+    status: passed
+    commands:
+    - External prototype/runs/windows-018-v2 -> 32 state checks and benchmark passed
+    - External prototype/runs/linux-018-v2 -> same 32 state checks and benchmark passed
+    - External prototype/runs/windows-g1fix-v1 and linux-g1fix-v1 -> repaired state 32/32 passed on both
+    - Independent reviewer-g1/results-v2.json -> old 2/2 negative controls and new 8/8 case groups passed
+    evidence:
+    - PROTOTYPE-017
+    - REVIEW-G1-FAILED
+    - REVIEW-G1-V2
+    - PROTOTYPE-G1-FIX
+    limitations:
+    - 仅原型验收；强杀不是断电测试；Linux 使用 WSL 的 /mnt/d，不代表原生 ext4 性能
+    - SQLite 原型仍序列化单个状态文档，不可直接当成生产存储；独立 G1 待完成
+    - G1-F02 回执污染已通过限定独立复核；不据此宣称完成全部生产语义或自动迁移
+  result:
+    summary: 两个隔离后端通过状态联动、重试幂等、双写者和强杀恢复；38/500/2000 条合成任务对照已保留
+    changed_files:
+    - D:/Project/vibe-coding-validation/prototype/state_store.py
+    - D:/Project/vibe-coding-validation/prototype/test_state_store.py
+    - D:/Project/vibe-coding-validation/prototype/benchmark_store.py
+    deviations: []
+    follow_ups: []
+- id: TASK-018
+  title: 验证 Git 快照交换原型
+  kind: spike
+  phase: solution-research
+  goal: 本机事务存储可安全跨副本和分支交换
+  status: done
+  authority: B
+  risk: high
+  tags:
+  - workflow-optimization
+  - approved-implementation
+  related_business_logic:
+  - BL-WFOPT-001
+  - BL-WFOPT-002
+  related_decisions:
+  - DEC-006
+  depends_on:
+  - TASK-017
+  inputs:
+  - .project-log/docs/workflow-optimization-task-plan.md
+  - 前置任务的已验证产物；按实施授权及 G1/G2 推进
+  outputs:
+  - 快照交换原型
+  - 双副本与分支故障报告
+  plan:
+  - 计划验证：两个临时 Git 仓库和工作树，覆盖导出/导入/冲突/中断往返。
+  - 只在用户后续要求开始且前置验收满足时执行；TASK-027 另需精确安装/迁移批准
+  done_when:
+  - 导出导入保留实体 ID、关联、未知字段与版本来源
+  - 双副本同时修改或未知基线拒绝覆盖，保留双方
+  - 分支 A-B-A、未导出变更和 manifest 发布失败均可恢复
+  - 不将本机 revision 大小当跨机器先后顺序，不提交数据库二进制
+  verification:
+    status: passed
+    commands:
+    - External prototype/runs/windows-018-v2 -> 12 real Git exchange checks passed
+    - External prototype/runs/linux-018-v2 -> same 12 real Git exchange checks passed
+    - External prototype/runs/windows-g1fix-v1 and linux-g1fix-v1 -> repaired exchange 19/19 passed on both
+    - Independent reviewer-g1/results-v2.json -> old 2/2 negative controls and new 8/8 case groups passed
+    evidence:
+    - PROTOTYPE-018
+    - REVIEW-G1-FAILED
+    - REVIEW-G1-V2
+    - PROTOTYPE-G1-FIX
+    limitations:
+    - 仅受控原型；外部任意 git checkout 与快照发布并非一个可控事务，独立 G1 正在检查此边界
+    - 全量 immutable 快照保留策略尚未用于生产，不声称其长期空间成本已解决
+    - G1-F01 分支错配已通过限定独立复核；生产采用协作 Git 锁和遗留锁恢复边界仍待 Q-002 批准
+  result:
+    summary: 双副本、分支 A/B/A、worktree、脏状态冲突与 manifest 中断恢复通过外部检查；不覆盖真实数据
+    changed_files:
+    - D:/Project/vibe-coding-validation/prototype/snapshot_exchange.py
+    - D:/Project/vibe-coding-validation/prototype/test_snapshot_exchange.py
+    deviations: []
+    follow_ups: []
+- id: TASK-019
+  title: 独立评估原型并确定生产后端
+  kind: research
+  phase: verification
+  goal: 给出 G1 go/no-go 决定，防止未经验证进入生产改造
+  status: done
+  authority: B
+  risk: high
+  tags:
+  - workflow-optimization
+  - approved-implementation
+  related_business_logic:
+  - BL-WFOPT-001
+  - BL-WFOPT-002
+  related_decisions:
+  - DEC-006
+  depends_on:
+  - TASK-017
+  - TASK-018
+  blocked_by_questions: []
+  inputs:
+  - .project-log/docs/workflow-optimization-task-plan.md
+  - 前置任务的已验证产物；按实施授权及 G1/G2 推进
+  outputs:
+  - 原型独立评审
+  - G1 后端选择记录
+  plan:
+  - 计划验证：独立 reviewer 复核并重放关键故障；审阅实测而非估计性能。
+  - 只在用户后续要求开始且前置验收满足时执行；TASK-027 另需精确安装/迁移批准
+  done_when:
+  - 非实现者审核事务、Git 往返、恢复和成本证据
+  - 明确 SQLite 是否满足约束及与单文档相比的代价
+  - 失败不继续生产改造；改变已认可方向须重新决定
+  - 无独立 reviewer 时标明未通过独立验收，不能自审冒充
+  verification:
+    status: passed
+    commands:
+    - Independent reviewer-g1/reproduce.py -> 2 confirmed defects, NO-GO
+    - External windows-g1fix-v1 -> 32 state and 19 exchange checks passed after remediation
+    - External linux-g1fix-v1 -> 32 state and 19 exchange checks passed after remediation
+    - Independent reviewer-g1/results-v2.json -> 8/8 repaired case groups, 2/2 old negative controls
+    evidence:
+    - REVIEW-G1-FAILED
+    - REVIEW-G1-V2
+    - PROTOTYPE-G1-FIX
+    limitations:
+    - G1 只放行生产实施，不代表 TASK-020 生产代码验收；独立修复复核为 Windows，Linux 由主代理另行验证
+  result:
+    summary: 原始 NO-GO 保留，修复后限定 GO；用户批准 Q-002 后采用 DEC-007 边界，放行 TASK-020 外部隔离实施与验证
+    changed_files:
+    - .project-log/specs/TASK-020.md
+    - .project-log/architecture/architecture.yaml
+    deviations: []
+    follow_ups: []
+- id: TASK-020
+  title: 统一状态操作和自动摘要闭环
+  kind: task
+  phase: implementation
+  goal: Agent 一次提交业务操作即可得到一致状态与可恢复摘要
+  status: done
+  authority: B
+  risk: high
+  tags:
+  - workflow-optimization
+  - approved-implementation
+  related_business_logic:
+  - BL-WFOPT-001
+  - BL-WFOPT-002
+  related_decisions:
+  - DEC-006
+  depends_on:
+  - TASK-015
+  - TASK-016
+  - TASK-019
+  blocked_by_questions: []
+  spec_ref: .project-log/specs/TASK-020.md
+  inputs:
+  - .project-log/docs/workflow-optimization-task-plan.md
+  - 前置任务的已验证产物；按实施授权及 G1/G2 推进
+  outputs:
+  - 统一状态服务与兼容 CLI
+  - 统一入口对应的 Hooks/Skills/安装器源码适配
+  - 自动摘要与恢复测试
+  plan:
+  - 计划验证：事务提交前后、摘要中断与重复调用集成测试；旧入口兼容回归。
+  - 只在用户后续要求开始且前置验收满足时执行；TASK-027 另需精确安装/迁移批准
+  done_when:
+  - 统一 begin/block/finish 服务与跨对象转换，禁止旧 Goal 自动兜底
+  - command_id 和 revision 生效，摘要失败可补生成而不重复记账
+  - 旧 vibe/loopctl 入口适配统一服务，旧 YAML 不继续独立写入
+  - 自动摘要带来源和版本；策略/证据未接入前不对真实严格任务开放完成
+  verification:
+    status: passed
+    commands:
+    - External state020-v5 -> 25 Windows tests and 38/500/2000 bounded-query benchmark passed
+    - External linux/state020-v3 -> 25 methods, 24 passed and 1 Windows-only skip; package/project passed
+    - External state020-crashes-v1 Windows/Linux -> 3 process-kill checks each passed
+    - Independent reviewer-020 v4 -> three confirmed adapter defects; v5a -> 23/23 pass after repair
+    - External state020-post-state -> 33 Windows tests including local-sequence/origin separation and tamper detection
+    - External state020-exchange-v5 -> 9 Windows two-clone round-trip, divergence, history-rewrite, foreign-identity, lock and hard-kill checks
+    - External linux/state020-exchange-v1 -> same 9 exchange methods passed on WSL Ubuntu
+    - External state020-post-regression and state020-post-metadata -> legacy baseline, Git binding, launcher and metadata checks passed
+    - External state027-d4-state -> 39 Windows state tests including in-place repair of missing generated view files and rejection of tampered view bytes
+    - External state027-d4-exchange -> 15 Windows exchange tests including ghost-entity, receipt-disagreement and pending-export-acceptance rejection
+    - Falsification probe -> the three new D1-D3 regression tests fail against a reverted copy of the fix, so they are load-bearing
+    - External reviewer-020b -> independent verification of snapshot 17c1fca9 raised D1-D4 code defects and D5-D9 record drift (204/213 assertions passed)
+    evidence:
+    - STATE020-SLICE
+    - REVIEW-STATE020-V5
+    limitations:
+    - 跨分支上下文迁移由 TASK-025 覆盖；本任务自身的存储/摘要与交换两个切片在冻结版本上通过
+    - 账本与实体一致性审计已实现并与导入共用同一重放（Store._verify_ledger）；剩余审计边界为复核报告记录的三项（区间内 created_sequence、自由文本 title/extensions、base_snapshot 替换）
+    - 交换切片已完成两轮独立复核：首轮 reviewer-020b 报出 D1-D9 并全部修复，复审 reviewer-020d 用未修改的首轮脚本复验为对抗 41/41、强杀 38/38（证据见 docs/workflow-optimization-cross-platform-acceptance.md）
+    - 独立复核为 Windows；Linux 与进程强杀由主代理另行验证；未真实安装迁移
+  result:
+    summary: 新格式按实体事务、统一命令与只读恢复、同版本摘要、旧写入隔离，以及本机序号/原始回执分离和显式 Git 快照交换已实现；每轮失败保留后修复并验证。已在冻结版本上通过跨平台验收，证据见 docs/workflow-optimization-cross-platform-acceptance.md。
+    changed_files:
+    - runtime/scripts/state_store.py
+    - runtime/scripts/state_views.py
+    - runtime/scripts/state_context.py
+    - runtime/scripts/state_exchange.py
+    - runtime/scripts/vibe.py
+    - runtime/scripts/loopctl.py
+    - runtime/hooks/hook_common.py
+    - runtime/hooks/post_tool_use.py
+    - docs/USAGE.md
+    - .gitattributes
+    deviations:
+    - 首切片仅实验性新项目，生成视图放数据库旁而非覆盖用户 Markdown；交换入口已通过 vibe.py 子命令提供并写入 USAGE.md
+    follow_ups:
+    - .project-log/specs/TASK-020-exchange-followup.md
+- id: TASK-021
+  title: 落地前置风险分流和最小上下文
+  kind: task
+  phase: implementation
+  goal: 简单任务少留痕但不降低必要验证
+  status: done
+  authority: B
+  risk: medium
+  tags:
+  - workflow-optimization
+  - approved-implementation
+  related_business_logic:
+  - BL-WFOPT-003
+  related_decisions:
+  - DEC-006
+  depends_on:
+  - TASK-020
+  inputs:
+  - .project-log/docs/workflow-optimization-task-plan.md
+  - 前置任务的已验证产物；按实施授权及 G1/G2 推进
+  outputs:
+  - 任务风险策略
+  - 对应全局规则与 Skills 的分流指令适配
+  - 按任务查询上下文接口
+  - 三类任务分流测试
+  plan:
+  - 计划验证：文本微调、普通缺陷、公式/投稿修改对照，统计读写次数和上下文字节。
+  - 只在用户后续要求开始且前置验收满足时执行；TASK-027 另需精确安装/迁移批准
+  done_when:
+  - quick/standard/strict 输出理由、最低验证与升级条件
+  - 先分类后按需读取，无需全量事件恢复当前任务
+  - 低风险任务仅精简记录和相关验证；范围变化触发重评
+  - 上下文预算不静默截断阻塞、安全或必要用户约束
+  verification:
+    status: passed
+    commands:
+    - External state021-final-routing -> 16 routing policy and bounded-context tests passed
+    - External state021-final-metadata -> package, project and loop validation passed
+    - External state027-frozen-routing -> 17 routing and bounded-context tests passed on Windows and on WSL Ubuntu
+    - External reviewer-021 probe -> 8/8 after fixes; the context package now reports its true serialized size and never exceeds the budget (R6)
+    evidence:
+    - ROUTING-021
+    limitations:
+    - 分流是策略与接口；三类任务对照已给出策略与最低验证差异，但尚无真实论文任务对照的读写次数/耗时统计
+    - 若存储层在后续复核中再发现缺陷，本任务依赖存储读取的部分需重新验证
+  result:
+    summary: 已实现确定性分流策略（quick/standard/strict 及理由、最低验证、必须记录、升级条件）、保守路径推断、按任务的有界上下文包，并把分流规则写入全局提示词与 a-engineering-landing/a-verification。
+    changed_files:
+    - runtime/scripts/state_routing.py
+    - runtime/scripts/vibe.py
+    - runtime/scripts/validate_package.py
+    - prompts/vibe-global-agent.md
+    - skills/a-engineering-landing/SKILL.md
+    - skills/a-verification/SKILL.md
+    deviations:
+    - 分流结论由 state-route 输出并要求随任务记录，但存储层尚未强制校验任务的 routing 声明与策略一致
+    follow_ups:
+    - 真实任务对照统计读写次数与上下文字节，验证 quick 确实显著降低开销
+- id: TASK-022
+  title: 建立版本化证据与基础指纹
+  kind: task
+  phase: implementation
+  goal: 明确历史验证结果与当前适用性并解释跨平台差异
+  status: done
+  authority: B
+  risk: medium
+  tags:
+  - workflow-optimization
+  - approved-implementation
+  related_business_logic:
+  - BL-WFOPT-004
+  related_decisions:
+  - DEC-006
+  depends_on:
+  - TASK-020
+  inputs:
+  - .project-log/docs/workflow-optimization-task-plan.md
+  - 前置任务的已验证产物；按实施授权及 G1/G2 推进
+  outputs:
+  - 证据模型及指纹模块
+  - 旧/新证据转换规则
+  - 指纹与选择器回归
+  plan:
+  - 计划验证：EV-069 类最小样本、旧 PDF、缺失文件、非 Git 和未跟踪输入。
+  - 只在用户后续要求开始且前置验收满足时执行；TASK-027 另需精确安装/迁移批准
+  done_when:
+  - result 与 applicability 分离，历史通过不自动背书当前文件
+  - raw-file、显式 text-lf 与 JSON 字段选择器有可重复的版本规则
+  - 保留原始 hash；不删除数学符号、任意空白或二进制差异
+  - 缺失路径、旧 PDF、CRLF 与真正内容变化分别处理
+  verification:
+    status: passed
+    commands:
+    - External state022-evidence-v2 -> 15 selector, applicability and legacy-conversion tests passed
+    - External state027-frozen-evidence -> 20 selector, applicability, legacy-conversion and binding-preservation tests passed on Windows and on WSL Ubuntu
+    - External reviewer-021 probe -> 11/11 after fixes; an unevaluable selector can no longer be reported current, and non-JSON-compliant fields or malformed selectors raise a defined StateError (E3/E4/E5)
+    evidence:
+    - EVIDENCE-022
+    limitations:
+    - 尚未把新证据模型写入真实 .project-log/evidence 索引，也未迁移历史 69 条证据（TASK-025/027）
+  result:
+    summary: 已实现 result 与 applicability 分离的证据模型、raw-file/text-lf/json-field 三种可复现选择器、旧证据无损转换规则，以及独立性汇总；text-lf 对二进制显式报错而不是归一化。
+    changed_files:
+    - runtime/scripts/state_evidence.py
+    - runtime/scripts/vibe.py
+    - runtime/scripts/validate_package.py
+    deviations:
+    - 旧证据索引文件未改写；转换是纯函数，实际迁移留给 TASK-025
+    follow_ups:
+    - 用真实论文项目的 69 条历史证据做一次转换与适用性抽样核对
+- id: TASK-023
+  title: 实现依赖失效和完成前复核
+  kind: task
+  phase: implementation
+  goal: 既减少无关 stale，也避免 Hook 漏检造成伪有效
+  status: done
+  authority: B
+  risk: medium
+  tags:
+  - workflow-optimization
+  - approved-implementation
+  related_business_logic:
+  - BL-WFOPT-004
+  related_decisions:
+  - DEC-006
+  depends_on:
+  - TASK-022
+  inputs:
+  - .project-log/docs/workflow-optimization-task-plan.md
+  - 前置任务的已验证产物；按实施授权及 G1/G2 推进
+  outputs:
+  - 证据依赖与失效服务
+  - Hooks 提示适配
+  - 门禁复核测试
+  plan:
+  - 计划验证：有/无 Hook 的相同改动给出一致结论，并测大文件检查成本。
+  - 只在用户后续要求开始且前置验收满足时执行；TASK-027 另需精确安装/迁移批准
+  done_when:
+  - 按输入反向索引传播变化，不单凭路径交集全部失效
+  - 图注变化保留计算证据但重查相关渲染/布局
+  - 手工编辑、shell 写入、Git checkout 可被完成门禁发现
+  - 依赖缺失、循环、选择器失配和验证期间变化保守报告
+  verification:
+    status: passed
+    commands:
+    - External state023-gate-v2 -> 13 reverse-index, precision, dependency and completion-gate tests passed
+    - External state023-metadata -> package, project and loop validation passed
+    - External state027-frozen-gate -> 29 reverse-index, dependency-propagation, precision, malformed-input and completion-gate tests passed on Windows and on WSL Ubuntu
+    - External reviewer-021 probe -> 17/17 after fixes; invalidation now propagates through depends_on transitively and cycle-safely (G15), and binary_input is classified as blocking (G17)
+    evidence:
+    - GATE-023
+    limitations:
+    - Hooks 尚未调用新门禁；当前是策略模块与 CLI，未接入 session/post-tool 流程
+    - 独立复核发现的问题已修复并复验（冻结版本 17/17）；Hooks 接入仍作为后续项保留（验收记录第 7 节 R-07），真实使用仍需 TASK-027
+  result:
+    summary: 已实现按输入反向索引的精确失效（json-field 命中才失效、仅路径前缀相同不失效）、依赖缺失/循环/选择器失配的保守报告，以及会重新指纹化覆盖输入并检测"验证期间被改动"的完成门禁。
+    changed_files:
+    - runtime/scripts/state_gate.py
+    - runtime/scripts/vibe.py
+    - runtime/scripts/validate_package.py
+    deviations:
+    - 门禁暂以显式 CLI/模块调用为准，Hooks 接入留给后续适配
+    follow_ups:
+    - 把 state-gate-invalidate 接入 PostToolUse，使有/无 Hook 的相同改动结论一致
+- id: TASK-024
+  title: 落实严格任务独立复核门禁
+  kind: task
+  phase: implementation
+  goal: 严格任务的完成具有当前版本的真实独立复核依据
+  status: done
+  authority: B
+  risk: high
+  tags:
+  - workflow-optimization
+  - approved-implementation
+  related_business_logic:
+  - BL-WFOPT-003
+  - BL-WFOPT-004
+  related_decisions:
+  - DEC-006
+  depends_on:
+  - TASK-021
+  - TASK-023
+  inputs:
+  - .project-log/docs/workflow-optimization-task-plan.md
+  - 前置任务的已验证产物；按实施授权及 G1/G2 推进
+  outputs:
+  - review 记录接口和完成策略
+  - 复核身份/版本回归
+  plan:
+  - 计划验证：独立/同人/缺席/过期复核矩阵和 strict/quick 差异。
+  - 只在用户后续要求开始且前置验收满足时执行；TASK-027 另需精确安装/迁移批准
+  done_when:
+  - review 记录主体、覆盖验收、结果和被审版本
+  - 同实现者自审或过期 review 不满足独立完成门禁
+  - 缺少 reviewer 明确降级和等待授权，不伪造 review-completed
+  - 快速路径不因此被强制升级到全量独立审计
+  verification:
+    status: passed
+    commands:
+    - External state024-reviewgate-v2 -> 21 gate and independent-review tests passed
+    - External state027-frozen-gate -> 29 tests passed, including review coverage of every accepted artifact, task binding, and case/whitespace-insensitive reviewer identity
+    - External reviewer-021 probe -> 17/17 after fixes (G10 identity normalisation, G12 review coverage, G14 task binding)
+    evidence:
+    - REVIEW-GATE-024
+    limitations:
+    - 尚未接入真实子 Agent 委派流程；目前由调用方提供 reviewer/author 身份
+    - 严格门禁要求复核覆盖全部被验收产物并绑定任务；未绑定任务的严格判定会阻塞而不是放行
+  result:
+    summary: 严格任务的完成门禁要求存在覆盖当前输入的 review 记录；同实现者自审、未署名 reviewer 或已过期复核一律阻塞，串行降级被显式标注为 allowed-with-fallback 而不是当作独立复核。
+    changed_files:
+    - runtime/scripts/state_gate.py
+    - runtime/scripts/state_evidence.py
+    - runtime/scripts/vibe.py
+    deviations:
+    - 门禁以显式记录身份为准，不自动识别子 Agent 身份
+    follow_ups:
+    - 与 vibe-subagent-orchestration 对接，自动记录 reviewer 身份与 serial-role-fallback
+- id: TASK-025
+  title: 完成旧记录迁移预览和回退演练
+  kind: task
+  phase: implementation
+  goal: 迁移不丢历史，回退不覆盖新写入
+  status: done
+  authority: B
+  risk: high
+  tags:
+  - workflow-optimization
+  - approved-implementation
+  related_business_logic:
+  - BL-WFOPT-001
+  - BL-WFOPT-002
+  - BL-WFOPT-004
+  related_decisions:
+  - DEC-006
+  depends_on:
+  - TASK-020
+  - TASK-021
+  - TASK-023
+  - TASK-024
+  inputs:
+  - .project-log/docs/workflow-optimization-task-plan.md
+  - 前置任务的已验证产物；按实施授权及 G1/G2 推进
+  outputs:
+  - 导入导出与回退命令
+  - 隔离迁移/回退报告
+  plan:
+  - 计划验证：脱敏最小案例和临时副本往返、部分失败、新增写入后回退；不改原论文目录。
+  - 只在用户后续要求开始且前置验收满足时执行；TASK-027 另需精确安装/迁移批准
+  done_when:
+  - dry-run 输出冲突、缺失和不支持字段；不按 mtime 猜测业务事实
+  - 保留旧 ID、未知字段、原始来源与历史证据，不自动补成通过
+  - 旧格式写者遇新状态拒绝写入或走适配器
+  - 含迁移后新增记录的回退保全数据，不直接恢复旧备份
+  verification:
+    status: passed
+    commands:
+    - External state025-migrate-v1 -> 8 preview, conflict-detection and rollback-bundle tests passed
+    - External state025-metadata-v2 -> package, project and loop validation passed after the preview module was registered
+    - External state027-frozen-migrate -> 12 preview, conflict-detection, rollback-bundle and malformed-input tests passed on Windows and on WSL Ubuntu
+    - External reviewer-021 probe -> 12/12 after fixes; the rollback bundle now carries legacy decisions, questions and the active goal (M5), malformed legacy shapes are reported (M7), and a missing root fails closed (M8)
+    evidence:
+    - MIGRATE-025
+    limitations:
+    - 只做预演与回退包生成；没有对真实 .project-log 执行迁移，也未演练部分失败后的续跑
+    - 无命令信封的历史记录明确列为 unmappable，不生成伪回执
+    - 独立复核已完成一轮，发现的问题已修复并复验；真实迁移仍需 TASK-027 的目标级批准
+  result:
+    summary: 已实现迁移预演（冲突/缺失/不支持字段/unmappable 历史，不读 mtime）与无损回退包（逐字保留旧字段与旧证据，并纳入迁移后新记录，拒绝覆盖已存在目录）。
+    changed_files:
+    - runtime/scripts/state_migrate.py
+    - runtime/scripts/vibe.py
+    - runtime/scripts/validate_package.py
+    deviations:
+    - 迁移不在原目录就地改写；真实迁移动作仍需 TASK-027 的目标级批准
+    follow_ups:
+    - 演练部分失败后续跑与二次迁移幂等
+- id: TASK-026
+  title: 完成跨平台集成和发布评审
+  kind: task
+  phase: verification
+  goal: 形成可批准安装的集成验收包而非仅单元测试结果
+  status: done
+  authority: B
+  risk: high
+  tags:
+  - workflow-optimization
+  - approved-implementation
+  related_business_logic:
+  - BL-WFOPT-001
+  - BL-WFOPT-002
+  - BL-WFOPT-003
+  - BL-WFOPT-004
+  related_decisions:
+  - DEC-006
+  depends_on:
+  - TASK-025
+  inputs:
+  - .project-log/docs/workflow-optimization-task-plan.md
+  - 前置任务的已验证产物；按实施授权及 G1/G2 推进
+  outputs:
+  - 临时安装的 Hooks/Skills/安装器兼容验收记录
+  - 跨平台测试与独立发布评审
+  - G2 安装授权清单
+  plan:
+  - 计划验证：临时 CODEX_HOME 集成、真实 shell 启动、Git 交换、故障恢复与任务重放。
+  - 只在用户后续要求开始且前置验收满足时执行；TASK-027 另需精确安装/迁移批准
+  done_when:
+  - Windows 与 Linux 均有实际证据，缺环境明确 partial
+  - 临时安装的入口、Hooks、Skills、旧 CLI 与新策略一致
+  - 三类任务对照读写开销，状态和证据正确性不倒退
+  - 非实现者给出发布审核、剩余风险和回退可行性
+  verification:
+    status: passed
+    commands:
+    - External state027 Windows -> baseline 41+1skip, binding 8, launchers 16, state 39, crashes 3, exchange 15, routing 17, evidence 20, gate 29, migrate 12, integration 7 and metadata validation all passed
+    - External linux/runs/state027-linux-final -> the same suites on WSL Ubuntu (baseline 41+1skip, unix launchers 6, state 39+1skip), driver exit code 0
+    - External routing comparison -> the three-task comparison produces byte-identical case output on Windows and Linux (cases sha256 87e935121fa3807a5c0e6e76af6b6592dc279149ce12c049aa02d2d662fd8e6c)
+    evidence:
+    - CROSSPLATFORM-026
+    limitations:
+    - 真实安装与单项目试点仍未执行；TASK-027 需要用户对具体目标的明确批准
+    - 复核方的机器可读结论已完成；其中 reviewer-021 报出的一处记录缺陷（冻结摘要不可复现）已在验收记录第 1 节更正，两处探针自身的过期用例不影响已复验的产品行为
+    - 未覆盖 macOS、其他 Linux 发行版与网络文件系统
+  result:
+    summary: 已形成跨平台验收记录 .project-log/docs/workflow-optimization-cross-platform-acceptance.md：冻结版本（state027-frozen，摘要 8accc998…），Windows 与 Ubuntu 全部套件退出码 0，隔离安装、Hooks 与 Skill 指令一致性、旧格式兼容与分流一致性均有证据；结论为两平台可正常使用，真实安装与试点留待 TASK-027 授权。
+    changed_files:
+    - .project-log/docs/workflow-optimization-cross-platform-acceptance.md
+    deviations:
+    - 三类任务对照验证的是策略与最低验证差异，不是真实耗时统计
+    follow_ups:
+    - TASK-027 授权后执行真实安装与单项目试点，记录真实开销
+- id: TASK-027
+  title: 授权后安装并进行单项目试点
+  kind: task
+  phase: verification
+  goal: 在用户精确授权范围内验证真实使用收益
+  status: done
+  authority: C
+  risk: high
+  tags:
+  - workflow-optimization
+  - planned-not-started
+  related_business_logic:
+  - BL-WFOPT-001
+  - BL-WFOPT-002
+  - BL-WFOPT-003
+  - BL-WFOPT-004
+  related_decisions:
+  - DEC-006
+  depends_on:
+  - TASK-026
+  blocked_by_questions: []
+  inputs:
+  - .project-log/docs/workflow-optimization-task-plan.md
+  - 前置任务的已验证产物；按实施授权及 G1/G2 推进
+  outputs:
+  - 获批本机安装与单项目试点记录
+  - 试点验收或回退报告
+  plan:
+  - 计划验证：批准范围内新终端 smoke 与低风险/严格任务实测，必要时按验证过的流程回退。
+  - 只在用户后续要求开始且前置验收满足时执行；TASK-027 另需精确安装/迁移批准
+  done_when:
+  - 先确认安装目标、项目、备份与回退方式；无批准不得写全局配置或项目
+  - 新终端验证入口与 Hooks；旧格式项目用只读预演评估，不原地改写
+  - 保留试点前后记录，确认无数据丢失、无遗留旧写入口
+  - 试点记录开销和问题；不顺带批量改写或全局蒸馏
+  verification:
+    status: passed
+    commands:
+    - External task027-dryrun-v2 -> state-migrate-preview on a read-only copy of D:/Project/my_lunwen/.project-log：ready=true、0 冲突、0 缺失，任务 39 / 决策 17 / 问题 21 / 证据 69；源目录整树摘要前后一致（4d4c4f85…）
+    - External task027-dryrun-v2 -> 证据转换 69/69、0 错误，绑定保留 tasks 68 / requirements 19 / git_commit 67 / diff_hash 67，与旧文件非空计数逐项一致；220 个选择器全部带记录摘要
+    - External state028-doc-integration and state028-final-metadata -> integration 与 metadata 在 USAGE.md 文档改动后重跑退出码 0
+    - Global install -> global_installer.py install 退出码 0；verify 退出码 0（Global installation verification passed.）；运行时 116 文件且 loopctl.py 哈希与源码一致；AGENTS.md 含标记、任务分流与八荣八耻；Hooks 三个事件注册；MCP codegraph、marketplace vibe-global-toolbox、插件 vibe-toolbelt 0.4.1；skills 46→46
+    - Real-project pilot -> 对 D:/Project/my_lunwen 只读执行 status/validate/restore/state-migrate-preview/state-route/evaluate goal；运行前后 96 个文件清单逐项一致，未写入任何字节
+    - Real-project finding -> evaluate goal 返回 passed=false（SC-004 的 EV-019 已 stale，失效原因 PostToolUse:apply_patch；另有未决 C 级 Q-021），而目标文档标记 complete，即框架抓出假完成
+    evidence:
+    - MIGRATE-027-DRYRUN
+    - PILOT-027
+    limitations:
+    - 试点对真实项目只读；EV-019 的重新验证、Q-021 的答复与目标状态更正属于该项目自身决策，未代为执行
+    - 预演确认框架没有旧格式原地迁移 apply（state-init 遇已有 .project-log 报 migration_required），因此试点内容为“安装 + 旧格式兼容 + 按需只读预演”，不是“迁移 my_lunwen”
+    - 真实项目日志里的任务带 7 个新格式未知字段，未来若真的引入迁移 apply，需要先决定这些字段的映射或显式弃置
+    - Q-001（显式配置的 Python 不可用时安装器是否可改选命名 Conda 环境）仍未答复；本次安装使用现有已配置解释器，未触发该分支
+  result:
+    summary: 在用户批准下完成全局安装（运行时、AGENTS.md、Hooks、MCP、marketplace、插件、skills）并通过 verify；在真实项目上只读试点，未写入任何字节，框架成功恢复状态、给出 strict 分流结论，并抓出“目标标记 complete 但依赖证据 EV-019 已 stale 且存在未决 C 级 Q-021”的假完成。
+    changed_files: []
+    deviations:
+    - 试点为只读：真实项目记录未被修改，假完成与 stale 证据交由用户决定如何处理
+    follow_ups:
+    - 用户确认后重新验证 EV-019（重跑其覆盖命令并重新登记证据），并答复 Q-021 以解除 SC-004 阻塞
+- id: TASK-028
+  title: 修复 Run 切换丢失 Goal 绑定与 Task 重放
+  kind: repair
+  phase: implementation
+  goal: 切换 Run 时保留项目 Goal 绑定，并让强制重建能重放 Task
+  status: done
+  authority: B
+  risk: medium
+  tags:
+  - workflow-optimization
+  - approved-implementation
+  related_business_logic:
+  - BL-WFOPT-001
+  related_decisions:
+  - DEC-006
+  depends_on:
+  - TASK-020
+  blocked_by_questions: []
+  inputs:
+  - .project-log/loop/active-run.yaml
+  - .project-log/goals/active-goal.yaml
+  outputs:
+  - loop_state.start_run 的 Goal 绑定与 run-started 事件字段
+  - restore_active_run 的 task_id 重放
+  - 四项回归测试
+  plan:
+  - 计划验证：开放、已完成与缺失目标三种情形，以及强制重建后的 goal/task/phase 一致性。
+  done_when:
+  - start-run 后的 Run 与当前未完成的项目 Goal 绑定，不借用已完成目标
+  - 强制重建从 run-started 事件重放 goal_id、task_id 与 phase
+  - 既有 start-run 语义保持不变：原生 Goal 仍由 goal-bind 显式绑定
+  - Windows 与 Linux 回归套件保持通过
+  verification:
+    status: passed
+    commands:
+    - External state028-all -> baseline 45 run (44 passed + 1 skipped), binding 8, launchers 16 passed on Windows
+    - External state028-state/crashes/exchange/routing/evidence/gate/migrate/integration/metadata -> all exit 0 on Windows
+    - External linux/runs/state028-linux-wsl -> 14 checks exit 0 on WSL Ubuntu (platform=linux, loop_state.py 758eb362…)
+    - Falsification -> against the pre-fix loop_state.py (a24a2523…) the two binding tests fail while the two guard tests still pass, so 2 of 4 tests are load-bearing
+    evidence:
+    - RUNBIND-028
+    limitations:
+    - 原生 Goal 绑定仍由 loopctl goal-bind 显式建立；README 记录的 start-run → goal-bind 流程未改变
+    - 只修 legacy Loop Core；新格式状态服务不涉及
+    - 真实安装与单项目试点仍未执行（TASK-027）
+  result:
+    summary: start-run 现在把新 Run 绑定到状态为 draft/active/waiting-user/blocked 的项目 Goal，并在 run-started 事件中记录 goal_id 与 native_goal_binding；restore_active_run 从该事件重放 task_id，因此切换 Run 或强制重建都不再丢失 Goal/Task 关联。
+    changed_files:
+    - runtime/scripts/loop_state.py
+    - tests/test_loop_core.py
+    deviations:
+    - 未改动 native_goal 的既有重置语义，避免破坏 README 记录的显式 goal-bind 流程
+    follow_ups:
+    - 为 active-run 增加 waiting-user 状态的 CLI 入口，使“等待用户”不必用 handoff 表达
+- id: TASK-029
+  title: 让实时 Hook 按记录哈希做精确失效
+  kind: repair
+  phase: implementation
+  goal: 工具提到某路径但被覆盖文件字节未变时，不再误判证据失效
+  status: done
+  authority: B
+  risk: medium
+  tags:
+  - workflow-optimization
+  - approved-implementation
+  related_business_logic:
+  - BL-WFOPT-004
+  related_decisions:
+  - DEC-006
+  depends_on:
+  - TASK-022
+  - TASK-023
+  blocked_by_questions: []
+  inputs:
+  - runtime/hooks/post_tool_use.py
+  - runtime/scripts/loop_state.py
+  - .project-log/loop/evidence-index.yaml
+  outputs:
+  - 基于 version_binding.file_hashes 的失效判定
+  - 五项回归测试
+  plan:
+  - 计划验证：路径被提到但字节未变、字节被重写为相同内容、缺少记录哈希、文件被删除、路径未被覆盖。
+  done_when:
+  - 被覆盖路径的当前字节与记录哈希一致时，证据保持 candidate/valid
+  - 字节变化、文件缺失或缺少记录哈希时仍然判为 stale
+  - Windows 与 Linux 回归套件保持通过
+  verification:
+    status: passed
+    commands:
+    - External state029-baseline -> 50 run (49 passed + 1 skipped) on Windows, including the 5 new invalidation tests
+    - External state029-{binding,launchers,state,crashes,exchange,routing,evidence,gate,migrate,integration,metadata} -> all exit 0 on Windows
+    - External linux/runs/state029-linux-wsl -> 14 checks exit 0 on WSL Ubuntu (platform=linux)
+    - Falsification -> against the previous revision's loop_state.py the two "keeps the record current" tests fail while the three guard tests pass, so 2 of 5 tests are load-bearing
+    evidence:
+    - HOOKINVALIDATE-029
+    limitations:
+    - Hook 仍未调用 state_gate.invalidate；对 legacy 项目它用记录哈希做精确失效，对新格式项目仍只读短路，精确失效由门禁/CLI 在判定时执行（原 R-07 的分层边界不变）
+    - 判定依据是 version_binding.file_hashes；没有记录哈希的旧记录仍按“无法证明未变化”保守失效
+  result:
+    summary: loop_state.invalidate_evidence 不再按路径交集直接失效，而是要求被覆盖路径的当前字节与 version_binding.file_hashes 记录不一致（或文件缺失、缺少哈希）才判 stale，因此工具 payload 提到但未真正改动的文件不再误伤证据。
+    changed_files:
+    - runtime/scripts/loop_state.py
+    - tests/test_loop_core.py
+    deviations:
+    - 只改 legacy 失效路径；新格式证据模型与 state_gate 未改动
+    follow_ups:
+    - 若真实项目出现大量“有覆盖路径但无记录哈希”的旧证据，考虑一次性回填哈希
+- id: TASK-009
+  title: 限制归档脚本提交范围并记录知识库修复
+  kind: repair
+  phase: implementation
+  goal: 归档 vibe-coding 后修复归档脚本把知识库根 .project-log 及未提交学习记录一并提交的问题
+  status: done
+  authority: A
+  owner: agent
+  related_business_logic: []
+  depends_on: []
+  inputs:
+  - skills/a-project-log-archive/scripts/archive.py
+  - /home/tbl/Project/My_knowledge_base
+  outputs:
+  - skills/a-project-log-archive/scripts/archive.py
+  - .project-log 会话/任务/工作留痕
+  done_when:
+  - 归档提交只包含 工程记录/<project-name>
+  - 知识库根 .project-log 位置保持原样
+  - 验证与推送结果已记录
+  verification:
+    status: passed
+    commands:
+    - archive.py --project-root 实测
+    - git -C 知识库 status/log 核对
+    evidence:
+    - ARCHIVE-FIX-001
+    limitations:
+    - 未在其他项目重复执行归档脚本
+  result:
+    summary: 归档脚本 git add 范围收窄到 工程记录/<project-name>；知识库根 .project-log 已恢复并推送修复提交。
+    changed_files:
+    - skills/a-project-log-archive/scripts/archive.py
+    deviations: []
+    follow_ups:
+    - 下次归档其他项目时确认提交范围
+  created_at: '2026-08-16T18:05:00+08:00'
+  updated_at: '2026-08-16T18:05:00+08:00'
+- id: TASK-001
+  title: Audit installed Vibe Coding Codex framework
+  kind: task
+  phase: verification
+  goal: Verify the installed Vibe Coding Codex Global Core framework
+  status: done
+  authority: A
+  owner: agent
+  related_business_logic: []
+  depends_on: []
+  inputs:
+  - installed Codex configuration
+  - Vibe Workflow runtime
+  - release package
+  - test suite
+  outputs:
+  - audit evidence
+  - non-blocking environment issue list
+  done_when:
+  - installer, package validation, and unit tests pass
+  - Project Log, Loop Core, Hooks, Goal, and role rendering pass
+  - host issues are separated from framework issues
+  verification:
+    status: passed
+    commands:
+    - py -3 scripts/global_installer.py verify
+    - py -3 -m unittest discover -s tests -p test_*.py
+    - py -3 scripts/validate_project.py --root .
+    - py -3 scripts/validate_workflow.py --root .
+    evidence:
+    - AUDIT-001
+    - AUDIT-002
+    - AUDIT-003
+    - AUDIT-004
+    - AUDIT-005
+    - AUDIT-006
+    - AUDIT-007
+    - AUDIT-008
+    limitations:
+    - codex doctor reports a host npm/Zed package-path mismatch
+    - MCP was intentionally not installed
+- id: TASK-002
+  title: Expand Codex Skill routing and keep repository source-only
+  kind: task
+  phase: implementation
+  goal: Make high-value installed Skills discoverable through the global Agent route
+    table and stop tracking release archives
+  status: done
+  authority: A
+  owner: agent
+  related_business_logic: []
+  depends_on:
+  - TASK-001
+  inputs:
+  - prompts/vibe-global-agent.md
+  - skills directory
+  - existing release archives
+  outputs:
+  - expanded Skill route table
+  - source-only Git repository configuration
+  done_when:
+  - orchestration, research, context, workflow-maintenance, extraction, Skill-authoring,
+    plan-stress-test, and UX-audit routes are explicit
+  - every newly routed Skill has a local SKILL.md
+  - release archives are removed from Git tracking and ignored
+  - package validation and the standard-library test suite pass
+  verification:
+    status: passed
+    commands:
+    - py -3 runtime/scripts/validate_package.py --root .
+    - py -3 -m unittest discover -s tests -v
+    evidence:
+    - ROUTE-001
+    - ROUTE-002
+    - ROUTE-003
+    limitations:
+    - pytest is not installed in the current Python environment; unittest execution
+      passed
+  result:
+    summary: Added nine explicit Skill routes, removed tracked ZIP artifacts, and
+      added ZIP ignore rules
+    changed_files:
+    - prompts/vibe-global-agent.md
+    - .gitignore
+    - .project-log/tasks/task-list.yaml
+    - .project-log/current-session.md
+    deviations: []
+    follow_ups: []
+- id: TASK-003
+  title: 配置全局 Vibe Python 解释器并绑定 Hooks
+  kind: task
+  phase: implementation
+  goal: 让安装器在缺少全局配置时自动创建或修复 Conda/Miniforge/Miniconda 的 vibe-coding Python 3.11 环境，并让所有跨项目
+    Vibe Python 功能使用它。
+  status: done
+  authority: A
+  owner: agent
+  related_business_logic: []
+  depends_on:
+  - TASK-002
+  inputs:
+  - 用户的 Miniforge 环境 vibe-coding
+  - global_installer.py
+  - Codex config.toml
+  - 全局 Agent 提示词
+  outputs:
+  - CODEX_HOME/vibe-python 全局配置
+  - 绑定到配置解释器的 Hooks
+  - 自动 bootstrap/修复脚本
+  - 安装器和文档支持
+  done_when:
+  - 安装器优先读取 CODEX_HOME/vibe-python 或 VIBE_PYTHON
+  - 配置缺失时自动寻找 Conda/Miniforge/Miniconda 并创建 vibe-coding Python 3.11 环境
+  - 自动安装 runtime/scripts/requirements.txt
+  - 全局 Hooks 使用配置解释器，新项目无需单独设置
+  - 安装器验证和测试通过
+  verification:
+    status: passed
+    commands:
+    - /home/tbl/Project/vibe-coding/install.sh or update.sh bootstrap_vibe_python.py
+    - /home/tbl/miniforge3/envs/vibe-coding/bin/python runtime/scripts/validate_package.py
+      --root .
+    - /home/tbl/miniforge3/envs/vibe-coding/bin/python -m unittest discover -s tests
+      -p test_*.py -q
+    - /home/tbl/miniforge3/envs/vibe-coding/bin/python scripts/global_installer.py
+      verify --codex-home /home/tbl/.codex --without-mcp
+    - fresh project init/validate/restore and SessionStart/PreCompact hook smoke test
+    evidence:
+    - PYTHON-001
+    - PYTHON-002
+    - PYTHON-003
+    - PYTHON-004
+    limitations:
+    - PostToolUse 未单独执行真实写入工具回调；其脚本已包含在安装包测试和配置注册中。
+  result:
+    summary: 新增用户级 CODEX_HOME/vibe-python 与 VIBE_PYTHON 临时覆盖；安装/升级包装脚本会自动创建或修复 Conda
+      环境 vibe-coding、安装 runtime 依赖，并将全局 Hooks 绑定到 /home/tbl/miniforge3/envs/vibe-coding/bin/python3.11。
+    changed_files:
+    - scripts/global_installer.py
+    - tests/test_installer.py
+    - install.sh
+    - update.sh
+    - prompts/vibe-global-agent.md
+    - README.md
+    - AI_INSTALL.md
+    - scripts/bootstrap_vibe_python.py
+    deviations: []
+    follow_ups:
+    - 重启 Codex 会话以确保新的全局 config.toml Hooks 被重新加载。
+  created_at: '2026-07-27T10:09:55+08:00'
+  updated_at: '2026-07-27T10:09:55+08:00'
+- id: TASK-004
+  title: 建立可选 MCP catalog 并安装 CodeGraph
+  kind: task
+  phase: verification
+  goal: 让 Vibe Coding 安装器按需管理可选 MCP，并在 Codex 中启用 CodeGraph 工程代码图谱。
+  status: done
+  authority: A
+  owner: agent
+  related_business_logic: []
+  depends_on:
+  - TASK-003
+  inputs:
+  - scripts/global_installer.py
+  - runtime/scripts/validate_package.py
+  - Codex MCP 配置
+  - CodeGraph 1.5.0
+  outputs:
+  - runtime/mcp/optional-mcps.json
+  - 可重复的 --mcp NAME 安装参数
+  - CodeGraph Codex 配置
+  - 0.4.1 发布包
+  done_when:
+  - 新安装默认不强制安装可选 MCP
+  - --mcp codegraph 能配置并验证 Codex MCP
+  - 可选 MCP catalog 被纳入包校验与发布包
+  - 已有配置和 --without-mcp 行为不被静默破坏
+  verification:
+    status: passed
+    commands:
+    - /home/tbl/miniforge3/envs/vibe-coding/bin/python runtime/scripts/validate_package.py
+      --root .
+    - /home/tbl/miniforge3/envs/vibe-coding/bin/python -m unittest discover -s tests
+      -p test_*.py -q
+    - /home/tbl/miniforge3/envs/vibe-coding/bin/python build_release.py
+    - scripts/global_installer.py update --mcp codegraph --skip-doctor
+    - scripts/global_installer.py verify
+    - codex mcp list; codex mcp get codegraph; codegraph status /home/tbl/Project/lerobot_v1.0
+    evidence:
+    - MCP-001
+    - MCP-002
+    - MCP-003
+    - MCP-004
+    - MCP-005
+    limitations:
+    - 当前 Codex ACP 线程需要重启后才会在工具列表中暴露新 MCP；命令行配置和服务状态已验证。
+  result:
+    summary: 新增声明式可选 MCP catalog，默认核心安装；支持 --mcp 重复选择，CodeGraph 已安装并配置到当前 Codex；Vibe
+      Coding 升级为 0.4.1。
+    changed_files:
+    - runtime/mcp/optional-mcps.json
+    - scripts/global_installer.py
+    - runtime/scripts/validate_package.py
+    - tests/test_installer.py
+    - README.md
+    - AI_INSTALL.md
+    - AI_UPGRADE.md
+    - build_release.py
+    deviations: []
+    follow_ups:
+    - 重启 Codex 或 Zed ACP Thread，使 CodeGraph MCP 工具在新会话加载。
+  created_at: '2026-07-27T11:48:34+08:00'
+  updated_at: '2026-07-27T11:54:48+08:00'
+- id: TASK-005
+  title: 将源码驱动代码讲解 Skill 同步到 Vibe Coding 源码包
+  kind: task
+  phase: distillation
+  goal: 将已经在项目中验证的源码深读方法纳入 Vibe Coding 源码包，供后续项目和 Codex 会话复用
+  status: done
+  authority: A
+  owner: agent
+  related_business_logic: []
+  depends_on: []
+  inputs:
+  - /home/tbl/.codex/skills/b-source-code-tutoring/SKILL.md
+  - /home/tbl/.codex/skills/b-source-code-tutoring/agents/openai.yaml
+  - /home/tbl/.codex/skills/b-source-code-tutoring/references/teaching-template.md
+  - 用户确认的源码讲解方法
+  outputs:
+  - skills/b-source-code-tutoring/SKILL.md
+  - skills/b-source-code-tutoring/agents/openai.yaml
+  - skills/b-source-code-tutoring/references/teaching-template.md
+  - .project-log/evals/source-code-tutoring.yaml
+  done_when:
+  - Skill 已放入源码包的 skills 目录并通过包校验
+  - Skill 保持显式触发，不改变主 Agent 的自动路由
+  - 项目日志记录同步内容、验证证据和后续边界
+  verification:
+    status: passed
+    commands:
+    - /home/tbl/miniforge3/envs/vibe-coding/bin/python runtime/scripts/validate_package.py
+      --root .
+    - /home/tbl/miniforge3/envs/vibe-coding/bin/python -m unittest discover -s tests
+      -v
+    - /home/tbl/miniforge3/envs/vibe-coding/bin/python runtime/scripts/validate_project.py
+      --root .
+    evidence:
+    - skills/b-source-code-tutoring/SKILL.md
+    - .project-log/evals/source-code-tutoring.yaml
+    limitations:
+    - 未在新的独立代码库教学会话中完成端到端人工评测；已保留评测样例。
+- id: TASK-007
+  title: 修复项目日志结构与残留 Loop active run
+  kind: repair
+  phase: verification
+  goal: 恢复项目日志 YAML 可解析性，并清理没有对应项目目标的残留 active run
+  status: done
+  authority: A
+  owner: agent
+  related_business_logic: []
+  depends_on: []
+  inputs:
+  - .project-log/decisions/decision-log.yaml
+  - .project-log/verification/evidence.yaml
+  - .project-log/work-trace/trace.yaml
+  - .project-log/loop/active-run.yaml
+  outputs:
+  - DEC-003 补全 hypothesis/options
+  - 两个 YAML 文件恢复可解析
+  - 残留 active run 标记为 complete
+  done_when:
+  - validate_project.py --root . 通过
+  - loopctl validate 通过
+  - 单元测试与包校验保持通过
+  verification:
+    status: passed
+    commands:
+    - '.../runtime/scripts/validate_project.py --root .'
+    - '.../vibe-workflow/scripts/loopctl.py --root . validate'
+    - '.../runtime/scripts/validate_package.py --root .'
+    - '.../bin/python -m unittest discover -s tests -p test_*.py -q'
+    - runtime/hooks/session_start.py smoke with /home/tbl/Project/vibe-coding
+    evidence:
+    - LOG-REPAIR-001
+    limitations: []
+  result:
+    summary: 项目日志 schema、Loop 状态和 SessionStart 恢复视图均已修复并验证通过。
+    changed_files:
+    - .project-log/decisions/decision-log.yaml
+    - .project-log/verification/evidence.yaml
+    - .project-log/work-trace/trace.yaml
+    - .project-log/loop/active-run.yaml
+    - .project-log/loop/events.jsonl
+    - .project-log/loop/handoff.md
+    - .project-log/tasks/task-list.yaml
+    - .project-log/tasks/task-list.md
+    - .project-log/current-session.md
+    deviations: []
+    follow_ups: []
+  created_at: '2026-08-15T00:00:00+08:00'
+  updated_at: '2026-08-15T11:43:32+08:00'
+- id: TASK-008
+  title: 充实 docs/USAGE.md 用户使用指南
+  kind: task
+  phase: implementation
+  goal: 将现有简略使用指南扩展为覆盖安装、日常工作流、Loop 状态、验证、故障排查和归档的完整用户手册
+  status: done
+  authority: A
+  owner: agent
+  related_business_logic: []
+  depends_on: []
+  inputs:
+  - README.md
+  - AI_INSTALL.md
+  - AI_UPGRADE.md
+  - docs/USAGE.md
+  - prompts/vibe-global-agent.md
+  outputs:
+  - docs/USAGE.md
+  done_when:
+  - 用户可根据文档完成从安装到归档的完整流程
+  - 文档中的命令、状态和目录说明与当前实现一致
+  - 文档校验、包校验和测试通过
+  verification:
+    status: passed
+    commands:
+    - runtime/scripts/validate_package.py --root .
+    - runtime/scripts/validate_project.py --root .
+    - vibe-workflow/scripts/loopctl.py --root . validate
+    - python -m unittest discover -s tests -p test_*.py -q
+    - 'markdown structural check: fenced blocks balanced and referenced docs exist'
+    evidence:
+    - DOC-USAGE-001
+    limitations: []
+  result:
+    summary: 将 docs/USAGE.md 从简略流程说明扩展为完整用户手册，覆盖安装、项目初始化、端到端工作流、三套状态、决策权限、多客户端、MCP/cc-switch、常见操作、排障、安全边界和完成标准。
+    changed_files:
+    - docs/USAGE.md
+    deviations: []
+    follow_ups: []
+  created_at: '2026-08-15T20:00:00+08:00'
+  updated_at: '2026-08-15T12:05:00+08:00'
+- id: TASK-006
+  title: 固化项目初始化 a-project-init skill 与路由
+  kind: task
+  phase: implementation
+  goal: 将项目初始化流程（.project-log 现有链路 + AGENTS.md 建立/安全注入）固化为 a-project-init skill 并路由
+  status: done
+  authority: B
+  owner: agent
+  related_business_logic:
+  - BL-PROJECTINIT-001
+  - BL-PROJECTINIT-002
+  - BL-PROJECTINIT-003
+  - BL-PROJECTINIT-004
+  depends_on: []
+  inputs:
+  - 2026-08-15 项目初始化 skill 澄清结论
+  - runtime/scripts/init_project.py
+  - skills/ 目录与 SKILL.md 规范
+  - prompts/vibe-global-agent.md 路由表
+  outputs:
+  - skills/a-project-init/SKILL.md
+  - skills/a-project-init/templates/general-rules.md
+  - skills/a-project-init/scripts/init_project_agents.py
+  - tests/test_project_init.py
+  - prompts/vibe-global-agent.md 路由条目
+  - .project-log 原子/澄清/决策/任务/会话记录
+  done_when:
+  - 新建项目初始化同时就绪 .project-log 与 AGENTS.md
+  - 已有 AGENTS.md 只注入通用区且幂等，原内容保留
+  - 通用规则模板存于 skill 内部为唯一来源
+  - 路由表包含 a-project-init
+  - 单测通过
+  verification:
+    status: passed
+    commands:
+    - python3 -m unittest discover -s tests -p test_project_init.py -v
+    - python3 runtime/scripts/validate_package.py --root .
+    - python3 runtime/scripts/validate_project.py --root .
+    evidence:
+    - 'UNIT-PI-001: test_project_init.py 6 passed'
+    - 'SMOKE-PI-001: CLI 初始化创建 .project-log(62) + AGENTS.md，重跑幂等'
+    - 'VALID-PI-001: validate_package passed；validate_project 仅剩 4 个历史存量问题'
+    limitations:
+    - validate_project 仍有 4 个历史遗留问题（DEC-003 缺字段、evidence.yaml/trace.yaml YAML 解析），与本任务新增记录无关
+  created_at: '2026-08-15T10:20:00+08:00'
+  updated_at: '2026-08-15T10:40:00+08:00'
+- id: TASK-010
+  title: 固化 project-log 长文档组织约定到框架源码
+  kind: task
+  phase: implementation
+  goal: 将 current-session.md/progress.md 的最新在最上、头部快照、超限归档和单一事实源规则写进模板、Skills、文档并加回归测试
+  status: done
+  authority: B
+  owner: agent
+  related_business_logic: []
+  depends_on: []
+  inputs:
+  - /home/tbl/Project/boss_electrics/.project-log/docs/log-file-organization-task.md
+  - runtime/project-log-template/progress.md
+  - runtime/project-log-template/current-session.md
+  - skills/a-project-log/SKILL.md
+  - skills/a-project-log/REFERENCE.md
+  - skills/a-session-handoff/SKILL.md
+  - docs/USAGE.md
+  - prompts/vibe-global-agent.md
+  outputs:
+  - runtime/project-log-template/progress.md
+  - runtime/project-log-template/current-session.md
+  - skills/a-project-log/SKILL.md
+  - skills/a-project-log/REFERENCE.md
+  - skills/a-session-handoff/SKILL.md
+  - docs/USAGE.md
+  - prompts/vibe-global-agent.md
+  - tests/test_project_templates.py
+  done_when:
+  - 模板与规则文档明确四约定：最新在最上、头部快照、超限归档、单一事实源
+  - 明确归档路径 .project-log/docs/archive/ 与阈值
+  - 明确机器维护文件 loop/*、verification/evidence.yaml 不手工重排
+  - 回归测试覆盖模板关键约定
+  - 包校验、项目校验、Loop 校验与单元测试通过
+  verification:
+    status: passed
+    commands:
+    - python -m unittest discover -s tests -p 'test_*.py' -q
+    - python runtime/scripts/validate_package.py --root .
+    - python runtime/scripts/validate_project.py --root .
+    - vibe-workflow/scripts/loopctl.py --root . validate
+    evidence:
+    - DOC-CONV-001
+    limitations:
+    - 未修改 boss_electrics 现有项目日志；约定先通过框架模板与规则文档落地
+  result:
+    summary: 将 project-log 长文档组织四约定固化为模板、Skill、文档与回归测试；本仓库项目日志按新约定记录本次任务。
+    changed_files:
+    - runtime/project-log-template/progress.md
+    - runtime/project-log-template/current-session.md
+    - skills/a-project-log/SKILL.md
+    - skills/a-project-log/REFERENCE.md
+    - skills/a-session-handoff/SKILL.md
+    - docs/USAGE.md
+    - prompts/vibe-global-agent.md
+    - runtime/scripts/validate_package.py
+    - tests/test_project_templates.py
+    - .project-log/current-session.md
+    - .project-log/progress.md
+    deviations:
+    - 未将 current-session.md 中更早的既有历史会话区块整体重排，仅按最新在最上新增本次记录并补头部快照
+    follow_ups:
+    - 用户确认后提交并推送 main
+  created_at: '2026-08-20T10:00:00+08:00'
+  updated_at: '2026-08-20T17:45:00+08:00'
+- id: TASK-011
+  title: 将八荣八耻工作口诀加入通用 Agent 规则
+  kind: task
+  phase: implementation
+  goal: 把用户提供的八荣八耻口诀加入全局 Agent 提示与项目通用规则模板，并同步到当前 Codex
+  status: done
+  authority: B
+  owner: agent
+  related_business_logic: []
+  depends_on: []
+  inputs:
+  - 用户提供的八荣八耻口诀
+  - prompts/vibe-global-agent.md
+  - skills/a-project-init/templates/general-rules.md
+  outputs:
+  - prompts/vibe-global-agent.md
+  - skills/a-project-init/templates/general-rules.md
+  - ~/.codex/AGENTS.md
+  - ~/.codex/skills/a-project-init/templates/general-rules.md
+  done_when:
+  - 全局 Agent 提示包含八荣八耻
+  - 通用规则模板包含八荣八耻
+  - 当前 Codex 的 AGENTS.md 与已安装 skill 模板同步
+  - 包校验、项目日志校验与单元测试通过
+  verification:
+    status: passed
+    commands:
+    - python -m unittest discover -s tests -p 'test_*.py' -q -> 41 passed, 1 skipped
+    - python runtime/scripts/validate_package.py --root . -> Package validation passed
+    - python runtime/scripts/validate_project.py --root . -> Validation passed
+    - vibe-workflow/scripts/loopctl.py --root . validate -> passed
+    evidence:
+    - RULES-011
+    limitations:
+    - 已存在项目的 AGENTS.md 不自动重新注入；只有重新初始化会使用新模板
+  result:
+    summary: 将八荣八耻加入全局 Agent 提示与 a-project-init 通用规则模板，并通过安装器同步到当前 Codex；第 7 条按语义写为“以诚实无知为荣”。
+    changed_files:
+    - prompts/vibe-global-agent.md
+    - skills/a-project-init/templates/general-rules.md
+    - ~/.codex/AGENTS.md
+    - ~/.codex/skills/a-project-init/templates/general-rules.md
+    deviations:
+    - 用户原文第 7 条为“诚实无知为菜”，按八荣八耻句式修正为“诚实无知为荣”
+    follow_ups:
+    - 用户确认是否需要提交并推送 vibe-coding main
+  created_at: '2026-09-07T15:00:00+08:00'
+  updated_at: '2026-09-07T15:40:00+08:00'
+- id: TASK-030
+  title: 让 Python 引导原地修复显式解释器而不是静默换环境
+  kind: repair
+  phase: implementation
+  goal: 已显式配置的解释器不可用时，安装/更新不再静默改选命名 Conda 环境并重写配置
+  status: done
+  authority: B
+  risk: medium
+  tags:
+  - workflow-optimization
+  - user-approved-q001
+  related_business_logic:
+  - BL-WFOPT-002
+  related_decisions:
+  - DEC-008
+  depends_on:
+  - TASK-016
+  blocked_by_questions: []
+  inputs:
+  - scripts/bootstrap_vibe_python.py
+  - .project-log/business-logic/open-questions.yaml
+  outputs:
+  - 显式解释器的原地依赖修复与显式 opt-in 开关
+  - 四项回归测试
+  plan:
+  - 计划验证：配置解释器是 3.11+ 但缺依赖、pip 原地修复失败、VIBE_PYTHON 环境变量优先、配置路径不存在四种情形。
+  done_when:
+  - 已配置解释器是 Python 3.11+ 且只缺依赖时，把依赖装进该解释器并保持 vibe-python 配置不变
+  - 已配置解释器不是 3.11+ 或不可执行时明确报错，不创建也不改选 Conda 环境
+  - 只有显式 opt-in（VIBE_PYTHON_REPAIR=1 或 --repair-interpreter）才允许改选命名 Conda 环境并重写配置
+  - VIBE_PYTHON 环境变量优先时不重写配置文件，而是明确拒绝并说明原因
+  - Windows 与 Linux 回归套件保持通过
+  verification:
+    status: passed
+    commands:
+    - External task030c-baseline -> 55 run (54 passed + 1 skipped) on Windows, including
+      the 5 new bootstrap tests
+    - External task030c-{binding,launchers,state,crashes,exchange,routing,evidence,gate,migrate,integration,metadata}
+      -> all exit 0 on Windows on the frozen revision exports/task030-fix3 (33765c8d…)
+    - Ubuntu linux/runs/task030-linux-wsl4 -> 14 checks exit 0 (platform=linux, baseline
+      55 run / 54 passed / 1 skipped)
+    - Falsification vs state029-hook -> all 5 new tests fail; vs task030-fix2 -> the F1
+      (falsy VIBE_PYTHON_REPAIR) and F2 (missing-path hint) tests fail, so the two later
+      fixes are load-bearing as well
+    - Independent review reviewer-031 -> A1-A7 verified; findings F1/F2 fixed, F3/F4/F5
+      resolved at close-out
+    evidence:
+    - PYTHONHINT-031
+    - PLATFORM-031
+    - STATESLICE-030
+    limitations:
+    - opt-in 用环境变量 VIBE_PYTHON_REPAIR（只有 1/true/yes/on 生效）或 --repair-interpreter；
+      未改动 install/update 脚本的参数解析
+    - 只改安装/更新期的引导脚本；日常运行入口（vibe.ps1/vibe.sh）与 global_installer.py 的
+      fail-closed 行为未改动
+    - 覆盖 .project-log 记录文件的证据不会因每次日志编辑而重新失效；语义化证据范围仍是后续项
+    - TASK-031 重新锚定：PYTHONREPAIR-030 与 PLATFORM-030 已因覆盖对象变化转为 stale，由 PYTHONHINT-031 与
+      PLATFORM-031 接替（同一 `done_when` 在当前修订上重新验证）
+  result:
+    summary: bootstrap_vibe_python.py 不再把显式配置的解释器换成命名 Conda 环境：配置解释器是
+      Python 3.11+ 但缺 Vibe 依赖时改为原地安装依赖并保持配置不变；不是 3.11+ 或不可执行时明确报错并给出修复命令；
+      只有显式 opt-in 才允许改选 Conda 环境并重写配置；VIBE_PYTHON 环境变量优先时拒绝重写配置文件。
+    changed_files:
+    - scripts/bootstrap_vibe_python.py
+    - tests/test_installer.py
+    deviations:
+    - 用环境变量而非脚本参数做 opt-in，避免改动四个安装/更新脚本的参数解析
+    follow_ups:
+    - 若需要在 install/update 命令行直接传开关，再为四个脚本增加 --repair-interpreter 透传
+  created_at: '2026-09-21T09:35:00+08:00'
+  updated_at: '2026-09-21T10:50:00+08:00'
+- id: TASK-031
+  title: 让配置路径不可用时的引导错误给出可执行的出路
+  kind: repair
+  phase: implementation
+  goal: 引导脚本失败时的提示必须指向当前状态下真正能改变结果的命令
+  status: done
+  authority: B
+  risk: low
+  tags:
+  - workflow-optimization
+  - review-follow-up
+  related_business_logic:
+  - BL-WFOPT-002
+  related_decisions:
+  - DEC-008
+  depends_on:
+  - TASK-030
+  blocked_by_questions: []
+  inputs:
+  - scripts/bootstrap_vibe_python.py
+  outputs:
+  - 与当前状态一致的失败提示，或让 opt-in 在配置路径不可用时真正生效
+  plan:
+  - 计划验证：配置路径不存在、配置文件为空、VIBE_PYTHON 为空白字符串三种情形下，提示与实际可执行动作一致。
+  done_when:
+  - 提示里给出的变量或命令在该状态下确实能改变结果，否则不得提及
+  - 三种畸形配置各有独立回归测试
+  verification:
+    status: passed
+    commands:
+    - External task031-baseline2 -> 57 run (56 passed + 1 skipped) on Windows, including
+      the 7 bootstrap tests
+    - External task031-{binding,launchers,state,crashes,exchange,routing,evidence,gate,migrate,integration,metadata}
+      -> all exit 0 on the frozen revision exports/task031-fix (a309d075…)
+    - Ubuntu linux/runs/task031-linux-wsl -> 14 checks exit 0 (platform=linux)
+    - Falsification vs task030-fix3 -> exactly the two new tests fail (opt-in switching
+      on an unusable path, and the VIBE_PYTHON source hint); the five earlier bootstrap
+      tests still pass
+    - Independent review reviewer-031 (round 3) -> W1-W4/W6/W7 verified, verdict GO
+    evidence:
+    - PYTHONHINT-031
+    - PLATFORM-031
+    - GOALREVIEW-032
+    limitations:
+    - 提示文本按来源区分（VIBE_PYTHON 说“取消或修正环境变量”，配置文件说“修路径或 opt-in 切换”）；
+      不再声称 VIBE_PYTHON 覆盖配置文件（该解释只对旧实现成立）
+    - 无 Conda 时仍会在切换提示之后失败（reviewer-031 的 X2，低）；find_conda/env_python 接受
+      “退出码 0 但打印错误”的管理器（X3，低-中，先于本任务存在），已登记为 TASK-032
+  result:
+    summary: configured_python 改为返回 (interpreter, source, problem) 而不再抛异常，ensure_python
+      在“配置路径本身不可用”且显式 opt-in 时真正回落到命名 Conda 环境并重写配置；提示按来源给出可执行动作，
+      空白 VIBE_PYTHON 归因到环境变量而非配置文件。
+    changed_files:
+    - scripts/bootstrap_vibe_python.py
+    - tests/test_installer.py
+    deviations:
+    - 重定向了 test_bootstrap_refuses_to_rewrite_while_vibe_python_env_var_is_set 的一条断言：从字面词
+      “overrides” 改为可执行提示 Unset VIBE_PYTHON，并新增 assertNotIn("switching to Conda environment")
+    follow_ups:
+    - TASK-032：让 find_conda/env_python 拒绝“退出码 0 但打印错误”的管理器（reviewer-031 的 X3）
+  created_at: '2026-09-21T11:55:00+08:00'
+  updated_at: '2026-09-21T11:55:00+08:00'
+- id: TASK-032
+  title: 让 Conda 管理器探测拒绝“退出码 0 但打印错误”的结果
+  kind: repair
+  phase: implementation
+  goal: find_conda/env_python 不得把错误文本当成解释器路径，失败时给出原始诊断
+  status: done
+  authority: B
+  risk: low
+  tags:
+  - workflow-optimization
+  - review-follow-up
+  related_business_logic:
+  - BL-WFOPT-002
+  related_decisions:
+  - DEC-008
+  depends_on:
+  - TASK-030
+  - TASK-031
+  blocked_by_questions: []
+  inputs:
+  - scripts/bootstrap_vibe_python.py
+  outputs:
+  - 对管理器输出做有效性校验后的解释器解析
+  - 覆盖该分支的回归测试
+  plan:
+  - 计划验证：管理器以退出码 0 打印错误文本、以退出码 0 打印多行输出、以及正常打印路径三种情形。
+  done_when:
+  - 管理器以退出码 0 打印错误文本时，env_python 返回 None 而不是把文本当成路径
+  - 该情形下失败信息包含管理器原始输出，而不是原始 WinError/FileNotFoundError
+  - 三种情形各有独立回归测试
+  verification:
+    status: passed
+    commands:
+    - PY=$(cat "${CODEX_HOME:-$HOME/.codex}/vibe-python"); "$PY" -m unittest tests.test_installer.BootstrapInterpreterResolutionTests -v -> 4 passed
+    - PY=$(cat "${CODEX_HOME:-$HOME/.codex}/vibe-python"); "$PY" -m unittest discover -s tests -p 'test_*.py' -q -> Ran 61 tests, OK (skipped=1)
+    - Falsification on pristine e236fda (git archive to /tmp/vibe-falsify-1wth + new tests) -> 4/4 fail (1 failure + 3 errors)
+    evidence:
+    - CONDA-PROBE-032
+    limitations:
+    - 本机为 Linux；reviewer-031 报告的 D:\conda\Library\bin\conda.bat 现场未在本机复现，改用同语义的零退出码错误输出管理器
+    - 多行输出用例在修复前只是签名不匹配而失败，属于防回归守卫，不是缺陷复现
+  result:
+    summary: env_python 改为返回 (解释器, 管理器输出)，只在零退出码且最后一行确实指向已存在文件时才认作解释器；新增
+      probe() 让缺失或不可执行目标返回诊断而不是抛出 FileNotFoundError；ensure_python 的失败信息引用管理器原始输出。
+      来源：reviewer-031 的 X3（先于 TASK-030/031 存在）。
+    changed_files:
+    - scripts/bootstrap_vibe_python.py
+    - tests/test_installer.py
+    deviations: []
+    follow_ups:
+    - 旧格式记录中的 TASK-032 结果字段原为“未开始”占位，本次按实现结果改写
+  created_at: '2026-09-21T13:20:00+08:00'
+  updated_at: '2026-09-21T13:20:00+08:00'

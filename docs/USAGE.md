@@ -795,22 +795,30 @@ vibe 恢复。请读取项目根目录的 AGENTS.md、.project-log/current-sessi
 
 这套工作流的目标不是让 Agent 写更多文字，而是让每个重要决定、实现和结论都能被恢复、质疑和验证。
 
-## 14. 事务状态预览（仅隔离测试项目）
+## 14. 事务状态（format 2）与初始化
 
-TASK-020 正在分片实施。此入口不是已发布迁移工具，不用于现有论文项目或真实全局安装。旧格式项目继续使用原有行为；任何已有 `.project-log` 都会被预览初始化器拒绝，不自动迁移、不覆盖用户笔记。
+format 2 是框架的默认格式：新建项目直接生成新格式，不再需要实验开关。任何已有 `.project-log` 都不会被覆盖——初始化报告 `skipped` 并保持原样。存量旧格式项目在迁移窗口内继续可用，迁移路径见本节末尾。生产契约的冻结原文在框架仓库迁移后保存于 `.project-log/legacy/specs/framework-landing-contract.md`。
 
-在已经创建的空白测试目录中，通过配置好的原生 `vibe.ps1` / `vibe.sh` 入口调用：
+通过配置好的原生 `vibe.ps1` / `vibe.sh` 入口调用：
 
 ```text
---root <test-project> state-init --experimental
---root <test-project> state-apply --file <command.json>
---root <test-project> state-task TASK-001
---root <test-project> status
---root <test-project> state-views
---root <test-project> validate
+--root <project> init
+--root <project> status
+--root <project> validate
+--root <project> task begin|update|wait|resume|handoff|finish|cancel
+--root <project> record create|update|link
+--root <project> evidence record|invalidate|refresh
+--root <project> review record
+--root <project> gate --task TASK-001
+--root <project> goal update|complete --id GOAL-001
+--root <project> route --path <file> --signal <signal>
+--root <project> context TASK-001 --budget-bytes 4096
+--root <project> render
+--root <project> migrate preview|apply|resume|rollback
+--root <project> exchange status|export|import|finish|abandon
 ```
 
-例如 `command.json` 是 UTF-8 JSON，而不是需要跨 Shell 转义的内联字符串：
+需要脚本化或批量写入时，仍可使用底层统一信封。`command.json` 是 UTF-8 JSON，而不是需要跨 Shell 转义的内联字符串：
 
 ```json
 {
@@ -822,13 +830,21 @@ TASK-020 正在分片实施。此入口不是已发布迁移工具，不用于�
 }
 ```
 
-每个新的业务操作使用新的 `command_id` 和最近观察到的 `revision`。网络或调用中断后，重试原始信封（包括原始 revision），返回原回执；不能修改同一 ID 的载荷或 revision。`goal.create` 显式创建目标；任务不自动继承历史目标。支持 `task.begin`、`task.wait`、`task.resume`、`task.handoff`、`task.finish`、`task.cancel`。等待用户必须记录问题引用和恢复条件。`task.finish` 只到 `implemented-unverified`，不能凭 `proof_ref` 宣布完成；证据和独立审核关口尚未接入。
+每个新的业务操作使用新的 `command_id` 和最近观察到的 `revision`。网络或调用中断后，重试原始信封（包括原始 revision），返回原回执；不能修改同一 ID 的载荷或 revision。`goal.create` 显式创建目标；任务不自动继承历史目标。等待用户必须记录问题引用和恢复条件。
+
+新格式的结构化事实包括：
+
+- `records` / `record_links`：业务原子、需求基线、决策、架构、研究、对齐、复盘与蒸馏及其交叉引用；
+- `evidence`：证据状态、覆盖范围与产物哈希绑定；
+- `reviews`：任务级独立复核、结论与证据引用。
+
+长文档正文只放在 `.project-log/docs/**`，结构化记录只保存 `doc_ref`（路径与内容哈希）。`task.finish` 要求至少一条 `valid` 且覆盖该任务的证据；高风险任务还要求独立 `go` 复核。`goal.complete` 会逐条检查 `success_conditions`、`required_evidence` 与显式 `not-applicable` 理由。`evidence refresh` 会在覆盖文件字节变化后把证据写成 `stale`，旧证据不会被删除。
 
 新格式标记为 `.project-log/state-format.json`。Git 项目数据库位于该 worktree 的 Git 管理目录下，按项目 ID 和分支上下文隔离；非 Git 测试项目位于 `.project-log/.state/`。不会把 SQLite 文件加入 Git。初次切换到没有本地状态的分支会明确失败，而不是沿用另一分支的状态。跨副本同步只在显式执行 `state-export`/`state-import` 时发生，见下文“显式快照交换”；日常任务命令不会触发同步。普通操作不占用或清理 `index.lock`。
 
 自动摘要保存在数据库旁的 `generated` 目录。以 `CURRENT.json` 指向的同一版本为一组读取，校验项目、上下文、revision 和内容哈希；不逐文件猜测哪个版本更新。`current-session.md`、`progress.md` 和 `handoff.md` 是派生视图，不是另外三份事实源，也不覆盖项目中的同名用户笔记。投影失败时业务提交仍成立，返回 `projection: pending`，可用 `state-views` 修复，不需要再次登记业务操作。生成内容由 revision 唯一决定，因此生成目录里缺失的文件（含 `manifest.json`）会在下次 `state-views` 或 `state-export` 时原地补写，结果中的 `repaired` 列出补写的文件名；已存在但字节不同的文件属于篡改，仍然失败关闭（`projection_incomplete`），不会被静默覆盖。
 
-新格式下，`loopctl restore/status` 与启动 Hook 只读恢复，不创建旧 YAML，不逐次工具调用追加完成事件。旧写命令明确拒绝，改用统一信封。初始化中断、缺失数据库、无法识别的标记或遗留投影锁均需保留现场并调查；不要删除标记、数据库或锁来让旧入口接管。此预览尚未获得完整 TASK-020/G2 发布验收。
+新格式下，启动 Hook 与会话恢复从状态库读回目标、任务、阻塞、证据有效性与精确下一步；`PostToolUse` 只按记录哈希精确失效证据，不创建旧 YAML。旧写命令明确拒绝，并提示使用正式 `vibe` 入口。初始化中断、缺失数据库、无法识别的标记或遗留投影锁均需保留现场并调查；不要删除标记、数据库或锁来让旧入口接管。
 
 `.project-log/.state/` 是新格式保留的本机所有权目录，Git 项目也保留此目录用于防止格式标记丢失后回退到旧写入器。目录仍在而标记缺失时（包括切换到不含标记的旧分支），入口保守拒绝恢复，不自动补写旧 YAML；需要后续显式迁移/交换流程处理，不能通过删除目录绕过。Hook 从子目录启动时会识别上层新格式项目，路径别名也不能绕过旧写入保护。
 
@@ -868,23 +884,43 @@ TASK-020 正在分片实施。此入口不是已发布迁移工具，不用于�
 
 `state-export` 只有在快照真正发布并确认后才报告成功；如果交换已经完成、只是随后生成派生视图失败，命令返回 `projection_error`（而不是失败退出），指针与 `exported_local_revision` 已经更新，调用方不应据此重试导出。
 
-### 旧格式项目与迁移预演
+### 旧格式项目与显式迁移
 
-`state-init` 只用于**新建**测试项目。项目已经有 `.project-log` 时，它以 `migration_required`（`migration is not available`）明确拒绝，绝不原地改写现有记录。旧格式项目继续使用原有的 `loopctl` 记录链路；新格式入口对旧项目只做只读恢复并拒绝新格式写入。这条边界是有意的：新格式的实体与账本模型跟旧 YAML 不是一一对应，静默转换等于伪造历史，因此框架只提供“预演”，不提供自动 apply。
+`vibe init` 只用于**新建**项目：目标目录已有 `.project-log` 时报告 `skipped` 并保持原样，绝不原地改写现有记录。存量旧格式项目在迁移窗口内继续可用；要切到 format 2，必须显式执行迁移，不能通过删除标记或状态目录绕过。
 
-需要评估“这个项目迁移会怎样”时，用只读预演而不是先动数据：
+先只读预演：
 
 ```text
---root <project> state-migrate-preview                          # 只读：报告保留/冲突/缺失/无法映射的内容
---root <project> state-migrate-rollback --destination <dir>      # 生成逐字保留旧记录的回退包
+--root <project> migrate preview
 ```
 
-预演的行为：
+预演不读取文件修改时间，也不猜测业务事实。重复 ID、悬空引用、源摘要变化会阻止切换；未知任务字段、无法转换的旧证据、无法复现完成门禁的任务会进入 `.project-log/legacy/unmapped`，不中止迁移也不删除历史。
 
-- 不读取任何文件修改时间，也不猜测业务事实；
-- 冲突（缺失或重复 ID、未知任务状态）、缺失引用（任务依赖、问题、决策、运行任务）与未知任务字段分别列出；
-- 没有命令信封的历史记录归入 `unmappable_history`，不会为它们编造回执；
-- 旧证据按 `covers.files` 与 `version_binding.file_hashes` 转成 `raw-file` 选择器，并保留 `covers.tasks`、`covers.requirements`、`git_commit`、`diff_hash`；历史结论原样保留为 `passed` 或 `unknown`，不会因为转换就变成当前有效；
-- 预演是纯函数，不改动任何字节；回退包逐字保留旧字段、并拒绝覆盖已存在的目标目录。
+确认预演结果后执行：
 
-`state-migrate-rollback` 需要一个已存在的本机状态库（它把“迁移后新增的记录”也纳入回退包）。旧格式项目还没有状态库时，先用 `state-migrate-preview` 评估，不要直接改写 `.project-log`。
+```text
+--root <project> migrate apply --confirm <preview_hash>
+--root <project> migrate resume
+--root <project> migrate rollback [--destination <dir>]
+```
+
+`migrate apply` 先备份旧记录，再生成并校验新存储，最后原子切换标记、旧文件与状态库。迁移日志位于 `.project-log/.migration/journal.json`；中断后用 `migrate resume` 从日志继续。`migrate rollback` 恢复旧格式文件，并先把迁移后的新写入导出到 `.project-log/legacy/new-writes/bundle.json`，不会静默丢弃新记录。
+
+### 版本与 format 1 退役关口
+
+查看框架版本、默认格式与退役阶段状态：
+
+```text
+vibe version
+vibe --version
+```
+
+format 1 的退役分三步，**每一步都需要用户单独确认**，代理不得自行推进：
+
+| 阶段 | 支持范围变化 |
+|---|---|
+| `stop-writing` | `loopctl`/`vibe` 不再接受 format 1 写入；只读查询与迁移仍可用 |
+| `stop-reading` | `status`/`validate`/`restore` 不再解析 format 1；迁移工具仍可离线运行 |
+| `stop-support` | 移除迁移工具、旧模板与兼容代码 |
+
+在旧格式项目上，只读命令会输出 `legacy format: migrate with vibe migrate` 指引；旧格式写入在迁移窗口内仍然可用，但每次都会在 stderr 输出弃用提示。完整发布说明见 [RELEASE-NOTES.md](RELEASE-NOTES.md)。

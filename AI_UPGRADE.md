@@ -1,6 +1,9 @@
 # AI 升级指南
 
-适用于已经安装旧版 Vibe Coding Codex Global Core，需要升级到 0.4.1 的电脑。
+适用于已经安装旧版 Vibe Coding Codex Global Core，需要升级到 0.5.0 的电脑。
+
+本版本把新项目默认格式切到 format 2，并把 format 1 的退役分为“停止写入 / 停止读取 /
+停止支持”三个需要用户单独确认的关口。升级前先阅读 [docs/RELEASE-NOTES.md](docs/RELEASE-NOTES.md)。
 
 ## 升级保证
 
@@ -9,6 +12,8 @@
 - 旧 runtime 和 Skill 整树未修改时，可自动迁移到逐文件升级状态。
 - 用户本地修改不会被静默覆盖。
 - 项目 `.project-log/` 不参与全局升级和卸载。
+- format 1 项目升级后仍可读写，只读命令会给出 `migrate with vibe migrate` 指引；
+  迁移必须由项目自己显式授权，升级本身不迁移任何项目日志。
 
 ## 推荐给 AI 的指令
 

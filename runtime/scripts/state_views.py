@@ -78,10 +78,11 @@ def _render(snapshot: dict) -> dict[str, bytes]:
         receipt = entry["receipt"]
         result = receipt["result"]
         entity = result.get("task_id", result.get("goal_id"))
+        outcome = result.get("status", result.get("updated", "recorded"))
         progress.append(
             f"- Local {entry['local_sequence']} (origin {_display(receipt['context_id'])}"
             f"@{receipt['revision']}): {_display(receipt['action'])} / {_display(entity)} / "
-            f"{_display(result['status'])}; command {_display(receipt['command_id'])}"
+            f"{_display(outcome)}; command {_display(receipt['command_id'])}"
         )
     if not snapshot["history"]:
         progress.append("No commands accepted yet.")

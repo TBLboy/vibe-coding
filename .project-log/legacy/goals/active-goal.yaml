@@ -1,0 +1,55 @@
+schema_version: 1
+goal:
+  id: GOAL-002
+  statement: 把新框架（format 2）彻底落地为唯一默认：新项目默认生成新格式，新格式具备完整生命周期实体、证据与复核门禁和统一入口，旧格式停止写入并沿显式、无损、可回退的路线退役
+  status: active
+  risk_level: high
+  success_conditions:
+  - id: SC-001
+    statement: 无 .project-log 的项目默认初始化为 format 2，不再需要实验开关，旧格式不再作为默认产物
+    status: pending
+    evidence_refs: []
+  - id: SC-002
+    statement: format 2 可记录完整生命周期实体与关系，且旧格式写入入口 fail-closed，不产生第二份事实源
+    status: pending
+    evidence_refs: []
+  - id: SC-003
+    statement: 任务与目标完成由绑定证据和独立复核门禁裁决，产物变化使证据失效
+    status: pending
+    evidence_refs: []
+  - id: SC-004
+    statement: 旧格式迁移可显式执行且无损、可续跑、可回退，回退不丢弃迁移后的新写入
+    status: pending
+    evidence_refs: []
+  - id: SC-005
+    statement: CLI、Hooks、Skills、全局规则、模板与文档指向同一入口与同一事实源，存量旧格式项目的只读兼容与退役路线明确
+    status: pending
+    evidence_refs: []
+  - id: SC-006
+    statement: Windows（PowerShell 5.1/7）与 Linux/WSL，以及分支、worktree 与 Git 快照交换场景通过验收
+    status: pending
+    evidence_refs: []
+  - id: SC-007
+    statement: 独立验收与发布评审通过，测试在源码树之外执行，且 vibe-coding 自身日志迁移经显式授权完成
+    status: pending
+    evidence_refs: []
+  non_goals:
+  - 不改变 Vibe Coding 的业务语义、风险分级标准与 A/B/C 决策权限
+  - 不实现通用多主同步、常驻服务或远程协作后端
+  - 不删除历史证据或旧格式记录
+  - 不在未获授权时迁移真实用户项目
+  constraints:
+  - 不静默迁移用户数据；未显式授权时旧格式项目字节不变
+  - 迁移回退不得丢弃迁移后的新写入
+  - 不引入第二个结构化事实源，不用自由文本兜底缺失实体
+  - 测试工程、临时安装与产物全部放在源码树之外
+  - vibe-coding 自身 .project-log 的迁移必须等待迁移工具验收并有显式授权
+  required_evidence:
+  - kind: independent-review
+    subject: goal-final-review
+    evidence_refs: []
+  - kind: integration
+    subject: cross-platform-release
+    evidence_refs: []
+  created_at: '2026-09-21T05:45:00Z'
+  updated_at: '2026-09-21T05:45:00Z'

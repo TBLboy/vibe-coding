@@ -1,0 +1,67 @@
+version: "0.2"
+baselines:
+- id: REQ-001
+  revision: 1
+  status: active
+  goal: 把新框架（format 2）彻底落地为唯一默认：新项目默认生成新格式，新格式具备完整生命周期实体、证据与复核门禁和统一入口，旧格式停止写入并沿显式、无损、可回退的路线退役。
+  actors:
+  - user：提出彻底落地要求，并对旧格式退役阶段与真实项目迁移给出授权
+  - agent：记录业务逻辑、拆解任务并按证据链实施与验证
+  - runtime：提供默认初始化、状态读写、门禁、Hooks 与迁移能力
+  - existing-project：已使用旧格式、需要只读兼容与显式迁移路径的存量项目
+  in_scope:
+  - 新项目默认初始化为 format 2，移除 --experimental 实验门槛，并提供正式初始化入口
+  - format 2 补齐完整生命周期实体与关系（Goal、Task、Run、Blocker、Evidence、Review、业务原子、需求基线、决策、架构、研究、对齐、复盘、蒸馏）
+  - 任务完成与目标完成由绑定证据和独立复核门禁裁决，产物变化使证据失效
+  - format 2 项目中旧格式写入入口 fail-closed，只保留只读兼容
+  - 统一命令入口；loopctl 等旧入口作为兼容适配落到同一实现
+  - 旧格式迁移的预览、备份、生成、校验、原子切换、续跑与回退
+  - 旧格式退役阶段与用户确认关口
+  - Hooks、Skills、全局规则、模板与文档同步到单一入口与单一事实源
+  - Windows（PowerShell 5.1/7）与 Linux/WSL、分支、worktree 与 Git 快照交换验收
+  - 包校验与项目校验覆盖新格式，测试产物位于源码树之外
+  out_of_scope:
+  - 不改变 Vibe Coding 的业务语义、风险分级标准与 A/B/C 决策权限
+  - 不实现通用多主同步、常驻服务或远程协作后端
+  - 不删除任何历史证据或旧格式记录
+  - 不在未获授权时迁移真实用户项目，包括 vibe-coding 自身的 .project-log
+  - 不把长文档正文复制进结构化存储
+  business_logic_refs:
+  - BL-FRAMELAND-001
+  - BL-FRAMELAND-002
+  - BL-FRAMELAND-003
+  - BL-FRAMELAND-004
+  - BL-FRAMELAND-005
+  - BL-FRAMELAND-006
+  - BL-FRAMELAND-007
+  - BL-FRAMELAND-008
+  - BL-FRAMELAND-009
+  constraints:
+  - 不静默迁移：未显式授权的旧格式项目字节不变
+  - 迁移回退不得丢弃迁移后的新写入
+  - 不引入第二个结构化事实源，不用自由文本兜底缺失实体
+  - 全局 Python 环境由 CODEX_HOME/vibe-python 指定，安装/运行路径保持既有 fail-closed 策略
+  - 测试工程、临时安装与产物全部位于源码树之外
+  - 旧入口只能作为兼容适配，不得产生与新入口不同的状态结果
+  quality_attributes:
+  - 无损：迁移前后历史事实、引用与证据可逐项对账
+  - 可回退：任一阶段失败都能恢复并保留新写入
+  - 幂等：重复初始化与重复迁移请求不产生重复记账
+  - 可审计：状态变化、证据适用性与迁移步骤都有可追踪记录
+  - 一致：文档、规则资产与运行时行为指向同一入口与同一事实源
+  - 跨平台一致：目标平台差异显式记录，不作为静默行为差异
+  assumptions:
+  - 用户已批准整体改造方向（DEC-009），但真实项目迁移仍需逐项授权
+  - format 2 现有事务存储、证据版本化与 Git 快照交换在隔离工程已验证，可作为落地基础
+  - 存量项目以 format 1 为主，迁移期需要同时保留只读与迁移能力
+  unresolved_questions:
+  - 旧格式停止写入、停止读取与停止支持的三个时间点各自需要用户在对应关口确认
+  - vibe-coding 自身 .project-log 的迁移授权在 TASK-045 通过后单独申请
+  - 迁移工具对无法映射的历史字段采用“显式保留区”还是“拒绝迁移”，由 TASK-040 冻结契约时决定
+  approval:
+    status: approved
+    evidence:
+    - 2026-09-21 用户回复“你给的这个修改方案我觉得没什么问题，总之就是要按照新框架彻底落地来进行改造和测试”
+    - DEC-009
+  created_at: '2026-09-21T05:40:00Z'
+  updated_at: '2026-09-21T05:40:00Z'

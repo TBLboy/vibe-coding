@@ -198,11 +198,69 @@ def validate(root: Path) -> list[str]:
 
     if is_transactional(root):
         try:
-            return open_store(root).validate()
+            store = open_store(root)
+            errors = store.validate()
+            if not errors:
+                errors.extend(store.audit_gates())
+                errors.extend(transactional_record_errors(store))
+                errors.extend(migration_state_errors(root))
+            return errors
         except (StateError, OSError, ValueError) as exc:
             return [str(exc)]
     schema, loaded = schema_errors(root)
     return schema + cross_reference_errors(loaded) + clarification_gate_errors(loaded) + validate_loop(root)
+
+
+def transactional_record_errors(store) -> list[str]:
+    """Validate payload boundaries and human-readable IDs for format 2 records."""
+    errors: list[str] = []
+    for record in store.list_records():
+        payload = record["payload"]
+        encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        if len(encoded.encode("utf-8")) > 16384:
+            errors.append(f"record {record['kind']}/{record['id']}: payload exceeds 16384 bytes")
+        for problem in long_form_payload_errors(payload):
+            errors.append(f"record {record['kind']}/{record['id']}: {problem}")
+    return errors
+
+
+def long_form_payload_errors(value, path: str = "payload") -> list[str]:
+    """Reject long-form text at any depth, mirroring the write-path boundary.
+
+    A stored record can also be tampered with outside the command surface, so the
+    validator must apply the same rule to the bytes it finds, not only to writes.
+    """
+    errors: list[str] = []
+    if isinstance(value, dict):
+        for key, item in value.items():
+            errors.extend(long_form_payload_errors(item, f"{path}.{key}"))
+    elif isinstance(value, list):
+        for index, item in enumerate(value):
+            errors.extend(long_form_payload_errors(item, f"{path}[{index}]"))
+    elif isinstance(value, str) and len(value.encode("utf-8")) > 4096:
+        errors.append(f"{path} carries long-form text over 4096 bytes; store a doc_ref instead")
+    return errors
+
+
+def migration_state_errors(root: Path) -> list[str]:
+    """Reject contradictory migration markers or failed journals."""
+    errors: list[str] = []
+    journal_path = root / ".project-log/.migration/journal.json"
+    marker_path = root / ".project-log/state-format.json"
+    if not journal_path.is_file():
+        return errors
+    try:
+        journal = json.loads(journal_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        return [f"migration journal is unreadable: {exc}"]
+    status = journal.get("status")
+    if status == "failed":
+        errors.append(f"migration journal records a failed switch: {journal.get('error', 'unknown error')}")
+    if status == "switched" and not marker_path.is_file():
+        errors.append("migration journal says switched but state-format.json is missing")
+    if marker_path.is_file() and status != "switched":
+        errors.append(f"format 2 marker exists but migration journal status is {status!r}")
+    return errors
 
 
 def main() -> int:

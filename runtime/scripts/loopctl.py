@@ -6,6 +6,7 @@ import argparse
 import json
 from pathlib import Path
 import sys
+import uuid
 
 from loop_state import (
     append_event,
@@ -16,6 +17,7 @@ from loop_state import (
     invalidate_evidence,
     load_active_run,
     load_yaml,
+    normalize_project_path,
     PHASES,
     project_goal_summary,
     project_log,
@@ -26,7 +28,24 @@ from loop_state import (
     start_run,
     sync_native_goal,
     validate_loop,
+    version_binding,
 )
+
+from framework_info import LEGACY_GUIDANCE, LEGACY_WRITE_WARNING
+
+# Format 1 stays writable only during the migration window; every write has to
+# announce the deprecation (contract section 6.2). Read-only commands do not.
+LEGACY_WRITE_COMMANDS = {
+    "init",
+    "start-run",
+    "decide",
+    "record-evidence",
+    "invalidate-evidence",
+    "goal-bind",
+    "goal-sync",
+    "record-event",
+    "handoff",
+}
 
 
 def output(data, as_json: bool) -> None:
@@ -110,9 +129,70 @@ def main() -> int:
                 return int(bool(errors))
             elif args.command == "handoff":
                 output(refresh_views(root), args.json)
+            elif args.command == "evaluate":
+                store = open_store(root)
+                output(store.evaluate_goal(store.active_goal_id()), args.json)
+            elif args.command == "record-evidence":
+                store = open_store(root)
+                payload = {
+                    "id": args.id,
+                    "kind": args.kind,
+                    "subject": args.subject,
+                    "status": args.status,
+                    "covers": {
+                        "files": args.file,
+                        "requirements": args.requirement,
+                        "tasks": args.task,
+                    },
+                    "version_binding": version_binding(root, args.file),
+                }
+                if len(args.task) == 1:
+                    payload["task_id"] = args.task[0]
+                output(store.apply({
+                    "schema_version": 1,
+                    "command_id": uuid.uuid4().hex,
+                    "expected_revision": store.status()["revision"],
+                    "action": "evidence.record",
+                    "payload": payload,
+                }), args.json)
+            elif args.command == "invalidate-evidence":
+                store = open_store(root)
+                changed = {normalize_project_path(root, item) for item in args.path}
+                invalidated = []
+                for item in store.list_evidence():
+                    if item["status"] not in {"candidate", "valid"}:
+                        continue
+                    covered = set(item.get("covers", {}).get("files", []))
+                    if not covered.intersection(changed):
+                        continue
+                    if store.evidence_applicability(root, item)["applicability"] != "stale":
+                        continue
+                    store.apply({
+                        "schema_version": 1,
+                        "command_id": uuid.uuid4().hex,
+                        "expected_revision": store.status()["revision"],
+                        "action": "evidence.invalidate",
+                        "payload": {"id": item["id"], "reason": args.reason},
+                    })
+                    invalidated.append(item["id"])
+                output({"invalidated": invalidated}, args.json)
+            elif args.command == "decide":
+                raise ValueError(
+                    "unsupported_legacy_command: use the native Goal/loop control surface for format 2"
+                )
+            elif args.command == "start-run":
+                raise ValueError(
+                    "unsupported_legacy_command: use vibe task begin --task-id ... --run-id ... --next-action ..."
+                )
+            elif args.command in {"goal-bind", "goal-sync", "record-event", "init"}:
+                raise ValueError(
+                    "unsupported_legacy_command: use the formal vibe command surface for format 2"
+                )
             else:
-                raise ValueError("unsupported_legacy_command: use vibe state-apply; legacy writes disabled for format 2")
+                raise ValueError("unsupported_legacy_command: legacy writes disabled for format 2")
             return 0
+        if args.command in LEGACY_WRITE_COMMANDS:
+            print(f"[!] {LEGACY_WRITE_WARNING}", file=sys.stderr)
         if args.command == "init":
             output({"created": initialize_loop(root)}, args.json)
         elif args.command == "restore":
@@ -135,6 +215,9 @@ def main() -> int:
             evidence = load_yaml(project_log(root) / "loop/evidence-index.yaml").get("evidence", [])
             output(
                 {
+                    "format": 1,
+                    "legacy": True,
+                    "guidance": LEGACY_GUIDANCE,
                     "goal": goal,
                     "state": state,
                     "evidence_counts": {
@@ -187,7 +270,16 @@ def main() -> int:
             output(start_run(root, args.phase, args.task_id), args.json)
         elif args.command == "validate":
             errors = validate_loop(root)
-            output({"passed": not errors, "errors": errors}, args.json)
+            output(
+                {
+                    "format": 1,
+                    "legacy": True,
+                    "guidance": LEGACY_GUIDANCE,
+                    "passed": not errors,
+                    "errors": errors,
+                },
+                args.json,
+            )
             return 1 if errors else 0
         return 0
     except Exception as exc:

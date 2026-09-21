@@ -98,31 +98,45 @@ def run(command: Sequence[str], *, check: bool = True, capture: bool = True) -> 
     )
 
 
+def probe(command: Sequence[str]) -> tuple[int, str]:
+    """Run a diagnostic command without raising for a missing or unrunnable target.
+
+    A manager shim or a stale configured path can name something that cannot be
+    spawned at all. That is a normal outcome to report here, not a crash that leaks
+    a raw ``FileNotFoundError`` to the user.
+    """
+    try:
+        result = run(command, check=False)
+    except OSError as error:
+        return 127, str(error)
+    return result.returncode, result.stdout or ""
+
+
 def python_version_ok(python: str) -> tuple[bool, str]:
     """True when the executable is a Python 3.11+ interpreter, ignoring dependencies."""
-    probe = run(
-        [python, "-c", "import sys; assert sys.version_info >= (3, 11); print(sys.executable)"],
-        check=False,
+    returncode, output = probe(
+        [python, "-c", "import sys; assert sys.version_info >= (3, 11); print(sys.executable)"]
     )
-    if probe.returncode == 0:
-        return True, probe.stdout.strip().splitlines()[-1]
-    return False, probe.stdout.strip() or f"unable to run {python}"
+    lines = [line.strip() for line in output.splitlines() if line.strip()]
+    if returncode == 0:
+        return True, lines[-1] if lines else python
+    return False, output.strip() or f"unable to run {python}"
 
 
 def python_is_usable(python: str, requirements: Path) -> tuple[bool, str]:
-    probe = run(
+    returncode, output = probe(
         [
             python,
             "-c",
             "import sys, yaml, jsonschema; "
             "assert sys.version_info >= (3, 11); "
             "print(sys.executable)",
-        ],
-        check=False,
+        ]
     )
-    if probe.returncode == 0:
-        return True, probe.stdout.strip().splitlines()[-1]
-    return False, probe.stdout.strip() or f"unable to use {python}"
+    lines = [line.strip() for line in output.splitlines() if line.strip()]
+    if returncode == 0:
+        return True, lines[-1] if lines else python
+    return False, output.strip() or f"unable to use {python}"
 
 
 def find_conda() -> str | None:
@@ -144,15 +158,30 @@ def find_conda() -> str | None:
     return None
 
 
-def env_python(manager: str, env_name: str) -> str | None:
-    result = run(
-        [manager, "run", "-n", env_name, "python", "-c", "import sys; print(sys.executable)"],
-        check=False,
+def env_python(manager: str, env_name: str) -> tuple[str | None, str]:
+    """Return ``(interpreter, manager output)`` for a Conda environment.
+
+    A zero exit code is not evidence that the last printed line is an interpreter
+    path: some manager shims print a ``CommandNotFoundError`` and still exit 0
+    (reviewer-031 X3). The candidate must therefore name an existing file, otherwise
+    the raw manager output is returned as the diagnostic instead of being handed to
+    ``python_is_usable`` as if it were a path.
+    """
+    returncode, output = probe(
+        [manager, "run", "-n", env_name, "python", "-c", "import sys; print(sys.executable)"]
     )
-    if result.returncode:
-        return None
-    lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
-    return lines[-1] if lines else None
+    lines = [line.strip() for line in output.splitlines() if line.strip()]
+    if returncode == 0 and lines and Path(lines[-1]).is_file():
+        return lines[-1], output.strip()
+    return None, output.strip()
+
+
+def manager_diagnostic(manager: str, output: str) -> str:
+    """Explain that the manager did not print an interpreter path, quoting its output."""
+    text = output.strip()
+    if not text:
+        return f"\n{manager} printed no interpreter path for the environment."
+    return f"\n{manager} did not print a usable interpreter path. Its output was:\n{text}"
 
 
 def create_env(manager: str, env_name: str) -> None:
@@ -253,14 +282,20 @@ def ensure_python(
             "No usable Vibe Python found. Install Miniforge/Miniconda or set VIBE_PYTHON to a Python 3.11+ environment."
         )
 
-    python = env_python(manager, env_name)
+    python, manager_output = env_python(manager, env_name)
     if not python:
         if not create:
-            raise RuntimeError(f"Conda environment {env_name!r} was not found; refusing to create it during uninstall.")
+            raise RuntimeError(
+                f"Conda environment {env_name!r} was not found; refusing to create it during uninstall."
+                f"{manager_diagnostic(manager, manager_output)}"
+            )
         create_env(manager, env_name)
-        python = env_python(manager, env_name)
+        python, manager_output = env_python(manager, env_name)
     if not python:
-        raise RuntimeError(f"Could not resolve Python from Conda environment {env_name!r}.")
+        raise RuntimeError(
+            f"Could not resolve Python from Conda environment {env_name!r}."
+            f"{manager_diagnostic(manager, manager_output)}"
+        )
 
     usable, detail = python_is_usable(python, requirements)
     if not usable:

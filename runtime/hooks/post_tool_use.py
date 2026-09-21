@@ -23,6 +23,27 @@ def main() -> int:
     from state_context import is_transactional
 
     if is_transactional(root):
+        name = tool_name(payload)
+        paths = extract_paths(payload)
+        if paths and any(hint in name.lower() for hint in WRITE_TOOL_HINTS):
+            try:
+                from state_context import refresh_evidence
+
+                result = refresh_evidence(root, f"PostToolUse:{name}", paths)
+            except Exception as exc:  # hooks must not block the user's tool call
+                print(f"Vibe PostToolUse state error: {type(exc).__name__}: {exc}", file=sys.stderr)
+            else:
+                if result.get("invalidated"):
+                    print(json.dumps({
+                        "hookSpecificOutput": {
+                            "hookEventName": "PostToolUse",
+                            "additionalContext": (
+                                "Vibe evidence invalidated: "
+                                + ", ".join(result["invalidated"])
+                            ),
+                        }
+                    }, ensure_ascii=False))
+                    return 0
         print(json.dumps({}))
         return 0
     maybe_probe(root, "PostToolUse", payload)

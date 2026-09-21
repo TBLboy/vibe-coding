@@ -1,0 +1,548 @@
+version: '0.2'
+decisions:
+- id: DEC-010
+  title: 授权迁移 vibe-coding 自身 .project-log 到 format 2
+  category: data
+  status: active
+  authority: C
+  user_approval: approved
+  related_tasks:
+  - TASK-045
+  - TASK-046
+  related_business_logic:
+  - BL-FRAMELAND-005
+  - BL-FRAMELAND-002
+  context: DEC-009 明确把 vibe-coding 自身项目日志的迁移列为独立 C 级授权事项，需要用户单独确认，不能由框架升级自动放行。TASK-045 第一轮独立复核曾给出 NO-GO（D-001..D-005），实现方已按契约回到实现阶段修复并登记 TASK-047；第二轮独立复核正在修复修订上复验迁移工具。
+  hypothesis: 在迁移工具通过独立复核、预览零冲突、备份与回退路径可演练的前提下，用户显式授权即可把本仓库自身日志迁移到 format 2，而不必再等旧格式退役阶段。
+  options:
+  - name: 暂不迁移，继续用 format 1 维护本仓库日志（未选择）
+    benefits:
+    - 零迁移风险，本仓库日志字节不变
+    costs:
+    - 框架自身继续使用即将退役的格式，无法端到端证明迁移路径
+    risks:
+    - 框架源码与自身日志长期格式不一致，后续退役时仍需一次性迁移
+  - name: 用户显式授权后迁移本仓库自身日志（选择）
+    benefits:
+    - 框架自身成为 format 2 的端到端样本，迁移工具得到真实数据验证
+    - 退役路线在真实项目上留下可复核记录
+    costs:
+    - 需要预览、备份、校验与回退演练，并在失败时保留现场
+    risks:
+    - 迁移工具仍有缺陷时可能影响本仓库历史记录，必须靠备份与回退边界控制
+  decision: 用户于 2026-09-21 明确答复“授权迁移，你继续推进”，即对 TASK-046 的 C 级授权关口给出批准。迁移必须使用已经过独立复核的迁移工具，先预览并确认零阻塞冲突，再备份、迁移、校验，最后演练回退；任一步失败即停止并保留现场，不得跳过预览或备份。
+  reason_summary:
+  - DEC-009 要求本仓库日志迁移必须单独授权，本次授权正是该关口
+  - 迁移工具已具备预览、备份、原子切换、续跑与回退能力，并在修复第一轮复核缺陷后重新进入独立复核
+  - 框架自身使用 format 2 才能端到端证明“默认格式 + 单一事实源”成立
+  conditions:
+  - 仅当 TASK-045 第二轮独立复核给出 GO（或明确的、不阻断迁移的结论）后才执行迁移
+  - 迁移前必须预览且零阻塞冲突；迁移前必须有备份
+  - 迁移后必须校验通过，并演练回退保留迁移后的新写入
+  - 迁移不得删除历史记录；不可映射内容进入 .project-log/legacy/unmapped/
+  action: 在 TASK-045 第二轮复核通过后执行 TASK-046：vibe migrate preview → apply --confirm <preview_hash> → validate → rollback 演练。
+  expected_result: vibe-coding 自身 .project-log 迁移为 format 2，历史记录逐项对账无损，校验通过，回退路径经演练可用。
+  reversal_plan: 使用 vibe migrate rollback 恢复旧格式；迁移后的新写入先导出到 .project-log/legacy/new-writes/bundle.json，不丢弃。
+  observation: 待第二轮独立复核与迁移执行后补充。
+- id: DEC-009
+  title: format 2 转正为新项目默认，旧格式停止写入并沿显式路线退役
+  category: architecture
+  status: active
+  authority: C
+  user_approval: approved
+  related_tasks:
+  - TASK-033
+  - TASK-035
+  - TASK-040
+  - TASK-044
+  - TASK-046
+  related_business_logic:
+  - BL-FRAMELAND-001
+  - BL-FRAMELAND-002
+  - BL-FRAMELAND-005
+  - BL-FRAMELAND-006
+  context: 新格式（format 2）的事务存储、证据版本化、风险分流与显式 Git 快照交换已在隔离工程验证通过，但仍停留在实验阶段——默认初始化继续生成旧格式模板，新格式必须先带 `--experimental` 且只允许空项目。用户明确要求新框架彻底落地、替换旧框架，不接受继续默认输出旧格式。用户已认可整体改造方案（默认切新格式、补齐完整生命周期实体、统一入口、可执行迁移、跨平台验收、旧格式退役）。
+  hypothesis: 把 format 2 提升为唯一默认格式，旧格式转入只读兼容并沿带用户关口的路线退役，可以在不静默迁移存量数据的前提下结束“两套格式并存、默认仍是旧框架”的状态。
+  options:
+  - name: 保持现状（旧格式默认，新格式实验性）
+    benefits:
+    - 零迁移风险，存量项目完全不受影响
+    costs:
+    - 新框架永远无法成为默认，用户已拒绝的口径继续存在
+    risks:
+    - 每个新项目继续生成将被淘汰的格式，后续迁移成本随时间上升
+  - name: format 2 转正为默认，旧格式只读兼容并显式迁移（选择）
+    benefits:
+    - 新项目从第一天起使用唯一结构化事实源
+    - 存量项目通过显式、无损、可回退的迁移路径过渡
+    costs:
+    - 需要补齐实体、门禁、CLI、Hooks、Skills、文档与迁移工具，并做跨平台验收
+    risks:
+    - 迁移工具缺陷可能影响存量记录，必须靠预览、备份、校验与回退边界控制
+  - name: format 2 转正并立即停止旧格式读取
+    benefits:
+    - 框架内只剩一套格式，实现面最小
+    costs:
+    - 存量项目在迁移前直接不可用
+    risks:
+    - 对用户历史记录造成不可接受的中断，不符合无损要求
+  decision: 用户已批准把 format 2 从实验特性提升为新项目的默认格式，并停止把旧格式作为可增长的目标格式。新项目默认初始化不再要求实验开关；format 2 项目中旧格式写入入口必须 fail-closed，只能由新格式写入路径修改结构化状态。旧格式保留只读兼容与显式迁移支持，停止写入、停止读取、停止发布的每一步都需要文档化并经过用户确认关口；vibe-coding 自身项目日志的迁移单独作为 C 级授权事项，不由本决定自动放行。
+  reason_summary:
+  - 用户明确要求彻底替换旧框架，不接受继续停留在 experimental
+  - 旧格式继续作为默认会让每个新项目产生未来必须迁移的负债
+  - 存量记录无损、可回退的价值高于切换速度，因此保留只读兼容与显式迁移
+  - 统一入口与完整实体是“唯一事实源”成立的前提，缺失时不得靠自由文本兜底
+  conditions:
+  - 迁移必须显式触发：未授权时旧格式项目字节不变，不产生新格式结构
+  - 迁移工具必须先具备预览、备份、生成、校验、原子切换、续跑与回退能力，才允许用于真实项目
+  - 回退不得丢弃迁移后的新写入
+  - 旧格式退役的每个阶段需文档化并有用户确认关口，不突然中断存量项目
+  - DEC-004 中“不改动 .project-log 现有创建链路与模板”的约束在本方向下不再成立，需要随 TASK-035 一并更新；其 AGENTS.md 幂等注入部分继续有效
+  action: 按 TASK-034 至 TASK-046 推进：先冻结生产契约，再实现默认初始化、补齐实体与门禁、统一入口、改造 Hooks/Skills/文档、实现可执行迁移与淘汰机制，最后做跨平台独立验收；vibe-coding 自身日志迁移等待 TASK-045 通过后的显式授权。
+  expected_result: 新项目默认生成 format 2；format 2 具备完整生命周期实体、证据与复核门禁、统一入口与一致规则资产；旧格式可显式无损迁移并沿可审计路线退役。
+  reversal_plan: 在旧格式读取仍受支持期间，可回滚默认初始化开关与旧写入口策略，使新项目回到旧格式；已迁移项目按迁移工具的回退流程恢复，且必须保留迁移后的新写入。
+  observation: 当前源码事实：默认初始化复制 runtime/project-log-template 生成旧格式；state-init 需要 --experimental 且拒绝已有 .project-log；verify 对 format 2 只调用 Store.validate()；state_store 实体仅覆盖 goals/tasks/runs/blockers/commands/events/projection/exchange；state_migrate 只有 preview 与 rollback bundle，没有 apply；post_tool_use 对 format 2 直接短路；a-project-init 脚本与全局规则仍指向 init_project.py 与 loopctl。
+  actual_result: 尚未实施；本轮只记录业务逻辑、需求基线与任务拆解。
+  outcome_status: not-observed
+  evidence:
+  - runtime/scripts/init_project.py
+  - runtime/scripts/state_context.py
+  - runtime/scripts/state_store.py
+  - runtime/scripts/state_migrate.py
+  - runtime/scripts/validate_project.py
+  - docs/USAGE.md
+  supersedes: []
+  created_at: '2026-09-21T05:35:00Z'
+  updated_at: '2026-09-21T05:35:00Z'
+- id: DEC-007
+  title: 原型修复通过后的生产存储与 Git 协调边界
+  category: architecture
+  status: active
+  authority: C
+  user_approval: approved
+  related_tasks:
+  - TASK-019
+  - TASK-020
+  related_business_logic:
+  - BL-WFOPT-001
+  - BL-WFOPT-002
+  context: 独立 G1 发现跨分支发布和回执污染。修复后八组独立检查通过，但协作 Git 锁可能暂时阻止切分支，进程强杀可能留下需人工核实的锁。
+  hypothesis: 日常命令只更新本机事务状态、仅显式快照交换时短暂协调 Git，可控制一致性风险和日常开销。
+  options:
+  - name: SQLite 按实体存储加显式快照交换与短暂 Git 协作锁（推荐，待批准）
+    benefits:
+    - 复用已测试的事务和精确冲突语义，日常操作不占用 Git index 锁
+    costs:
+    - 显式同步步骤、短暂 Git busy 和中断后的人工调查流程
+    risks:
+    - 非协作式 Git plumbing 不在保证内，强杀可遗留锁
+  - name: 不接受 Git 锁副作用，暂缓生产交换并重新设计
+    benefits:
+    - 不改变用户日常 Git 可用性
+    costs:
+    - 需额外原型验证，不能直接沿用当前方案进入生产
+    risks:
+    - 仅增加前后检查不能证明并发切分支安全
+  decision: Q-002 已获用户明确批准；选择按实体 SQLite 状态和显式 Git 文本快照交换，仅同步窗口持有协作锁，普通任务操作不锁 Git。允许 TASK-020 源码实施，不代表实现通过验收或真实安装获批。
+  reason_summary:
+  - 独立复核证明已知缺陷被拦截，不等于全部生产行为获批
+  - 实测未证明 SQLite 更快，选择理由是事务所有权和按实体查询
+  - 影响外部 Git 使用和恢复成本的策略需用户确认
+  action: 保留原始失败和限定复核证据，按 TASK-020 分片落地事务服务、适配入口、生成视图及交换边界，全部在外部工程验证
+  expected_result: 用户明确接受的 Git 协调边界和可验证的最小生产实现
+  evidence:
+  - D:/Project/vibe-coding-validation/reviewer-g1/REPORT-v2.md
+  - .project-log/specs/TASK-020.md
+- id: DEC-006
+  title: 四项优化采用统一命令服务并先试验事务存储与 Git 交换
+  category: architecture
+  status: active
+  authority: C
+  user_approval: approved
+  related_tasks:
+  - TASK-012
+  related_business_logic: []
+  context: 真实论文项目出现任务阻塞而 Run 活跃、摘要引用旧 Goal、证据误失效和漏失效，用户要求先做技术选型
+  hypothesis: 统一转换入口、事务存储、自动摘要与分级策略可降低人工协调成本；SQLite 的收益须包含 Git 交换成本共同验证
+  options:
+  - name: SQLite 本机权威状态加文本交换快照（条件推荐）
+    benefits:
+    - 复用成熟事务、约束与查询能力
+    - 同事务更新任务运行与证据，减少多文件状态漂移
+    costs:
+    - 需要迁移、导出导入、分支上下文与旧命令适配
+    risks:
+    - 不可直接 Git 合并数据库，不能忽略交换冲突
+  - name: 单文档 JSON 权威状态加项目锁
+    benefits:
+    - 保持可读文本和直接 Git 差异
+    costs:
+    - 每次解析重写整体状态并维护锁与 revision 检查
+    risks:
+    - 文本合并成功不等于业务状态一致
+  - name: 继续多 YAML 分别写入
+    benefits:
+    - 初期改动最少
+    costs:
+    - 跨文件事务和重复视图仍需额外协调
+    risks:
+    - 再次出现半更新和多事实源
+  decision: 用户已认可 SQLite 本机状态加 Git 文本快照方向并随后批准实施与外部测试；实际安装迁移仍未批准，新增 Git 协调边界见 DEC-007
+  reason_summary:
+  - 优先解决状态一致性，不以当前文件大小为数据库必要性的依据
+  - Agent 只提交业务操作，运行时负责记录与投影
+  - 证据历史结果与当前适用性必须分开
+  conditions:
+  - 技术方向和隔离实施已获认可；真实安装与项目迁移必须另行批准
+  - 原型必须验证故障、并发、幂等、分支切换与双副本冲突
+  action: 按 TASK-014 至 TASK-027 推进；原型已运行，生产接入仍须关闭 G1 和 Q-002
+  expected_result: 四项优化具备明确接口边界、失败策略、渐进实施和可测验收
+  reversal_plan: 研究阶段无运行时迁移；实施后回滚必须先保全新写入，禁止直接恢复旧备份丢掉新数据
+  observation: 用户最初要求仅拆解任务，随后明确要求开工并全部在外部测试；以后一条授权为准
+  actual_result: Foundation fixes and isolated prototypes verified; no production store integration or actual migration
+  outcome_status: not-observed
+  evidence:
+  - .project-log/docs/workflow-optimization-technical-selection.md
+  supersedes: []
+  created_at: '2026-09-19T14:27:45Z'
+  updated_at: '2026-09-19T14:44:01Z'
+- id: DEC-001
+  title: 可选 MCP 使用声明式 catalog，CodeGraph 仅按用户选择安装
+  category: tooling
+  status: active
+  authority: B
+  user_approval: approved
+  related_tasks:
+  - TASK-004
+  related_business_logic: []
+  context: Vibe Coding 需要支持不同项目按需使用 MCP，且 CodeGraph 应由 Codex 使用而不是安装进 LeRobot 应用环境。
+  hypothesis: 将 MCP 定义放在 runtime/mcp/optional-mcps.json，并通过安装器 --mcp NAME 选择，可保持核心安装轻量并支持后续扩展。
+  options:
+  - name: 将所有 MCP 强制安装
+    benefits:
+    - 开箱即用
+    costs:
+    - 增加依赖和网络失败面
+    risks:
+    - 污染不需要 MCP 的环境
+  - name: 声明式可选 catalog，默认不安装（选择）
+    benefits:
+    - 核心安装可逆且轻量
+    - 可重复选择多个 MCP
+    - 配置来源可审计
+    costs:
+    - 需要增加状态和验证逻辑
+    risks:
+    - 新会话前需重启 ACP 才能暴露新增工具
+  - name: 仅手工维护个人 Codex config
+    benefits:
+    - 实现成本最低
+    costs:
+    - 无法随框架安装复用
+    - 缺少验证和状态
+    risks:
+    - 不同机器配置漂移
+  decision: 采用声明式可选 MCP catalog；新安装默认不启用；用户用 --mcp codegraph 显式选择，CodeGraph 通过 Codex MCP 配置运行。
+  reason_summary:
+  - 不强制引入可选依赖
+  - 安装器可以验证、记录和保护配置
+  - CodeGraph 与 LeRobot Python 环境解耦
+  conditions:
+  - CodeGraph 可执行文件在 PATH 中时优先使用；否则允许 npx 回退。
+  - 用户现有不同 MCP 配置不得被静默覆盖。
+  action: 新增 catalog、安装器参数、状态字段、校验、测试和文档；将 codegraph 配置到 /home/tbl/.codex。
+  expected_result: Vibe Coding 0.4.1 可选择性安装 MCP，CodeGraph 在 Codex 中 enabled。
+  reversal_plan: 使用备份目录回滚 Vibe Coding 受管文件，并执行 codex mcp remove codegraph。
+  observation: 已完成实现、发布包构建和实际 Codex 配置。
+  actual_result: CodeGraph 1.5.0 作为 Codex stdio MCP enabled；LeRobot 索引 804 files / 17,512 nodes / 46,134 edges 且 up to date。
+  outcome_status: successful
+  lesson: 可选工具应以 catalog + state + verify 三件套管理，避免把一次性本机配置变成不可审计的隐式依赖。
+  evidence:
+  - MCP-001
+  - MCP-004
+  - MCP-005
+  supersedes: []
+  created_at: '2026-07-27T11:48:34+08:00'
+  updated_at: '2026-07-27T11:54:48+08:00'
+
+- id: DEC-002
+  title: MCP/hooks/插件失效根因确认为 cc-switch 整写 config.toml，防复发方案待用户选择
+  category: tooling
+  status: active
+  authority: B
+  user_approval: approved
+  related_tasks:
+  - TASK-005
+  related_business_logic: []
+  context: VibeCoding 安装后 MCP/hooks/插件多次失效，每次重装后短暂恢复。备份与 cc-switch 日志时间线比对显示，cc-switch 在启动/异常恢复/热切换时整写 C:\Users\12187\.codex\config.toml，仅保留其管理的模型字段，删除 Vibe 受管的 hooks/mcp_servers/marketplaces/plugins 段。
+  hypothesis: 失效由第三方配置接管工具 cc-switch 在每次“重新接管 Codex Live 配置”时覆盖 config.toml 造成；安装器只在运行时恢复，无守护机制。
+  options:
+  - name: 关闭 cc-switch 对 Codex 的接管与自动启动
+    benefits:
+    - 从源头消除覆盖源，最可靠
+    costs:
+    - 需要手动切换模型或改用其他方式
+    risks:
+    - 用户已依赖 cc-switch 的模型热切换体验
+  - name: 安装器增加配置守护/自愈校验
+    benefits:
+    - 即使外部工具覆盖也能自动恢复
+    costs:
+    - 属于框架功能改动，需要实现与测试
+    risks:
+    - 与 cc-switch 写入竞争，可能产生配置抖动
+  - name: cc-switch 支持合并保留其他配置段时开启
+    benefits:
+    - 双方配置可共存
+    costs:
+    - 依赖第三方功能是否支持
+    risks:
+    - 需验证每次接管后 Vibe 段仍完整
+  decision: 根因确认（cc-switch 整写覆盖）。防复发采用“方案 C（cc-switch 通用配置托管 Vibe 块）+ 安装器兼容增强”组合：用户在 cc-switch 通用配置中维护带标记的完整 Vibe 块，安装器修复 cc-switch 重写格式（容忍缺失 END、剥离时保留混入的 model_providers/mcp_servers）。
+  reason_summary:
+  - 7/28 20:37、7/29 20:55、8/1 08:33 的 config.toml 被裁为 394 字节，与 cc-switch 日志“重新接管”时间戳逐一吻合
+  - 394 字节配置含 cc-switch 专属字段 model_catalog_json 与 experimental_bearer_token = "PROXY_MANAGED"
+  - cc-switch 数据库 proxy_live_backup 中 codex 的 original_config 仅含模型字段，证明其“备份”不包含 Vibe 受管段
+  - 安装器 backup() 在写入前执行，其备份反映的正是被 cc-switch 裁后的状态
+  conditions:
+  - 用户确认采用哪个防复发方案后再实施
+  - 任何方案不得静默丢失用户模型供应商配置
+  action: 记录根因分析到项目日志；向用户输出结论与防复发选项；待用户选择后实施。
+  expected_result: 明确 MCP/hooks/插件失效的根因与可选防复发路径；热切换后 Vibe 配置保留且安装器 update 不再报错或误删用户配置。
+  reversal_plan: 不涉及代码改动，无需回滚。
+  observation: 当前 config.toml 已由安装器恢复为 1847 字节，hooks/MCP/marketplace/plugins 段完整，模型配置保留。
+  actual_result: 根因链闭环：cc-switch 每次启动/异常恢复/热切换整写 config.toml；方案 C 实测透传完整 TOML 段（热切换后 hooks/marketplace/plugins 保留）；安装器增强后 update 在真实 cc-switch 重写配置上成功修复（model_providers/mcp_servers 保留、END 恢复、marketplace/plugin 重建），codex mcp list 全 enabled，vibe-toolbelt 0.4.1 正常。
+  outcome_status: successful
+  lesson: 全局配置存在多个写入方时，应把“外部写入方审计”纳入配置失效排查第一步；恢复机制需要能安全修复第三方工具的整写结果（容忍其格式变化、保留其混入段），而不只是安装时一次性写入。
+  evidence:
+  - ROOTCAUSE-001
+  - REPRO-001
+  - COMMONCFG-001
+  - COMPATFIX-001
+  supersedes: []
+  created_at: '2026-08-01T15:30:00+08:00'
+  updated_at: '2026-08-01T15:30:00+08:00'
+
+- id: DEC-003
+  title: cc-switch 通用配置必须按宿主机动态生成
+  category: tooling
+  status: active
+  authority: B
+  user_approval: approved
+  related_tasks: []
+  related_business_logic: []
+  context: cc-switch 通用配置模板曾把 Windows 的 Conda、用户目录和源码仓库路径写死，用户当前实际运行环境为 Ubuntu，直接粘贴会导致 Hook 与本地 marketplace 无法加载。
+  hypothesis: 将宿主机相关绝对路径写死在通用配置模板中，会导致跨机器复制后 Hook 与本地 marketplace 无法加载；按目标宿主机动态生成可消除该漂移。
+  options:
+  - name: 继续维护固定模板
+    benefits:
+    - 修改成本低
+    costs:
+    - 更换宿主机时需要手工修改路径
+    risks:
+    - 容易因路径漂移导致配置失效
+  - name: 按宿主机动态生成（选择）
+    benefits:
+    - 从当前宿主机事实来源生成可直接使用的配置
+    costs:
+    - 更换宿主机时需要重新运行生成脚本
+    risks:
+    - 生成脚本必须正确解析目标宿主机环境
+
+  decision: 新增生成脚本，从 CODEX_HOME、VIBE_PYTHON 或 CODEX_HOME/vibe-python 以及当前源码根目录解析绝对路径；模板文件只保存当前宿主生成结果，并明确禁止跨机器直接复制。
+  reason_summary:
+  - 安装器已有同源的宿主路径解析逻辑，生成脚本应复用同一事实来源
+  - cc-switch 配置中的 Hook 和本地 marketplace 都依赖绝对路径
+  - Linux 与 Windows 的 command/commandWindows 字段需要按宿主机分别生成
+  conditions:
+  - 目标宿主机必须存在 CODEX_HOME/vibe-python，或显式提供 VIBE_PYTHON
+  - 目标宿主机必须从实际源码根目录运行生成脚本
+  action: 新增 scripts/generate_cc_switch_config.py；更新 cc-switch-common-config-codex.txt；补充项目日志和宿主路径验证。
+  expected_result: 当前宿主机可直接粘贴生成结果；更换宿主机时重新运行脚本即可，不需要手工修改路径。
+  reversal_plan: 删除生成脚本并恢复上一版本模板；不影响 Codex 当前运行配置。
+  observation: Ubuntu 当前生成结果使用 /home/tbl/miniforge3/envs/vibe-coding/bin/python3.11、/home/tbl/.codex/vibe-workflow/hooks 和 /home/tbl/Project/vibe-coding；TOML、路径和回归检查均通过。
+  actual_result: implemented-unverified
+  outcome_status: successful
+  lesson: 机器相关的配置示例不能作为跨平台常量提交，应由安装器同源逻辑在目标宿主机生成并验证。
+  evidence:
+  - HOSTCFG-001
+  supersedes: []
+  created_at: '2026-08-03T10:20:00+08:00'
+  updated_at: '2026-08-03T10:20:00+08:00'
+- id: DEC-004
+  title: 项目初始化流程固化为 a-project-init skill
+  category: process
+  status: active
+  authority: B
+  user_approval: approved
+  related_tasks:
+  - TASK-006
+  related_business_logic:
+  - BL-PROJECTINIT-001
+  - BL-PROJECTINIT-002
+  - BL-PROJECTINIT-003
+  - BL-PROJECTINIT-004
+  context: 项目初始化目前只创建 .project-log，AGENTS.md 依赖手工维护；需要将初始化流程统一并固化。
+  hypothesis: 将 .project-log 现有链路与 AGENTS.md 建立/安全注入包装为 a-project-init skill，通用规则模板资产化到 skill 内部，可安全幂等初始化项目。
+  options:
+  - name: 纯 prompt skill（不写脚本）
+    benefits:
+    - 实现成本最低
+    costs:
+    - 幂等注入依赖模型每次正确执行，不可测试
+    risks:
+    - 重复初始化可能叠加或破坏已有 AGENTS.md
+  - name: skill 内带确定性脚本（选择）
+    benefits:
+    - 幂等注入、标记检测可自动化测试
+    - 通用规则模板可随 skill 同步并保持唯一来源
+    costs:
+    - 需要维护一个脚本与模板
+    risks:
+    - 脚本路径需兼容源码与安装后两种布局
+  - name: 扩展 init_project.py 合并两条链路
+    benefits:
+    - 单一入口
+    costs:
+    - 违反用户明确要求：.project-log 现有链路不改动
+    risks:
+    - 改动既有稳定链路，回归风险高
+  decision: 新建 a-project-init skill，包含 SKILL.md、templates/general-rules.md 与 scripts/init_project_agents.py；脚本内部调用现有 init_project.py；AGENTS.md 用 VIBE-PROJECT-GENERAL 标记幂等注入；路由加入 prompts/vibe-global-agent.md。
+  reason_summary:
+  - 不修改 .project-log 现有创建链路
+  - 确定性脚本保证注入幂等并可测试
+  - 通用规则模板资产化，避免规则在项目间复制失真
+  - 已有 AGENTS.md 保留原内容，降低覆盖风险
+  conditions:
+  - 已有 AGENTS.md 原内容一字不动保留，仅最前注入通用区块
+  - 重复初始化幂等：已有 BEGIN 标记则跳过
+  - 只维护项目根目录 AGENTS.md，不处理子文件夹
+  action: 创建 skills/a-project-init（SKILL.md、templates/general-rules.md、scripts/init_project_agents.py）、tests/test_project_init.py，更新 prompts/vibe-global-agent.md 路由与 .project-log 记录。
+  expected_result: 用户说“初始化项目”时，.project-log 与 AGENTS.md 一并就绪；已有 AGENTS.md 安全注入不覆盖。
+  reversal_plan: 删除 skills/a-project-init 与路由条目，回滚 .project-log 相关记录；不影响 .project-log 现有链路。
+  observation: skill、模板、脚本、测试与路由已创建；test_project_init.py 6 项单测通过，validate_package 通过，CLI 冒烟（创建 + 幂等重跑）通过；validate_project 仅剩 4 个历史存量问题。
+  actual_result: implemented and verified in source repo
+  outcome_status: successful
+  lesson: 需要幂等写文件的初始化流程应配套确定性脚本，避免依赖模型每次手工执行。
+  evidence:
+  - UNIT-PI-001
+  - SMOKE-PI-001
+  - VALID-PI-001
+  supersedes: []
+  created_at: '2026-08-15T10:20:00+08:00'
+  updated_at: '2026-08-15T10:40:00+08:00'
+- id: DEC-005
+  title: 将 project-log 长文档组织约定固化为框架默认规则
+  category: tooling
+  status: active
+  authority: B
+  user_approval: approved
+  related_tasks:
+  - TASK-010
+  related_business_logic:
+  - BL-PROJECTLOG-001
+  context: 现有项目日志的长 Markdown 摘要缺少统一维护约定，新内容位置靠手写自觉，文件越大越乱，恢复成本随时间线性上升。
+  hypothesis: 把“最新在最上 + 头部快照 + 超限归档 + 单一事实源”写成模板与规则文档，并加测试，可以让新项目从初始化起就遵守一致结构。
+  options:
+  - name: 仅手工整理单个项目日志
+    benefits:
+    - 改动范围最小
+    costs:
+    - 不解决框架复用，新项目仍靠自觉
+    risks:
+    - 长文档会继续失序
+  - name: 写入框架模板、Skills 与文档（选择）
+    benefits:
+    - 所有新项目初始化即带约定
+    - 规则可被回归测试保护
+    costs:
+    - 需要同步多处框架源码与文档
+    risks:
+    - 既有项目需按需迁移
+  decision: 将四约定写入 runtime/project-log-template 的两个长摘要模板，并同步 a-project-log、a-session-handoff、docs/USAGE.md、prompts/vibe-global-agent.md；validate_package 把模板纳入必选产物，新增 tests/test_project_templates.py。
+  reason_summary:
+  - 模板是每个新项目初始化的唯一来源，适合承载默认约定
+  - Skill 与主 Agent 提示负责让代理遵守约定
+  - 测试防止模板约定在未来被意外精简
+  conditions:
+  - 不手工重排机器维护的结构化状态文件
+  - 归档路径固定为 .project-log/docs/archive/
+  - 精确下一步以 loop/active-run.yaml、loop/handoff.md 为单一事实源
+  action: 更新模板、Skills、用户指南、主 Agent 提示、包校验与测试，并更新本仓库项目日志。
+  expected_result: 新初始化的项目在 current-session.md/progress.md 顶部有当前状态快照，最新内容在最上，超限时可归档到 docs/archive/。
+  reversal_plan: 回滚框架源码与测试改动；模板更新只影响未来初始化的项目，不会自动改写既有项目日志。
+  observation: 41 个 unittest（1 跳过）、包校验、项目校验、Loop 校验全部通过；本仓库项目日志已按新约定记录本次任务。
+  actual_result: implemented and verified in source repo
+  outcome_status: successful
+  lesson: 长文档维护约定应固化在模板与规则资产中并配回归测试，避免每次靠代理自觉或不一致的手工整理。
+  evidence:
+  - DOC-CONV-001
+  supersedes: []
+  created_at: '2026-08-20T17:45:00+08:00'
+  updated_at: '2026-08-20T17:45:00+08:00'
+- id: DEC-008
+  title: 显式配置的解释器只原地修复，改选环境需显式 opt-in
+  category: tooling
+  status: active
+  authority: C
+  user_approval: approved
+  related_tasks:
+  - TASK-030
+  related_business_logic:
+  - BL-WFOPT-002
+  context: 复核 O016-01 发现安装/更新期的引导脚本在显式配置的解释器依赖检查失败时会改用命名 Conda 环境并重写
+    CODEX_HOME/vibe-python，属于“静默替换用户显式选择”。日常运行入口（vibe.ps1/vibe.sh）与 global_installer.py
+    都不这样做：前者 fail-closed 且从不创建环境，后者的文档声明该文件不被安装器管理。因此这是三处策略不一致，
+    而且当 VIBE_PYTHON 环境变量被设置时，写入的配置文件实际不生效。
+  hypothesis: 让引导脚本与另外两条链路一致（配置的解释器只原地修复，改选环境需显式授权），可以在不降低可恢复性的前提下消除静默替换。
+  options:
+  - name: 保持自动改选（现状）
+    benefits:
+    - 安装/更新对坏环境自愈
+    costs:
+    - 用户显式指定的解释器可能在不知情时被换掉
+    risks:
+    - 与另外两条链路的 fail-closed 策略不一致；VIBE_PYTHON 优先时写入的文件不生效
+  - name: 原地修复 + 显式 opt-in（选择）
+    benefits:
+    - 用户指定的解释器永不被静默替换
+    - 三条链路策略一致
+    costs:
+    - 环境无法原地修复时需要用户按提示处理或显式授权
+    risks:
+    - 需要新增一个开关与相应回归测试
+  - name: 完全只读（失败即报错，无开关）
+    benefits:
+    - 行为最保守
+    costs:
+    - 正常的“请帮我换到 Conda 环境”诉求无法通过安装器完成
+    risks:
+    - 用户需要手工编辑配置文件
+  decision: 引导脚本默认原地修复显式配置的解释器：若它是 Python 3.11+ 且只缺 Vibe 依赖，则把依赖装进该解释器并保持
+    vibe-python 不变；若不是 3.11+ 或不可执行，则报错并给出修复命令。只有显式 opt-in（VIBE_PYTHON_REPAIR=1
+    或 --repair-interpreter）才允许改选命名 Conda 环境并重写配置；VIBE_PYTHON 环境变量优先时拒绝重写配置文件。
+  reason_summary:
+  - 用户明确选择“原地修复、绝不静默换环境”（Q-001 答复 A）
+  - 与日常入口和 global_installer 的 fail-closed 策略对齐
+  - 顺带消除 VIBE_PYTHON 优先时写入文件不生效的隐患
+  conditions:
+  - 无显式配置时的首次安装行为不变（创建/修复命名 Conda 环境并写入配置）
+  - uninstall（--no-create）不做任何安装或写入
+  - 不改动 install/update 脚本的参数解析
+  action: 修改 scripts/bootstrap_vibe_python.py（configured_python 返回来源、新增 python_version_ok、ensure_python
+    分支与 --repair-interpreter/VIBE_PYTHON_REPAIR），并新增 4 项回归测试。
+  expected_result: 显式配置的解释器不再被静默替换；坏环境有明确可执行的下一步。
+  reversal_plan: 回滚 scripts/bootstrap_vibe_python.py 与 tests/test_installer.py；opt-in 开关随之失效，行为回到“自动改选”。
+  observation: Windows 55 项（54 通过 + 1 跳过）与 Ubuntu 14 项检查全部通过（冻结修订 exports/task030-fix3，
+    摘要 33765c8d…）；反证在最初修订上 5/5 失败、在上一修订上 2 项失败，证明两次修复都 load-bearing。独立复核
+    reviewer-031 的 A1–A7 全部 verified，并提出 F1（VIBE_PYTHON_REPAIR=0 仍会 opt-in）与 F2（配置路径缺失时
+    报错缺少出路提示）两处缺陷，均已修复并重新复验。
+  actual_result: implemented and verified in source repo (frozen revision exports/task030-fix3)
+  outcome_status: successful
+  lesson: 安装器的“自愈”必须与用户显式配置的优先级对齐；对用户显式选择的环境，默认应是修复它而不是替换它。
+  evidence:
+  - PYTHONREPAIR-030
+  - PLATFORM-030
+  supersedes: []
+  created_at: '2026-09-21T09:35:00+08:00'
+  updated_at: '2026-09-21T10:50:00+08:00'

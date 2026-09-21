@@ -2,6 +2,16 @@
 
 ## File ownership
 
+| Storage | Primary writer | Notes |
+|---|---|---|
+| format 2 `records` / `evidence` / `reviews` | formal `vibe` commands | Branch-local state database; exact current facts |
+| legacy YAML files | `loopctl` migration window | Read-only compatibility; migrate explicitly |
+| current-session.md | vibe-goal | Concise, current, resumable |
+| progress.md | vibe-goal | Human-readable phase summary; reverse-chronological |
+| docs/archive/ | vibe-goal | Archived old sections from current-session.md / progress.md |
+
+The legacy table below describes files that remain readable in the migration window:
+
 | File | Primary writer | Notes |
 |---|---|---|
 | workflow.yaml | vibe-goal | Phase changes require gate evidence |
@@ -15,9 +25,6 @@
 | alignment/findings.yaml | vibe-goal after read-only audit | Reviewer returns draft; primary decides repair/escalation |
 | retrospective/retrospective.yaml | retrospective | Evidence-backed improvement only |
 | distillation/candidates.yaml | operator-distill | Staged promotion; never silently update global assets |
-| current-session.md | vibe-goal | Concise, current, resumable |
-| progress.md | vibe-goal | Human-readable phase summary; reverse-chronological |
-| docs/archive/ | vibe-goal | Archived old sections from current-session.md / progress.md |
 
 ## Fact priority
 
@@ -49,5 +56,5 @@ When a single YAML file becomes difficult to maintain, split by domain while ret
 - Latest on top: latest session block / phase section is at the top of the file; older sections go downward.
 - Header snapshot: the short "current state" block at the top is overwritten on every update instead of appended.
 - Archive on threshold: when `current-session.md` exceeds about 50-100 KB or roughly 10 session blocks, move older sections to `.project-log/docs/archive/`. Do the same for `progress.md` at about 50-100 KB.
-- Single source of truth: exact current state and next action come from `loop/handoff.md` and `loop/active-run.yaml`; the two md files must not contradict them.
-- Machine-maintained files (`loop/events.jsonl`, `loop/active-run.yaml`, `loop/handoff.md`, `verification/evidence.yaml`) must not be manually reordered or rewritten.
+- Single source of truth: format 2 uses the branch-local state database and generated `handoff.md`; legacy uses `loop/handoff.md` and `loop/active-run.yaml`. The two md files must not contradict them.
+- Machine-maintained state (format 2 database; legacy `loop/events.jsonl`, `loop/active-run.yaml`, `loop/handoff.md`, `verification/evidence.yaml`) must not be manually reordered or rewritten.

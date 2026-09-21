@@ -1,0 +1,692 @@
+version: '0.2'
+evidence:
+- id: ROUTE-001
+  task_id: TASK-002
+  business_logic: []
+  acceptance_criteria:
+  - Every newly routed Skill has a local SKILL.md
+  result: passed
+  level: 1
+  commands:
+  - PowerShell route existence check for nine newly routed Skills
+  limitations: []
+  artifacts:
+  - prompts/vibe-global-agent.md
+  - skills/
+- id: ROUTE-002
+  task_id: TASK-002
+  business_logic: []
+  acceptance_criteria:
+  - Package validation passes
+  result: passed
+  level: 2
+  commands:
+  - py -3 runtime/scripts/validate_package.py --root .
+  limitations: []
+  artifacts:
+  - runtime/scripts/validate_package.py
+- id: ROUTE-003
+  task_id: TASK-002
+  business_logic: []
+  acceptance_criteria:
+  - Existing standard-library tests pass
+  result: passed
+  level: 2
+  commands:
+  - py -3 -m unittest discover -s tests -v
+  limitations:
+  - pytest is not installed in the current Python environment
+  artifacts:
+  - tests/test_installer.py
+  - tests/test_loop_core.py
+- id: PYTHON-001
+  task_id: TASK-003
+  business_logic:
+  - Vibe 控制层应使用全局统一且兼容的 Python 解释器。
+  acceptance_criteria:
+  - 包校验、编译和 18 个 unittest 通过。
+  result: passed
+  level: 3
+  commands:
+  - /home/tbl/miniforge3/envs/vibe-coding/bin/python runtime/scripts/validate_package.py
+    --root .
+  - /home/tbl/miniforge3/envs/vibe-coding/bin/python -m unittest discover -s tests
+    -p test_*.py -q
+  - /home/tbl/miniforge3/envs/vibe-coding/bin/python -m compileall -q runtime scripts
+    plugins
+  limitations:
+  - 1 个历史 0.3.0 archive 测试按预期跳过。
+  artifacts:
+  - scripts/global_installer.py
+  - tests/test_installer.py
+- id: PYTHON-002
+  task_id: TASK-003
+  business_logic:
+  - 全局 Hooks 不应依赖进入项目时 PATH 中恰好存在兼容的 python。
+  acceptance_criteria:
+  - config.toml 的 SessionStart/PostToolUse/PreCompact 均使用 vibe-coding 解释器绝对路径。
+  result: passed
+  level: 3
+  commands:
+  - global_installer.py update --codex-home /home/tbl/.codex --without-mcp --skip-preflight
+  - tomllib 解析并检查三个 Hook 命令
+  limitations: []
+  artifacts:
+  - /home/tbl/.codex/vibe-python
+  - /home/tbl/.codex/config.toml
+- id: PYTHON-003
+  task_id: TASK-003
+  business_logic:
+  - 新项目应能复用全局 Vibe Python 设置完成初始化和恢复。
+  acceptance_criteria:
+  - 临时项目 init/validate/restore 及 SessionStart/PreCompact smoke test 通过；global verify
+    通过。
+  result: passed
+  level: 3
+  commands:
+  - fresh project smoke test
+  - global_installer.py verify --codex-home /home/tbl/.codex --without-mcp
+  limitations: []
+  artifacts:
+  - ~/.codex/vibe-workflow
+  - temporary project log
+- id: PYTHON-004
+  task_id: TASK-003
+  business_logic:
+  - 安装时应能自动准备并固定跨项目使用的 Conda-backed Vibe Python 环境。
+  acceptance_criteria:
+  - 模拟缺失 Conda 环境时 bootstrap 创建环境并写入 vibe-python；真实 update.sh 使用 bootstrap 后全局 verify
+    通过。
+  result: passed
+  level: 3
+  commands:
+  - unittest test_bootstrap_creates_missing_conda_environment
+  - /home/tbl/Project/vibe-coding/update.sh --codex-home /home/tbl/.codex --without-mcp
+    --skip-preflight
+  - global_installer.py verify
+  limitations:
+  - 未实现自动下载安装 Miniforge 发行版；机器必须已有 Conda/Miniforge/Miniconda，或显式提供 VIBE_PYTHON。
+  artifacts:
+  - scripts/bootstrap_vibe_python.py
+  - install.sh
+  - update.sh
+  - uninstall.sh
+  - /home/tbl/.codex/vibe-python
+- id: MCP-001
+  task_id: TASK-004
+  business_logic: []
+  acceptance_criteria:
+  - optional-mcps.json is required and schema-valid
+  - unknown MCP entries are rejected
+  result: passed
+  level: 2
+  commands:
+  - runtime/scripts/validate_package.py --root .
+  limitations: []
+  artifacts:
+  - runtime/mcp/optional-mcps.json
+  - runtime/scripts/validate_package.py
+- id: MCP-002
+  task_id: TASK-004
+  business_logic: []
+  acceptance_criteria:
+  - default install has no optional MCP
+  - --mcp codegraph configures and verifies
+  - --without-mcp preserves legacy MCP config
+  result: passed
+  level: 3
+  commands:
+  - python -m unittest discover -s tests -p test_*.py -q
+  limitations:
+  - 测试使用隔离 Codex fake CLI，不代表所有 Codex 版本输出格式。
+  artifacts:
+  - tests/test_installer.py
+  - scripts/global_installer.py
+- id: MCP-003
+  task_id: TASK-004
+  business_logic: []
+  acceptance_criteria:
+  - release validation, unit tests and plugin validation pass
+  result: passed
+  level: 3
+  commands:
+  - python build_release.py
+  limitations:
+  - 一个旧版 0.3.0 迁移测试因本地缺少历史归档而 skipped。
+  artifacts:
+  - dist/vibe-coding-codex-global-core-0.4.1.zip
+  - 'dist/vibe-coding-codex-global-core-0.4.1.zip.sha256 (SHA-256: 009c6a797ea90bb492e6cfcce7c55538b5913bd61f42d66a44670335ce6a4d1d)'
+- id: MCP-004
+  task_id: TASK-004
+  business_logic: []
+  acceptance_criteria:
+  - installed package is 0.4.1
+  - Codex global verify passes
+  - codegraph is enabled
+  result: passed
+  level: 4
+  commands:
+  - python scripts/global_installer.py update --mcp codegraph --skip-doctor
+  - python scripts/global_installer.py verify
+  - codex mcp list
+  - codex mcp get codegraph
+  limitations:
+  - 跳过了 Codex doctor，仅因本次变更不需要重新诊断主机；preflight features 检查已通过。
+  artifacts:
+  - /home/tbl/.codex/.vibe-codex-installation-state.json
+  - /home/tbl/.codex/config.toml
+  - /home/tbl/.codex/backups/vibe-global-update-20260727-115448-079438
+- id: MCP-005
+  task_id: TASK-004
+  business_logic: []
+  acceptance_criteria:
+  - CodeGraph project index is current and queryable
+  result: passed
+  level: 3
+  commands:
+  - codegraph status /home/tbl/Project/lerobot_v1.0
+  limitations:
+  - 未在当前 ACP 线程中直接调用 MCP tool；需要重启 Codex/Zed ACP 后验证工具暴露。
+  artifacts:
+  - /home/tbl/Project/lerobot_v1.0/.codegraph/
+  - /home/tbl/Project/lerobot_v1.0/CODE_MAP.md
+- id: MCP-006
+  task_id: TASK-004
+  business_logic: []
+  acceptance_criteria:
+  - Windows installer regression fixtures are executable on Windows
+  - Hook tests cover both Unix and Windows command fields
+  - selected CodeGraph MCP regression passes on Windows
+  result: passed
+  level: 2
+  commands:
+  - py -3 -m unittest discover -s tests -v
+  - py -3 runtime/scripts/validate_package.py --root .
+  - py -3 -m compileall -q runtime scripts tests
+  - plugin-creator validate_plugin.py plugins/vibe-toolbelt
+  limitations:
+  - 一个旧版 0.3.0 迁移测试因本地缺少历史归档而 skipped。
+  artifacts:
+  - tests/test_installer.py
+  - runtime/scripts/validate_package.py
+  - plugins/vibe-toolbelt
+- id: MCP-007
+  task_id: TASK-004
+  business_logic: []
+  acceptance_criteria:
+  - release archive builds after Windows regression fixes
+  - release archive checksum is recorded
+  result: passed
+  level: 3
+  commands:
+  - py -3 build_release.py
+  limitations:
+  - 一个旧版 0.3.0 迁移测试因本地缺少历史归档而 skipped。
+  artifacts:
+  - dist/vibe-coding-codex-global-core-0.4.1.zip
+- id: INSTALL-001
+  task_id: TASK-005
+  business_logic: []
+  acceptance_criteria:
+  - global installation is Vibe Coding 0.4.1
+  - isolated Conda Python environment is usable and persisted
+  - no optional MCP is configured
+  - installer, package, Project Log, Workflow, Loop, unit tests, and installed-runtime
+    smoke test pass
+  result: passed
+  level: 4
+  commands:
+  - .\update.ps1 --access-profile keep-existing --without-mcp
+  - D:\conda\envs\vibe-coding\python.exe scripts\global_installer.py verify
+  - D:\conda\envs\vibe-coding\python.exe runtime\scripts\validate_package.py --root
+    .
+  - D:\conda\envs\vibe-coding\python.exe runtime\scripts\validate_project.py --root
+    .
+  - D:\conda\envs\vibe-coding\python.exe runtime\scripts\validate_workflow.py --root
+    .
+  - D:\conda\envs\vibe-coding\python.exe runtime\scripts\loopctl.py --root . --json
+    validate
+  - D:\conda\envs\vibe-coding\python.exe -m pytest -q
+  - installed runtime init_project.py, validate_project.py, loopctl.py validate, and
+    render_subagent_prompt.py smoke test
+  limitations:
+  - ???? 0.3.0 ?????????????? skipped?
+  - Codex doctor reports a nonblocking duplicate npm/Zed installation diagnostic.
+  artifacts:
+  - C:\Users\12187\.codex\.vibe-codex-installation-state.json
+  - C:\Users\12187\.codex\vibe-python
+  - C:\Users\12187\.codex\backups\vibe-global-update-20260727-221129-704101
+- id: INSTALL-002
+  task_id: TASK-005
+  business_logic: []
+  acceptance_criteria:
+  - Vibe Coding Core 0.4.1 remains globally installed
+  - selected codegraph MCP is configured and enabled
+  - selected vibe-toolbelt plugin is installed, enabled, and version 0.4.1
+  - Windows plugin installation regression is covered
+  - installer, package, project, workflow, Loop validation, and full tests pass
+  result: passed
+  level: 4
+  commands:
+  - D:\conda\envs\vibe-coding\python.exe -m pytest tests\test_installer.py -q
+  - D:\conda\envs\vibe-coding\python.exe scripts\global_installer.py update --access-profile
+    keep-existing --mcp codegraph --mcp vibe-toolbelt
+  - codex --version
+  - codex mcp get codegraph
+  - codex plugin list
+  - D:\conda\envs\vibe-coding\python.exe scripts\global_installer.py verify
+  - D:\conda\envs\vibe-coding\python.exe runtime\scripts\validate_package.py --root
+    .
+  - D:\conda\envs\vibe-coding\python.exe runtime\scripts\validate_project.py --root
+    .
+  - D:\conda\envs\vibe-coding\python.exe runtime\scripts\validate_workflow.py --root
+    .
+  - D:\conda\envs\vibe-coding\python.exe runtime\scripts\loopctl.py --root . --json
+    validate
+  - D:\conda\envs\vibe-coding\python.exe -m pytest -q
+  results:
+  - installer regression: 8 passed, 1 skipped
+  - full test suite: 21 passed, 1 skipped, 4 subtests passed
+  - Codex CLI: 0.145.0
+  - codegraph: enabled
+  - vibe-toolbelt: installed, enabled, 0.4.1
+  limitations:
+  - Actual MCP/plugin tool invocation in the current ACP thread remains unverified
+    until the session is restarted.
+  - Codex doctor still reports a nonblocking duplicate npm/Zed installation diagnostic.
+  artifacts:
+  - scripts/global_installer.py
+  - tests/test_installer.py
+  - C:\Users\12187\.codex\.vibe-codex-installation-state.json
+  - C:\Users\12187\.codex\backups\vibe-global-update-20260727-222855-802325
+- id: INSTALL-003
+  task_id: TASK-005
+  business_logic: []
+  acceptance_criteria:
+  - Global installer verify passes with hooks config block present
+  - codegraph MCP enabled and responds to MCP initialize
+  - vibe-toolbelt plugin installed, enabled, version 0.4.1
+  - User model provider config preserved
+  result: passed
+  level: 4
+  commands:
+  - D:\conda\envs\vibe-coding\python.exe scripts\global_installer.py verify
+  - D:\conda\envs\vibe-coding\python.exe C:\Users\12187\.codex\vibe-workflow\scripts\validate_project.py
+    --root .
+  - D:\conda\envs\vibe-coding\python.exe C:\Users\12187\.codex\vibe-workflow\scripts\validate_workflow.py
+  - D:\conda\envs\vibe-coding\python.exe C:\Users\12187\.codex\vibe-workflow\scripts\loopctl.py
+    --root . --json validate
+  - D:\conda\envs\vibe-coding\python.exe -m pytest -q
+  - codex mcp list
+  - codex plugin list
+  - npx --yes @colbymchenry/codegraph serve --mcp (MCP initialize smoke test)
+  results:
+  - installer verify: Global installation verification passed
+  - project/workflow/loop validation: all passed
+  - pytest: 21 passed, 1 skipped, 4 subtests passed
+  - codegraph: enabled, serverInfo 1.5.0 on initialize
+  - vibe-toolbelt: installed, enabled, 0.4.1
+  - model config: preserved (deepseek-v4-flash-free / 127.0.0.1:15721)
+  limitations:
+  - Actual MCP/plugin tool invocation in the current ACP thread remains unverified
+    until the session is restarted.
+  artifacts:
+  - C:\Users\12187\.codex\config.toml
+  - C:\Users\12187\.codex\.vibe-codex-installation-state.json
+  - C:\Users\12187\.codex\backups\vibe-global-update-20260801-144717-992833
+- id: ROOTCAUSE-001
+  task_id: TASK-005
+  business_logic:
+  - 全局 Codex 配置应同时承载模型供应商配置与 Vibe 受管配置（hooks/MCP/插件），互不静默覆盖。
+  acceptance_criteria:
+  - 定位 MCP/hooks/插件安装后失效的具体外部写入方
+  - 证明失效事件与外部写入时间一一对应
+  - 说明安装器恢复机制为何无法防止复发
+  result: passed
+  level: 4
+  commands:
+  - 比对 C:\Users\12187\.codex\backups\ 内各备份 config.toml 的字节数与 mtime
+  - 检索 C:\Users\12187\.cc-switch\logs\cc-switch.log 的接管记录
+  - 检查 C:\Users\12187\.cc-switch\settings.json 与 cc-switch.db 的 proxy_live_backup
+    表
+  - tomllib 校验当前 config.toml 的 hooks/mcp_servers/marketplaces/plugins 存在
+  limitations:
+  - cc-switch 为闭源桌面应用，未审查其源码；行为由日志、备份内容与时间戳交叉验证。
+  artifacts:
+  - C:\Users\12187\.codex\backups\vibe-global-update-20260728-204228-172873\config.toml
+  - C:\Users\12187\.codex\backups\vibe-global-update-20260801-144717-992833\config.toml
+  - C:\Users\12187\.cc-switch\logs\cc-switch.log
+  - C:\Users\12187\.cc-switch\settings.json
+  - C:\Users\12187\.cc-switch\cc-switch.db
+- id: REPRO-001
+  task_id: TASK-005
+  business_logic:
+  - 全局 Codex 配置应同时承载模型供应商配置与 Vibe 受管配置（hooks/MCP/插件），互不静默覆盖。
+  acceptance_criteria:
+  - 用户使用 cc-switch 热切换模型后，检查 config.toml 是否仍含 Vibe 受管段
+  - 若被覆盖，通过安装器恢复并验证 MCP/插件/hooks 可用
+  result: passed
+  level: 4
+  commands:
+  - tomllib 检查热切换后 config.toml 的 hooks/mcp_servers/marketplaces/plugins
+  - codex mcp list / codex plugin list
+  - global_installer.py update --access-profile keep-existing --mcp codegraph --mcp
+    vibe-toolbelt
+  - global_installer.py verify
+  limitations:
+  - cc-switch 自身管理 MCP servers，因此本次整写保留了 [mcp_servers] 段，codegraph 仍 enabled；hooks/marketplace/plugins
+    仍被删除，需安装器恢复。
+  artifacts:
+  - C:\Users\12187\.codex\config.toml
+  - C:\Users\12187\.codex\backups\vibe-global-update-20260801-150629-068198
+  - C:\Users\12187\.cc-switch\logs\cc-switch.log
+- id: COMMONCFG-001
+  task_id: TASK-005
+  business_logic:
+  - 全局 Codex 配置应同时承载模型供应商配置与 Vibe 受管配置（hooks/MCP/插件），互不静默覆盖。
+  acceptance_criteria:
+  - 验证 cc-switch“应用通用配置”选项能否透传完整 TOML 段（hooks/marketplace/plugins）
+  - 验证透传后 Codex MCP/插件/hooks 是否仍可用
+  - 验证透传结果与 Vibe 安装器 update 是否兼容
+  result: partial
+  level: 4
+  commands:
+  - 在 cc-switch 通用配置（settings.common_config_codex）加入带 VIBE-CODEX-GLOBAL 标记的完整 Vibe
+    块
+  - 用户手动切换模型后检查 config.toml 与 codex mcp list/plugin list
+  - 离线模拟安装器 strip_config_block/preserved_mcp_sections 剥离逻辑
+  limitations:
+  - cc-switch 为闭源应用，序列化行为由写入结果反推：其重排了 TOML 段顺序，并把 [model_providers]/[mcp_servers.codegraph]
+    插入 Vibe 标记块内部。
+  - cc-switch 序列化丢失了行尾注释
+  artifacts:
+  - C:\Users\12187\.codex\config.toml
+  - C:\Users\12187\.cc-switch\cc-switch.db
+  - D:\Project\vibe-coding\cc-switch-common-config-codex.txt
+  - D:\Project\vibe-coding\scripts\global_installer.py
+- id: COMPATFIX-001
+  task_id: TASK-005
+  business_logic:
+  - 全局 Codex 配置应同时承载模型供应商配置与 Vibe 受管配置（hooks/MCP/插件），互不静默覆盖。
+  - 安装器应能安全修复第三方工具（cc-switch）重写后的 config.toml，而不是报错或误删用户配置。
+  acceptance_criteria:
+  - 安装器 update 在 BEGIN 存在、END 缺失的 config.toml 上不报错
+  - 剥离标记块时保留混入的 model_providers/mcp_servers 段
+  - 重建后 hooks/marketplace/plugins/END 标记完整，TOML 合法
+  - 卸载时同样保留 model_providers/mcp_servers
+  - 新增回归测试与全量测试通过
+  result: passed
+  level: 4
+  commands:
+  - 修改 global_installer.py：config_block_bounds 容忍缺失 END；_sections_in_block 抽出 model_providers/mcp_servers；install_config/remove_config
+    合并保留段
+  - pytest tests/test_installer.py -q（10 passed, 1 skipped）
+  - pytest -q（23 passed, 1 skipped, 4 subtests passed）
+  - validate_package.py --root .（passed）
+  - 真实环境 global_installer.py update --access-profile keep-existing --mcp codegraph
+    --mcp vibe-toolbelt
+  - codex mcp list / codex plugin list
+  limitations:
+  - 端到端实测基于当前 cc-switch 写入格式；cc-switch 后续版本若改变序列化方式需重新验证。
+  artifacts:
+  - D:\Project\vibe-coding\scripts\global_installer.py
+  - D:\Project\vibe-coding\tests\test_installer.py
+  - C:\Users\12187\.codex\config.toml
+  - C:\Users\12187\.codex\backups\vibe-global-update-20260801-152623-806243
+- id: MCP-008
+  task_id: TASK-006
+  business_logic:
+  - cc-switch ??????Codex ??????????? MCP??????????????
+  acceptance_criteria:
+  - document-loader ????????????????????
+  - Codex 0.145.0 ???????? async hook ? PreCompact additionalContextLimit
+  - ?????? MCP ?????
+  result: passed
+  level: 4
+  commands:
+  - pytest tests\test_installer.py -q -> 10 passed, 1 skipped
+  - uvx awslabs.document-loader-mcp-server@1.0.17 + MCP initialize -> serverInfo Document
+    Loader 3.4.5
+  - codex mcp list -> codegraph/document-loader/github/playwright/web-search/context7
+    enabled
+  - codex exec --ephemeral --json '??? OK' -> OK, exit 0, no MCP/hook startup warnings
+  artifacts:
+  - plugins/vibe-toolbelt/.mcp.json
+  - scripts/global_installer.py
+  - cc-switch-common-config-codex.txt
+  - C:\Users\12187\.codex\config.toml
+  - C:\Users\12187\.codex\plugins\cache\vibe-global-toolbox\vibe-toolbelt\0.4.1\.mcp.json
+  limitations:
+  - ???? Codex ????????????????????????????
+- id: MCP-009
+  task_id: TASK-006
+  business_logic:
+  - document-loader 在 Codex 终端新会话中应完成 MCP initialize，不因 Windows 输出编码失败而被标记为 unavailable
+  acceptance_criteria:
+  - 插件缓存包含固定版本 1.0.17、代理和 UTF-8 Python 环境变量
+  - 直接 MCP initialize 返回 Document Loader 3.4.5
+  - 普通 Codex CLI exec 返回 OK 且退出码为 0
+  - SessionStart Hook 返回 additionalContext 且退出码为 0
+  result: passed
+  level: 4
+  commands:
+  - global_installer.py update --access-profile keep-existing --skip-preflight
+  - codex mcp get document-loader
+  - uvx awslabs.document-loader-mcp-server@1.0.17 + MCP initialize
+  - codex exec --ephemeral --skip-git-repo-check --json '只回复 OK'
+  - session_start.py with SessionStart payload
+  artifacts:
+  - plugins/vibe-toolbelt/.mcp.json
+  - C:\Users\12187\.codex\plugins\cache\vibe-global-toolbox\vibe-toolbelt\0.4.1\.mcp.json
+  - C:\Users\12187\.codex\config.toml
+  limitations:
+  - 终端交互 TUI 需要用户重启当前旧进程后手动确认；当前 PATH 优先命中 Zed 注入的 Codex 0.145.0，用户级 npm 另有 0.146.0
+- id: HOSTCFG-001
+  task_id: TASK-006
+  business_logic:
+  - cc-switch Codex 通用配置必须匹配实际宿主机的 Vibe Python、CODEX_HOME、Hook 和本地 marketplace 路径。
+  acceptance_criteria:
+  - 生成脚本读取 CODEX_HOME/vibe-python 或 VIBE_PYTHON，而不是硬编码用户路径。
+  - 生成结果包含当前宿主机的 Hook 和 marketplace 路径。
+  - 生成结果可被 TOML 解析，且不包含当前 Ubuntu 不应出现的 Windows 固定路径。
+  - canonical 配置文件正文与当前宿主机重新生成结果一致。
+  result: passed
+  level: 3
+  commands:
+  - python scripts/generate_cc_switch_config.py --output temporary-file
+  - tomllib 解析生成结果并断言 CODEX_HOME、Vibe Python、源码根路径
+  - rg 扫描 cc-switch-common-config-codex.txt 的 Windows 固定路径
+  - python -m unittest discover -s tests -p test_installer.py -> 10 passed, 1 skipped
+  - python runtime/scripts/validate_package.py --root . -> Package validation passed
+  limitations:
+  - 当前仅在 Ubuntu 宿主机验证；Windows 的字段分化由代码路径覆盖，未在本次宿主机上实际运行 Windows 生成器。
+  artifacts:
+  - scripts/generate_cc_switch_config.py
+  - cc-switch-common-config-codex.txt
+  - /home/tbl/.codex/vibe-python
+  - /home/tbl/.codex/config.toml
+- id: HOOK-SESSION-001
+  task_id: TASK-006
+  business_logic:
+  - SessionStart Hook 应返回当前 Codex 接受的事件专用 JSON，并注入项目恢复上下文。
+  acceptance_criteria:
+  - 输出顶层包含 hookSpecificOutput。
+  - hookSpecificOutput.hookEventName 等于 SessionStart。
+  - hookSpecificOutput.additionalContext 为字符串。
+  - PreCompact 使用对应的 PreCompact 事件名。
+  - 新会话冒烟不再报告 invalid session start JSON output。
+  result: passed
+  level: 4
+  commands:
+  - python -m unittest tests.test_loop_core -> 13 passed
+  - python -m unittest discover -s tests -p test_installer.py -> 10 passed, 1 skipped
+  - python runtime/scripts/validate_package.py --root . -> Package validation passed
+  - 直接运行已安装 session_start.py 并解析 hookSpecificOutput
+  - codex exec --ephemeral --json -> OK, exit 0
+  limitations:
+  - 当前使用 Codex CLI ephemeral 冒烟验证；用户交互式 TUI 仍需重新开启对话做最终观察。
+  artifacts:
+  - runtime/hooks/session_start.py
+  - runtime/hooks/pre_compact.py
+  - tests/test_loop_core.py
+  - /home/tbl/.codex/vibe-workflow/hooks/session_start.py
+  - /home/tbl/.codex/config.toml
+- id: DOC-CONV-001
+  task_id: TASK-010
+  business_logic:
+  - BL-PROJECTLOG-001
+  acceptance_criteria:
+  - 两个模板与规则文档明确四约定和机器维护文件边界。
+  - 新增模板约定回归测试通过。
+  - 包校验、项目校验、Loop 校验和单元测试通过。
+  result: passed
+  level: 2
+  commands:
+  - python -m unittest discover -s tests -p 'test_*.py' -q -> 41 passed, 1 skipped
+  - python runtime/scripts/validate_package.py --root . -> Package validation passed
+  - python runtime/scripts/validate_project.py --root . -> Validation passed
+  - vibe-workflow/scripts/loopctl.py --root . validate -> passed
+  limitations:
+  - 约定先落地到框架模板与规则文档；既有项目（如 boss_electrics）未做历史段落重排。
+  artifacts:
+  - runtime/project-log-template/progress.md
+  - runtime/project-log-template/current-session.md
+  - skills/a-project-log/SKILL.md
+  - skills/a-project-log/REFERENCE.md
+  - skills/a-session-handoff/SKILL.md
+  - docs/USAGE.md
+  - prompts/vibe-global-agent.md
+  - tests/test_project_templates.py
+- id: RULES-011
+  task_id: TASK-011
+  business_logic: []
+  acceptance_criteria:
+  - 全局 Agent 提示包含八荣八耻
+  - 通用规则模板包含八荣八耻
+  - 当前 Codex 的 AGENTS.md 与已安装 skill 模板同步
+  - 包校验、项目日志校验与单元测试通过
+  result: passed
+  level: 2
+  commands:
+  - python -m unittest discover -s tests -p 'test_*.py' -q -> 41 passed, 1 skipped
+  - python runtime/scripts/validate_package.py --root . -> Package validation passed
+  - python runtime/scripts/validate_project.py --root . -> Validation passed
+  - vibe-workflow/scripts/loopctl.py --root . validate -> passed
+  - grep -n 八荣八耻 ~/.codex/AGENTS.md -> 存在
+  - diff 源码与 ~/.codex/skills/a-project-init/templates/general-rules.md -> MATCH
+  limitations:
+  - 已存在项目的 AGENTS.md 不会自动重新注入，只有重新初始化会使用新通用规则模板。
+  artifacts:
+  - prompts/vibe-global-agent.md
+  - skills/a-project-init/templates/general-rules.md
+  - ~/.codex/AGENTS.md
+  - ~/.codex/skills/a-project-init/templates/general-rules.md
+- id: LANDING-033
+  task_id: TASK-033
+  business_logic:
+  - BL-FRAMELAND-001
+  - BL-FRAMELAND-002
+  - BL-FRAMELAND-003
+  - BL-FRAMELAND-004
+  - BL-FRAMELAND-005
+  - BL-FRAMELAND-006
+  - BL-FRAMELAND-007
+  - BL-FRAMELAND-008
+  - BL-FRAMELAND-009
+  acceptance_criteria:
+  - 已确认方向有原子业务逻辑、需求基线、决策与活动目标承载
+  - 实施任务依赖无环，TASK-034..TASK-046 全部为 pending，且覆盖每条 BL-FRAMELAND 原子
+  - 与既有原子 BL-PROJECTINIT-001 的语义冲突显式取代而非静默覆盖
+  - 项目日志校验、包校验与单元测试通过
+  result: passed
+  level: 2
+  commands:
+  - PY=$(cat "${CODEX_HOME:-$HOME/.codex}/vibe-python"); "$PY" runtime/scripts/validate_project.py --root .
+  - PY=$(cat "${CODEX_HOME:-$HOME/.codex}/vibe-python"); "$PY" runtime/scripts/validate_package.py --root .
+  - PY=$(cat "${CODEX_HOME:-$HOME/.codex}/vibe-python"); "$PY" -m unittest discover -s tests -p 'test_*.py' -q
+  - PY=$(cat "${CODEX_HOME:-$HOME/.codex}/vibe-python"); "$PY" runtime/scripts/loopctl.py --root . --json validate
+  limitations:
+  - 只验证规划产物与项目日志一致性，不验证任何实现行为；BL-FRAMELAND 的验收条目在当前修订上全部为 not-verified
+  - TASK-034..TASK-046 的任务图仅做依赖与覆盖检查，未执行任何实现或迁移
+  artifacts:
+  - .project-log/business-logic/atoms.yaml
+  - .project-log/decisions/decision-log.yaml
+  - .project-log/requirements/baseline.yaml
+  - .project-log/goals/active-goal.yaml
+  - .project-log/tasks/task-list.yaml
+- id: CONDA-PROBE-032
+  task_id: TASK-032
+  business_logic:
+  - BL-WFOPT-002
+  acceptance_criteria:
+  - 管理器以退出码 0 打印错误文本时，env_python 返回 None 而不是把文本当成路径
+  - 该情形下失败信息包含管理器原始输出，而不是原始 WinError/FileNotFoundError
+  - 三种情形各有独立回归测试
+  result: passed
+  level: 3
+  commands:
+  - PY=$(cat "${CODEX_HOME:-$HOME/.codex}/vibe-python"); "$PY" -m unittest tests.test_installer.BootstrapInterpreterResolutionTests -v
+  - PY=$(cat "${CODEX_HOME:-$HOME/.codex}/vibe-python"); "$PY" -m unittest discover -s tests -p 'test_*.py' -q
+  - git archive HEAD -> /tmp/vibe-falsify-1wth + 新测试 -> 4/4 失败（1 failure + 3 errors）
+  limitations:
+  - 本机为 Linux；reviewer-031 报告的 Windows D:\conda\Library\bin\conda.bat 现场未在本机复现，改用同语义的零退出码错误输出管理器
+  - 多行输出用例在修复前只是签名不匹配而失败，属于防回归守卫，不是缺陷复现
+  artifacts:
+  - scripts/bootstrap_vibe_python.py
+  - tests/test_installer.py
+- id: CONTRACT-034
+  task_id: TASK-034
+  business_logic:
+  - BL-FRAMELAND-001
+  - BL-FRAMELAND-002
+  - BL-FRAMELAND-003
+  - BL-FRAMELAND-004
+  - BL-FRAMELAND-005
+  - BL-FRAMELAND-006
+  - BL-FRAMELAND-007
+  - BL-FRAMELAND-008
+  - BL-FRAMELAND-009
+  acceptance_criteria:
+  - format 2 实体清单、字段、关系与 ID 规则明确
+  - 长文档正文与结构化状态的分工、版本引用与失效规则明确
+  - 正式入口与兼容入口的命令面、参数与失败语义明确
+  - 迁移状态机每一步与失败处置明确
+  - 证据与独立复核门禁的判定条件明确
+  - 每条 BL-FRAMELAND 原子都有对应的可执行验收条目
+  result: passed
+  level: 2
+  commands:
+  - 结构检查：10 个小节 / AC-FL-001..019 / 8 类文档实体 / 7 个新增动作全部存在
+  - PY=$(cat "${CODEX_HOME:-$HOME/.codex}/vibe-python"); "$PY" runtime/scripts/validate_project.py --root .
+  - PY=$(cat "${CODEX_HOME:-$HOME/.codex}/vibe-python"); "$PY" runtime/scripts/validate_package.py --root .
+  limitations:
+  - 契约冻结不等于实现；AC-FL-001..019 仍待 TASK-035..TASK-044 执行
+  - records/evidence/reviews 表结构是设计冻结，尚未落地到 state_store.py
+  artifacts:
+  - .project-log/specs/framework-landing-contract.md
+  - .project-log/architecture/architecture.yaml
+- id: TASK035-INIT
+  task_id: TASK-035
+  business_logic:
+  - BL-FRAMELAND-001
+  acceptance_criteria:
+  - 无 .project-log 的目录默认初始化出 format 2，且不需要 --experimental
+  - 已有可识别 .project-log 时不覆盖、不混合两套结构化状态
+  - Git 工作树等前置条件不满足时 fail-closed 并给出可执行提示
+  - DEC-004 中与本方向冲突的“不得改动初始化链路”约束已显式更新
+  result: passed
+  level: 3
+  commands:
+  - PY=$(cat "${CODEX_HOME:-$HOME/.codex}/vibe-python"); "$PY" -m unittest discover -s tests -p 'test_*.py' -q -> Ran 70 tests, OK (skipped=1)
+  - PY=$(cat "${CODEX_HOME:-$HOME/.codex}/vibe-python"); "$PY" -m unittest tests.test_project_log_init -v -> 8 passed
+  - git archive HEAD -> /tmp/vibe-falsify-035-HesH + 新测试 -> 8/8 失败
+  limitations:
+  - 只验证本机 Linux；Windows 矩阵由 TASK-043 覆盖
+  - format 1 仍可经 --format 1 显式生成，尚未退役
+  artifacts:
+  - runtime/scripts/init_project.py
+  - runtime/scripts/state_context.py
+  - runtime/scripts/vibe.py
+  - runtime/hooks/hook_common.py
+  - tests/test_project_log_init.py
+  - docs/USAGE.md

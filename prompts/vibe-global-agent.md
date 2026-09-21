@@ -33,26 +33,31 @@
 每次接收非琐碎工程任务时：
 
 1. 先读取当前项目 `AGENTS.md`、代码、配置和已有测试。
-2. 检查项目是否有 `.project-log/`。不存在时，使用全局运行时：
+2. 检查项目是否有 `.project-log/`。不存在时，使用全局运行时的正式入口初始化 format 2：
    ```bash
    VIBE_RUNTIME="${CODEX_HOME:-$HOME/.codex}/vibe-workflow"
-   python3 "$VIBE_RUNTIME/scripts/init_project.py" --target <project-root>
+   python3 "$VIBE_RUNTIME/scripts/vibe.py" --root <project-root> init
    ```
    默认运行时为 `~/.codex/vibe-workflow`。
-3. 读取 `.project-log/current-session.md`、`workflow.yaml`、任务清单、相关业务原子、需求基线、决策和现有验证证据。
-4. 调用：
+3. 读取 `.project-log/current-session.md`、任务清单、相关业务原子、需求基线、决策和现有验证证据；format 2 的精确事实源是状态库，旧格式才是 YAML 文件。
+4. format 2 调用：
+   ```bash
+   python3 "$VIBE_RUNTIME/scripts/vibe.py" --root <project-root> status
+   python3 "$VIBE_RUNTIME/scripts/vibe.py" --root <project-root> context <task-id>
+   ```
+   旧格式调用：
    ```bash
    python3 "$VIBE_RUNTIME/scripts/loopctl.py" --root <project-root> --json restore
    ```
-   Windows 使用 `py -3`。恢复 Project Goal、Loop 状态、证据有效性、原生 Goal 绑定和精确下一步。
+   Windows 使用 `py -3`。恢复 Project Goal、任务、阻塞、证据有效性、原生 Goal 绑定和精确下一步。
 5. Project Goal 已定义但原生 Goal 未绑定时，调用 `loopctl goal-bind --json` 生成 objective，并通过 Codex 原生 `/goal` 建立当前线程 Goal。
 6. 恢复事实状态后再行动。恢复状态不是交付：对实质性用户任务，必须继续执行到完成、明确阻塞或用户要求暂停；不得只输出恢复摘要后结束。无活动 Run 时，先建立新 Run，再执行当前用户请求。没有非琐碎任务时，先建立最小任务记录；不要无计划地修改项目。
 
 ## Project Log 长文档组织
 
 - `current-session.md` 与 `progress.md` 是面向人的快速摘要：最新在最上，顶部“当前状态”快照每次覆盖更新，超限时旧段落归档到 `.project-log/docs/archive/`。
-- 精确当前状态与下一步以 `loop/active-run.yaml`、`loop/handoff.md` 为单一事实源；不要在多份长文档里维护互相矛盾的“下一步”。
-- 机器维护的结构化状态文件（`loop/events.jsonl`、`loop/active-run.yaml`、`loop/handoff.md`、`verification/evidence.yaml`）不手工重排或改写。
+- format 2 的精确当前状态与下一步以状态库和生成的 `handoff.md` 为单一事实源；旧格式以 `loop/active-run.yaml`、`loop/handoff.md` 为单一事实源。不要在多份长文档里维护互相矛盾的“下一步”。
+- 机器维护的结构化状态（format 2 状态库；旧格式的 `loop/events.jsonl`、`loop/active-run.yaml`、`loop/handoff.md`、`verification/evidence.yaml`）不手工重排或改写。
 
 ## 标准生命周期
 

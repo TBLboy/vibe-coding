@@ -1,10 +1,12 @@
-# Vibe Coding - Codex Global Core 0.4.1
+# Vibe Coding - Codex Global Core 0.5.0
 
 面向 Codex CLI、VS Code 插件、桌面端与 ACP 外部协议连接端等 Codex 客户端的用户级全局 Vibe Coding 工作流。
 
 ## 使用指南
 
 以真实开发任务讲解完整使用流程（初始化工程 → 业务逻辑澄清 → 技术选型 → 代码落地 → 归档留痕），见 [docs/USAGE.md](docs/USAGE.md)。
+
+本版本的默认格式切换、format 1 只读兼容与退役关口见 [docs/RELEASE-NOTES.md](docs/RELEASE-NOTES.md)。
 
 ## 核心能力
 
@@ -173,29 +175,27 @@ py -3 -m unittest discover -s tests -v
 项目初始化与验证：
 
 ```powershell
-py -3 "$env:CODEX_HOME\vibe-workflow\scripts\init_project.py" --target C:\path\to\project
-py -3 "$env:CODEX_HOME\vibe-workflow\scripts\validate_project.py" --root C:\path\to\project
+py -3 "$env:CODEX_HOME\vibe-workflow\scripts\vibe.py" init --root C:\path\to\project
+py -3 "$env:CODEX_HOME\vibe-workflow\scripts\vibe.py" --root C:\path\to\project validate
 ```
 
-## Loop CLI
+## Vibe CLI
 
 ```text
-loopctl init
-loopctl restore
-loopctl status
-loopctl start-run --task-id TASK-NEW
-loopctl goal-bind
-loopctl goal-sync
-loopctl record-event
-loopctl record-evidence
-loopctl invalidate-evidence
-loopctl evaluate goal
-loopctl decide
-loopctl handoff
-loopctl validate
+vibe init
+vibe status
+vibe validate
+vibe route --signal ...
+vibe task begin|update|wait|resume|handoff|finish|cancel
+vibe record create|update|link
+vibe evidence record|invalidate|refresh
+vibe review record
+vibe gate --task TASK-ID
+vibe goal update|complete --id GOAL-ID
+vibe migrate preview|apply|resume|rollback
 ```
 
-原生 `/goal` 显示完成后，仍需通过 `loopctl evaluate goal` 才能完成 Project Goal。
+`loopctl.py` 保留为底层兼容入口；日常操作与文档示例统一走 `vibe`。原生 `/goal` 显示完成后，仍需通过 `vibe goal complete` 的验收门禁才能完成 Project Goal。
 
 ## 卸载
 

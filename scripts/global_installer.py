@@ -15,9 +15,15 @@ import sys
 import tomllib
 from typing import Any
 
+RUNTIME_SCRIPTS = Path(__file__).resolve().parents[1] / "runtime" / "scripts"
+if str(RUNTIME_SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(RUNTIME_SCRIPTS))
+
+from framework_info import LEGACY_GUIDANCE, VERSION  # noqa: E402
+
 
 TITLE = "Vibe Coding - Codex Global Core"
-PACKAGE_VERSION = "0.4.1"
+PACKAGE_VERSION = VERSION
 BEGIN = "<!-- VIBE-CODEX-GLOBAL:BEGIN -->"
 END = "<!-- VIBE-CODEX-GLOBAL:END -->"
 CONFIG_BEGIN = "# VIBE-CODEX-GLOBAL:CONFIG:BEGIN"
@@ -777,6 +783,8 @@ def install_or_update(
     print(f"[+] {TITLE} {PACKAGE_VERSION} installed to: {home}")
     print(f"[+] Skills: {skills}")
     print(f"[+] Backup: {backup_dir}")
+    print("[*] New projects default to project-log format 2.")
+    print(f"[*] Existing format 1 projects stay readable and writable for now; {LEGACY_GUIDANCE}")
 
 
 def verify(root: Path, home: Path, skills: Path, *, check_plugin: bool = False) -> None:
@@ -863,6 +871,7 @@ def uninstall(root: Path, home: Path, skills: Path) -> None:
         remove_empty_directories(home / "vibe-workflow")
         remove_empty_directories(skills)
         print("[*] No active Vibe installation state was found.")
+        print("[*] Project .project-log/ directories were not touched.")
         return
     backup_dir = backup(home, skills, "uninstall")
     remove_agents_block(home)
@@ -891,6 +900,7 @@ def uninstall(root: Path, home: Path, skills: Path) -> None:
     remove_empty_directories(home / "vibe-workflow")
     remove_empty_directories(skills)
     print(f"[+] Removed the Vibe-managed global layer. Backup: {backup_dir}")
+    print("[*] Project .project-log/ directories were not touched.")
 
 
 def main() -> int:

@@ -8,8 +8,12 @@ import subprocess
 import sys
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
+RUNTIME_SCRIPTS = Path(__file__).resolve().parent / "runtime" / "scripts"
+if str(RUNTIME_SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(RUNTIME_SCRIPTS))
 
-VERSION = "0.4.1"
+from framework_info import VERSION  # noqa: E402
+
 EXCLUDED_DIRS = {".git", "__pycache__", "dist"}
 EXCLUDED_SUFFIXES = {".pyc", ".pyo", ".zip"}
 
