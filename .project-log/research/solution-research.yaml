@@ -1,2 +1,58 @@
 version: "0.2"
-studies: []
+studies:
+- id: RES-001
+  status: complete
+  problem: 为恢复可信、统一记录写入、风险分流和证据当前适用性选择最小可行实现路径
+  related_business_logic: []
+  related_tasks:
+  - TASK-012
+  constraints:
+  - Python 3.11+；Windows PowerShell 与 Linux；复用 vibe-python
+  - 本轮只交付研究，不改运行时代码、全局安装或 my_lunwen
+  - 必须兼顾 Git 跨机器交换、分支切换、回滚和可读历史
+  - 不新增常驻服务、付费推理或大型编排框架
+  candidates:
+  - name: 多 YAML 写入脚本
+    fit: 适合旧格式兼容层，不能单凭单文件原子写保证跨文件一致性
+    migration_cost: low
+    maintenance_risk: 多事实源和恢复协调继续存在
+  - name: 单文档 JSON 加锁与原子替换
+    fit: 小规模可用且 Git 友好，是需要直接文本合并时的正式候选
+    migration_cost: medium
+    maintenance_risk: 全量解析重写、锁恢复和跨分支冲突
+  - name: Python sqlite3 加 SQLite 与文本快照
+    fit: 本机事务和查询首选；必须先验证 Git 交换与冲突处理
+    migration_cost: medium-high
+    maintenance_risk: 快照导入导出、分支上下文和旧写者兼容
+  - name: JSONL 完整事件溯源
+    fit: 不选作本轮主架构
+    migration_cost: high
+    maintenance_risk: 重放版本、快照和并发事件语义扩大控制层复杂度
+  - name: DVC 全量集成
+    fit: 仅借鉴输入命令输出依赖；不适合作为通用任务状态框架
+    migration_cost: high
+    maintenance_risk: 给纯文档项目增加不必要的数据管线与缓存约束
+  strategy: spike-first
+  recommendation:
+    document: .project-log/docs/workflow-optimization-technical-selection.md
+    storage: 条件推荐 SQLite；原型与 Git roundtrip 不满足要求则选择单文档存储
+    implementation: 统一命令服务、显式转换、自动视图、风险规则和版本化证据绑定
+    approval: DEC-006 的技术方向已认可；当前仅拆解任务，暂不执行；实际安装与迁移仍需单独批准
+  conditions:
+  - 先验证事务故障恢复、幂等、版本冲突、两副本交换与分支往返
+  - 若直接编辑或自动合并机器状态文本是硬约束，重新选择单文档方案
+  - 严格验证与独立 review 不能因任务提速被静默省略
+  contrary_evidence:
+  - 当前日志体量不足以证明数据库在速度上胜过文件
+  - SQLite 本机单写者，不用于多机同时访问的共享数据库
+  - 当前文件 hash 不匹配可能仅是换行变化，不能推断历史验证失败
+  - 没有原始计时基线，不能声称具体提速倍数
+  confidence: 0.75
+  decision_ref: DEC-006
+  sources:
+  - .project-log/docs/workflow-optimization-technical-selection.md 第 12 节 S1-S8 官方资料及 L1-L2 本地证据
+  - runtime/scripts/loop_state.py
+  - runtime/hooks/post_tool_use.py
+  - D:/Project/my_lunwen/.project-log（只读核查）
+  retrieved_at: '2026-09-19'
+  updated_at: '2026-09-19'

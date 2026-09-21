@@ -160,6 +160,64 @@ class LoopCoreTests(unittest.TestCase):
         item = load_yaml(self.root / ".project-log/loop/evidence-index.yaml")["evidence"][0]
         self.assertEqual(item["status"], "stale")
 
+    def record_file_evidence(self, files: list[str], evidence_id: str = "EVID-001") -> None:
+        record_evidence(
+            self.root,
+            evidence_id=evidence_id,
+            kind="test",
+            subject="file",
+            status="valid",
+            files=files,
+            requirements=[],
+            tasks=["TASK-001"],
+            command="test",
+            result_ref=None,
+            replace=False,
+        )
+
+    def test_touching_an_unchanged_covered_file_keeps_the_record_current(self) -> None:
+        source = self.root / "src.txt"
+        source.write_text("one", encoding="utf-8")
+        self.record_file_evidence(["src.txt"])
+
+        self.assertEqual(invalidate_evidence(self.root, ["src.txt"], "PostToolUse:apply_patch"), [])
+        item = load_yaml(self.root / ".project-log/loop/evidence-index.yaml")["evidence"][0]
+        self.assertEqual(item["status"], "valid")
+        self.assertIsNone(item["invalidated_at"])
+
+    def test_rewriting_identical_bytes_keeps_the_record_current(self) -> None:
+        source = self.root / "src.txt"
+        source.write_text("one", encoding="utf-8")
+        self.record_file_evidence(["src.txt"])
+        source.write_text("one", encoding="utf-8")
+
+        self.assertEqual(invalidate_evidence(self.root, ["src.txt"], "PostToolUse:apply_patch"), [])
+
+    def test_a_covered_path_without_a_recorded_hash_is_still_invalidated(self) -> None:
+        self.record_file_evidence(["later.txt"])
+        (self.root / "later.txt").write_text("new", encoding="utf-8")
+
+        self.assertEqual(
+            invalidate_evidence(self.root, ["later.txt"], "PostToolUse:apply_patch"), ["EVID-001"]
+        )
+
+    def test_a_removed_covered_file_is_still_invalidated(self) -> None:
+        source = self.root / "src.txt"
+        source.write_text("one", encoding="utf-8")
+        self.record_file_evidence(["src.txt"])
+        source.unlink()
+
+        self.assertEqual(
+            invalidate_evidence(self.root, ["src.txt"], "PostToolUse:apply_patch"), ["EVID-001"]
+        )
+
+    def test_an_uncovered_path_does_not_invalidate(self) -> None:
+        source = self.root / "src.txt"
+        source.write_text("one", encoding="utf-8")
+        self.record_file_evidence(["src.txt"])
+
+        self.assertEqual(invalidate_evidence(self.root, ["other.txt"], "PostToolUse:apply_patch"), [])
+
     def retry_payload(self, delta: str) -> dict:
         return {
             "decision_id": "LD-001",
@@ -304,6 +362,42 @@ class LoopCoreTests(unittest.TestCase):
         self.assertEqual(state["counters"]["task_attempts"], 0)
         self.assertEqual(state["native_goal"]["binding_status"], "unbound")
         self.assertEqual(result["event"]["type"], "run-started")
+
+    def test_start_run_binds_the_open_project_goal(self) -> None:
+        self.define_goal()
+
+        result = start_run(self.root, phase="verification", task_id="TASK-NEW")
+
+        self.assertEqual(result["state"]["goal_id"], "GOAL-001")
+        self.assertEqual(result["event"]["goal_id"], "GOAL-001")
+        self.assertEqual(validate(self.root), [])
+
+    def test_start_run_does_not_borrow_a_completed_goal(self) -> None:
+        self.define_goal()
+        document = load_yaml(self.root / ".project-log/goals/active-goal.yaml")
+        document["goal"]["status"] = "complete"
+        save_yaml(self.root / ".project-log/goals/active-goal.yaml", document)
+
+        result = start_run(self.root, task_id="TASK-NEW")
+
+        self.assertIsNone(result["state"]["goal_id"])
+
+    def test_start_run_without_a_goal_stays_unbound(self) -> None:
+        result = start_run(self.root, task_id="TASK-NEW")
+
+        self.assertIsNone(result["state"]["goal_id"])
+        self.assertEqual(validate(self.root), [])
+
+    def test_restore_replays_the_run_goal_and_task_binding(self) -> None:
+        self.define_goal()
+        start_run(self.root, phase="verification", task_id="TASK-NEW")
+
+        state, warnings = restore_active_run(self.root, force=True)
+
+        self.assertEqual(state["goal_id"], "GOAL-001")
+        self.assertEqual(state["task_id"], "TASK-NEW")
+        self.assertEqual(state["phase"], "verification")
+        self.assertTrue(any("active-run rebuilt" in warning for warning in warnings), warnings)
 
 
 class HookTests(unittest.TestCase):

@@ -26,6 +26,16 @@ For every affected business atom and acceptance criterion, map:
 - result;
 - limitations.
 
+## Depth by risk class
+
+Match the verification depth to the task's routing class instead of applying one weight everywhere:
+
+- `quick`: one targeted check or read-back of the changed artifact, recorded with its exact command or inspection.
+- `standard`: focused test plus adjacent regression; the evidence must name the unit it covers.
+- `strict`: acceptance evidence bound to the covered artifacts, independent review that does not reuse the implementer's conclusions, and a re-run after those artifacts change.
+
+Budget limits apply to context packages, never to blocking facts: when `state-context` reports `budget_insufficient`, raise the budget or read the blocker directly. Do not treat a truncated package as complete.
+
 ## Evidence Levels
 
 From strongest to weakest:

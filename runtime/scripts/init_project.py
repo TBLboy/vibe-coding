@@ -22,6 +22,9 @@ def initialize_project(target: Path, dry_run: bool = False) -> tuple[list[Path],
     runtime_root = Path(__file__).resolve().parents[1]
     source = runtime_root / "project-log-template"
     target = target.expanduser().resolve()
+    from state_context import reject_legacy
+
+    reject_legacy(target)
     target.mkdir(parents=True, exist_ok=True)
     if not source.exists():
         raise FileNotFoundError(f"Project Log template is missing: {source}")
@@ -49,7 +52,7 @@ def main() -> int:
     target = args.target.expanduser().resolve()
     try:
         created, skipped = initialize_project(target, args.dry_run)
-    except FileNotFoundError as exc:
+    except (FileNotFoundError, ValueError) as exc:
         parser.error(str(exc))
 
     print(

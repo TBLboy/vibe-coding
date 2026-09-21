@@ -1,2 +1,49 @@
 version: "0.2.1"
-questions: []
+questions:
+- id: Q-002
+  title: 是否采用显式 Git 快照同步和短暂协作锁作为第一版生产边界
+  status: answered
+  authority: C
+  impact: high
+  uncertainty: medium
+  rework_cost: high
+  related_business_logic:
+  - BL-WFOPT-001
+  - BL-WFOPT-002
+  related_tasks:
+  - TASK-019
+  - TASK-020
+  context: 独立复核证明无协调的分支获取和发布之间存在错配。隔离修复在快照交换时独占 Git index 锁并绑定上下文，普通 git switch 会明确 busy；非协作元数据操作不受保证。强杀可留锁，不能静默删除。此操作策略影响用户 Git 可用性，不包含在最初 SQLite 技术方向认可中。
+  recommendation: 第一版采用显式导出导入，日常任务和查询不占用 Git index 锁；只在同步提交窗口短暂锁定，异常留锁先明确提示并经人工核实，不自动删除。用户同意后进入最小生产实现。
+  alternatives:
+  - 接受上述显式同步和协作锁边界，继续当前生产设计
+  - 不接受 Git 锁副作用，先重新设计并验证交换方案
+  answer: 用户回复“可以”，批准第一版显式导出导入与同步时短暂 Git 协作锁；日常命令不锁 Git，异常遗留锁不自动删除。此批准不包含真实安装迁移或 Q-001 环境修复策略。
+  source_refs:
+  - D:/Project/vibe-coding-validation/reviewer-g1/REPORT-v2.md
+  - .project-log/specs/TASK-020.md
+  answered_at: '2026-09-20'
+- id: Q-001
+  title: 已显式配置的 Python 不可用时，安装器能否改选命名 Conda 环境
+  status: answered
+  authority: C
+  impact: high
+  uncertainty: medium
+  rework_cost: low
+  related_business_logic:
+  - BL-WFOPT-002
+  related_tasks:
+  - TASK-027
+  - TASK-030
+  context: 独立复核 O016-01 发现原有安装器在显式解释器依赖检查失败时可能改用命名 Conda 环境并重写配置。日常运行入口不会这样做；没有在本机执行实际环境替换。改变该行为影响用户环境选择和兼容策略，需用户确认，不阻塞隔离 G1 检查。
+  recommendation: 默认保留用户指定的解释器并明确报错；只有用户明确选择修复或更换目标环境后才修改环境及配置。
+  alternatives:
+  - 保留既有行为，安装或更新时允许改选命名 Conda 环境并提示
+  - 严格保留配置，失败即报错，显式授权修复或切换
+  - 原地修复所配置解释器的依赖，绝不自动改选环境；改选命名 Conda 环境需要显式 opt-in（已选择）
+  answer: 用户选择“原地修复、绝不静默换环境”：显式配置的解释器若是 Python 3.11+ 但缺少 Vibe 依赖，安装/更新应把依赖装进该解释器并保持 vibe-python 配置不变；若该解释器不是 3.11+ 或不可执行，则明确报错并给出修复命令，不创建也不改选 Conda 环境。只有显式 opt-in（VIBE_PYTHON_REPAIR=1 或 --repair-interpreter）才允许改选命名 Conda 环境并重写配置。用户原话：“A”。
+  source_refs:
+  - D:/Project/vibe-coding-validation/reviewer-016/REPORT-v3.md
+  - D:/Project/vibe-coding-validation/runs/task030-falsification/report.json
+  created_at: '2026-09-20T08:55:00+08:00'
+  answered_at: '2026-09-21T09:30:00+08:00'

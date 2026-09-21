@@ -20,6 +20,11 @@ WRITE_TOOL_HINTS = ("apply_patch", "edit", "write", "shell", "exec", "command")
 def main() -> int:
     payload = read_input()
     root = ensure_project(payload)
+    from state_context import is_transactional
+
+    if is_transactional(root):
+        print(json.dumps({}))
+        return 0
     maybe_probe(root, "PostToolUse", payload)
     name = tool_name(payload)
     paths = extract_paths(payload)

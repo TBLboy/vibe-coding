@@ -193,6 +193,14 @@ def clarification_gate_errors(loaded: dict[str, Any]) -> list[str]:
 
 
 def validate(root: Path) -> list[str]:
+    from state_context import is_transactional, open_store
+    from state_store import StateError
+
+    if is_transactional(root):
+        try:
+            return open_store(root).validate()
+        except (StateError, OSError, ValueError) as exc:
+            return [str(exc)]
     schema, loaded = schema_errors(root)
     return schema + cross_reference_errors(loaded) + clarification_gate_errors(loaded) + validate_loop(root)
 

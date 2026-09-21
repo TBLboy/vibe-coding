@@ -26,6 +26,16 @@ Confirm:
 
 Prototype/spike work may proceed with explicit `experimental` status and must not be presented as production completion.
 
+## Risk routing
+
+Classify before editing with `state-route` (or `state_routing.classify`) and scale the work to the class:
+
+- `quick`: one reversible low-impact file; run one targeted check on the changed artifact, record one compact status update.
+- `standard`: focused test for the changed unit plus a regression check of adjacent behavior; record changed files and the verification command with its result.
+- `strict`: bind acceptance evidence to the covered artifacts, obtain independent review, and re-run after any covered artifact changes.
+
+Re-classify whenever the change grows past its declared files or signals. Never use a `quick` classification to skip correctness checks; escalate as soon as a check fails or scope grows.
+
 ## Implementation Rules
 
 1. Make the smallest coherent change that satisfies the task.

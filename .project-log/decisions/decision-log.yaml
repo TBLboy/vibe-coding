@@ -1,5 +1,97 @@
 version: '0.2'
 decisions:
+- id: DEC-007
+  title: 原型修复通过后的生产存储与 Git 协调边界
+  category: architecture
+  status: active
+  authority: C
+  user_approval: approved
+  related_tasks:
+  - TASK-019
+  - TASK-020
+  related_business_logic:
+  - BL-WFOPT-001
+  - BL-WFOPT-002
+  context: 独立 G1 发现跨分支发布和回执污染。修复后八组独立检查通过，但协作 Git 锁可能暂时阻止切分支，进程强杀可能留下需人工核实的锁。
+  hypothesis: 日常命令只更新本机事务状态、仅显式快照交换时短暂协调 Git，可控制一致性风险和日常开销。
+  options:
+  - name: SQLite 按实体存储加显式快照交换与短暂 Git 协作锁（推荐，待批准）
+    benefits:
+    - 复用已测试的事务和精确冲突语义，日常操作不占用 Git index 锁
+    costs:
+    - 显式同步步骤、短暂 Git busy 和中断后的人工调查流程
+    risks:
+    - 非协作式 Git plumbing 不在保证内，强杀可遗留锁
+  - name: 不接受 Git 锁副作用，暂缓生产交换并重新设计
+    benefits:
+    - 不改变用户日常 Git 可用性
+    costs:
+    - 需额外原型验证，不能直接沿用当前方案进入生产
+    risks:
+    - 仅增加前后检查不能证明并发切分支安全
+  decision: Q-002 已获用户明确批准；选择按实体 SQLite 状态和显式 Git 文本快照交换，仅同步窗口持有协作锁，普通任务操作不锁 Git。允许 TASK-020 源码实施，不代表实现通过验收或真实安装获批。
+  reason_summary:
+  - 独立复核证明已知缺陷被拦截，不等于全部生产行为获批
+  - 实测未证明 SQLite 更快，选择理由是事务所有权和按实体查询
+  - 影响外部 Git 使用和恢复成本的策略需用户确认
+  action: 保留原始失败和限定复核证据，按 TASK-020 分片落地事务服务、适配入口、生成视图及交换边界，全部在外部工程验证
+  expected_result: 用户明确接受的 Git 协调边界和可验证的最小生产实现
+  evidence:
+  - D:/Project/vibe-coding-validation/reviewer-g1/REPORT-v2.md
+  - .project-log/specs/TASK-020.md
+- id: DEC-006
+  title: 四项优化采用统一命令服务并先试验事务存储与 Git 交换
+  category: architecture
+  status: active
+  authority: C
+  user_approval: approved
+  related_tasks:
+  - TASK-012
+  related_business_logic: []
+  context: 真实论文项目出现任务阻塞而 Run 活跃、摘要引用旧 Goal、证据误失效和漏失效，用户要求先做技术选型
+  hypothesis: 统一转换入口、事务存储、自动摘要与分级策略可降低人工协调成本；SQLite 的收益须包含 Git 交换成本共同验证
+  options:
+  - name: SQLite 本机权威状态加文本交换快照（条件推荐）
+    benefits:
+    - 复用成熟事务、约束与查询能力
+    - 同事务更新任务运行与证据，减少多文件状态漂移
+    costs:
+    - 需要迁移、导出导入、分支上下文与旧命令适配
+    risks:
+    - 不可直接 Git 合并数据库，不能忽略交换冲突
+  - name: 单文档 JSON 权威状态加项目锁
+    benefits:
+    - 保持可读文本和直接 Git 差异
+    costs:
+    - 每次解析重写整体状态并维护锁与 revision 检查
+    risks:
+    - 文本合并成功不等于业务状态一致
+  - name: 继续多 YAML 分别写入
+    benefits:
+    - 初期改动最少
+    costs:
+    - 跨文件事务和重复视图仍需额外协调
+    risks:
+    - 再次出现半更新和多事实源
+  decision: 用户已认可 SQLite 本机状态加 Git 文本快照方向并随后批准实施与外部测试；实际安装迁移仍未批准，新增 Git 协调边界见 DEC-007
+  reason_summary:
+  - 优先解决状态一致性，不以当前文件大小为数据库必要性的依据
+  - Agent 只提交业务操作，运行时负责记录与投影
+  - 证据历史结果与当前适用性必须分开
+  conditions:
+  - 技术方向和隔离实施已获认可；真实安装与项目迁移必须另行批准
+  - 原型必须验证故障、并发、幂等、分支切换与双副本冲突
+  action: 按 TASK-014 至 TASK-027 推进；原型已运行，生产接入仍须关闭 G1 和 Q-002
+  expected_result: 四项优化具备明确接口边界、失败策略、渐进实施和可测验收
+  reversal_plan: 研究阶段无运行时迁移；实施后回滚必须先保全新写入，禁止直接恢复旧备份丢掉新数据
+  observation: 用户最初要求仅拆解任务，随后明确要求开工并全部在外部测试；以后一条授权为准
+  actual_result: Foundation fixes and isolated prototypes verified; no production store integration or actual migration
+  outcome_status: not-observed
+  evidence:
+  - .project-log/docs/workflow-optimization-technical-selection.md
+  supersedes: []
+  created_at: '2026-09-19T14:27:45Z'
+  updated_at: '2026-09-19T14:44:01Z'
 - id: DEC-001
   title: 可选 MCP 使用声明式 catalog，CodeGraph 仅按用户选择安装
   category: tooling
@@ -274,3 +366,69 @@ decisions:
   supersedes: []
   created_at: '2026-08-20T17:45:00+08:00'
   updated_at: '2026-08-20T17:45:00+08:00'
+- id: DEC-008
+  title: 显式配置的解释器只原地修复，改选环境需显式 opt-in
+  category: tooling
+  status: active
+  authority: C
+  user_approval: approved
+  related_tasks:
+  - TASK-030
+  related_business_logic:
+  - BL-WFOPT-002
+  context: 复核 O016-01 发现安装/更新期的引导脚本在显式配置的解释器依赖检查失败时会改用命名 Conda 环境并重写
+    CODEX_HOME/vibe-python，属于“静默替换用户显式选择”。日常运行入口（vibe.ps1/vibe.sh）与 global_installer.py
+    都不这样做：前者 fail-closed 且从不创建环境，后者的文档声明该文件不被安装器管理。因此这是三处策略不一致，
+    而且当 VIBE_PYTHON 环境变量被设置时，写入的配置文件实际不生效。
+  hypothesis: 让引导脚本与另外两条链路一致（配置的解释器只原地修复，改选环境需显式授权），可以在不降低可恢复性的前提下消除静默替换。
+  options:
+  - name: 保持自动改选（现状）
+    benefits:
+    - 安装/更新对坏环境自愈
+    costs:
+    - 用户显式指定的解释器可能在不知情时被换掉
+    risks:
+    - 与另外两条链路的 fail-closed 策略不一致；VIBE_PYTHON 优先时写入的文件不生效
+  - name: 原地修复 + 显式 opt-in（选择）
+    benefits:
+    - 用户指定的解释器永不被静默替换
+    - 三条链路策略一致
+    costs:
+    - 环境无法原地修复时需要用户按提示处理或显式授权
+    risks:
+    - 需要新增一个开关与相应回归测试
+  - name: 完全只读（失败即报错，无开关）
+    benefits:
+    - 行为最保守
+    costs:
+    - 正常的“请帮我换到 Conda 环境”诉求无法通过安装器完成
+    risks:
+    - 用户需要手工编辑配置文件
+  decision: 引导脚本默认原地修复显式配置的解释器：若它是 Python 3.11+ 且只缺 Vibe 依赖，则把依赖装进该解释器并保持
+    vibe-python 不变；若不是 3.11+ 或不可执行，则报错并给出修复命令。只有显式 opt-in（VIBE_PYTHON_REPAIR=1
+    或 --repair-interpreter）才允许改选命名 Conda 环境并重写配置；VIBE_PYTHON 环境变量优先时拒绝重写配置文件。
+  reason_summary:
+  - 用户明确选择“原地修复、绝不静默换环境”（Q-001 答复 A）
+  - 与日常入口和 global_installer 的 fail-closed 策略对齐
+  - 顺带消除 VIBE_PYTHON 优先时写入文件不生效的隐患
+  conditions:
+  - 无显式配置时的首次安装行为不变（创建/修复命名 Conda 环境并写入配置）
+  - uninstall（--no-create）不做任何安装或写入
+  - 不改动 install/update 脚本的参数解析
+  action: 修改 scripts/bootstrap_vibe_python.py（configured_python 返回来源、新增 python_version_ok、ensure_python
+    分支与 --repair-interpreter/VIBE_PYTHON_REPAIR），并新增 4 项回归测试。
+  expected_result: 显式配置的解释器不再被静默替换；坏环境有明确可执行的下一步。
+  reversal_plan: 回滚 scripts/bootstrap_vibe_python.py 与 tests/test_installer.py；opt-in 开关随之失效，行为回到“自动改选”。
+  observation: Windows 55 项（54 通过 + 1 跳过）与 Ubuntu 14 项检查全部通过（冻结修订 exports/task030-fix3，
+    摘要 33765c8d…）；反证在最初修订上 5/5 失败、在上一修订上 2 项失败，证明两次修复都 load-bearing。独立复核
+    reviewer-031 的 A1–A7 全部 verified，并提出 F1（VIBE_PYTHON_REPAIR=0 仍会 opt-in）与 F2（配置路径缺失时
+    报错缺少出路提示）两处缺陷，均已修复并重新复验。
+  actual_result: implemented and verified in source repo (frozen revision exports/task030-fix3)
+  outcome_status: successful
+  lesson: 安装器的“自愈”必须与用户显式配置的优先级对齐；对用户显式选择的环境，默认应是修复它而不是替换它。
+  evidence:
+  - PYTHONREPAIR-030
+  - PLATFORM-030
+  supersedes: []
+  created_at: '2026-09-21T09:35:00+08:00'
+  updated_at: '2026-09-21T10:50:00+08:00'

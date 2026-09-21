@@ -1,6 +1,102 @@
 version: "0.2"
 source_of_truth: true
 atoms:
+- id: BL-WFOPT-001
+  title: 恢复状态准确反映可执行性
+  kind: state-transition
+  domain: workflow-optimization
+  status: active
+  authority: evidence-derived
+  source:
+    type: document
+    reference: .project-log/docs/workflow-optimization-technical-selection.md
+  description: 四项目标的验收细化草案；TASK-014 冻结，不能视为所有边界语义已获批准。
+  trigger: 选择或恢复任务时
+  rule:
+    statement: Goal、Task、Run、阻塞事实和下一步不得互相矛盾；未绑定目标不能借用历史目标。
+  acceptance:
+  - id: AC-WFOPT-001
+    given: 任务等待 Q-021 且另有独立任务
+    when: 恢复执行上下文
+    then: 显示等待事项及独立可执行工作，不把被阻塞任务显示为可执行
+    method: runtime/scripts/loop_state.py + tests/test_loop_core.py + docs/workflow-optimization-cross-platform-acceptance.md
+    evidence: RUNBIND-028
+    status: passed
+  decision_refs:
+  - DEC-006
+  notes: 用户已授权实施，具体契约见 specs/workflow-optimization-contract.md；真实迁移仍单独授权。
+- id: BL-WFOPT-002
+  title: 一次业务操作维护一致状态和可重建摘要
+  kind: flow
+  domain: workflow-optimization
+  status: active
+  authority: evidence-derived
+  source:
+    type: document
+    reference: .project-log/docs/workflow-optimization-technical-selection.md
+  description: 四项目标的验收细化草案；TASK-014 冻结，不能视为所有边界语义已获批准。
+  trigger: 开始、阻塞或完成任务时
+  rule:
+    statement: 同一业务操作的权威状态一致提交，摘要可重建，重复请求不重复记账。
+  acceptance:
+  - id: AC-WFOPT-002
+    given: 完成请求重试且摘要生成中断
+    when: 重新提交相同请求
+    then: 只保留一次业务结果，摘要可恢复，跨对象状态一致
+    method: runtime/scripts/state_store.py + runtime/scripts/state_context.py + test_state_service.py
+    evidence: STATE020-SLICE
+    status: passed
+  decision_refs:
+  - DEC-006
+  notes: 用户已授权实施，具体契约见 specs/workflow-optimization-contract.md；真实迁移仍单独授权。
+- id: BL-WFOPT-003
+  title: 控制成本随任务风险分级
+  kind: rule
+  domain: workflow-optimization
+  status: active
+  authority: evidence-derived
+  source:
+    type: document
+    reference: .project-log/docs/workflow-optimization-technical-selection.md
+  description: 四项目标的验收细化草案；TASK-014 冻结，不能视为所有边界语义已获批准。
+  trigger: 收到新用户请求时
+  rule:
+    statement: 先读取最小必要约束再分流，低风险任务不得默认承担完整生命周期，关键风险不得静默降级。
+  acceptance:
+  - id: AC-WFOPT-003
+    given: 意图明确且无关键语义影响的小改动
+    when: 选择执行路径
+    then: 采用轻量记录和相关验证，不创建无关架构或决策记录
+    method: runtime/scripts/state_routing.py + test_state_routing.py
+    evidence: ROUTING-021
+    status: passed
+  decision_refs:
+  - DEC-006
+  notes: 用户已授权实施，具体契约见 specs/workflow-optimization-contract.md；真实迁移仍单独授权。
+- id: BL-WFOPT-004
+  title: 证据区分历史结果与当前版本适用性
+  kind: data-contract
+  domain: workflow-optimization
+  status: active
+  authority: evidence-derived
+  source:
+    type: document
+    reference: .project-log/docs/workflow-optimization-technical-selection.md
+  description: 四项目标的验收细化草案；TASK-014 冻结，不能视为所有边界语义已获批准。
+  trigger: 登记、引用证据或判断完成时
+  rule:
+    statement: 历史结果保留，当前适用性按明确输入和版本策略判断；无法确认时不作为当前完成依据。
+  acceptance:
+  - id: AC-WFOPT-004
+    given: 历史 PDF 已变化而数据计算输入未变
+    when: 核查相关证据
+    then: 旧 PDF 验证不背书当前产物，无关计算证据不因路径重叠被误伤
+    method: runtime/scripts/state_evidence.py + runtime/scripts/state_gate.py + runtime/scripts/loop_state.py + test_state_evidence.py + test_state_gate.py + tests/test_loop_core.py
+    evidence: HOOKINVALIDATE-029
+    status: passed
+  decision_refs:
+  - DEC-006
+  notes: 用户已授权实施，具体契约见 specs/workflow-optimization-contract.md；真实迁移仍单独授权。
 - id: BL-PROJECTINIT-001
   title: .project-log 走现有创建链路且不覆盖已有内容
   kind: rule

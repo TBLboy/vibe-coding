@@ -1,7 +1,7 @@
 version: '0.4'
 mode: standard
-current_phase: business-intent
-active_goal: null
+current_phase: implementation
+active_goal: GOAL-001
 phase_order:
 - business-intent
 - business-clarification
@@ -46,8 +46,8 @@ phases:
     - active atoms have acceptance criteria
     evidence: []
   solution-research:
-    status: pending
-    gate_status: not-evaluated
+    status: completed
+    gate_status: open
     required_artifacts:
     - .project-log/research/solution-research.yaml
     exit_conditions:
@@ -62,8 +62,8 @@ phases:
     - ownership interfaces data and failure boundaries are sufficient for decomposition
     evidence: []
   task-decomposition:
-    status: pending
-    gate_status: not-evaluated
+    status: completed
+    gate_status: open
     required_artifacts:
     - .project-log/tasks/task-list.yaml
     exit_conditions:
@@ -71,15 +71,15 @@ phases:
     - in-scope atoms are covered or intentionally deferred
     evidence: []
   engineering-spec:
-    status: pending
-    gate_status: not-evaluated
+    status: completed
+    gate_status: open
     required_artifacts:
     - .project-log/specs
     exit_conditions:
     - non-trivial ready tasks have implementation-ready specs
     evidence: []
   implementation:
-    status: pending
+    status: active
     gate_status: not-evaluated
     required_artifacts: []
     exit_conditions:
@@ -87,7 +87,7 @@ phases:
     - deviations are recorded
     evidence: []
   verification:
-    status: pending
+    status: active
     gate_status: not-evaluated
     required_artifacts:
     - .project-log/verification/evidence.yaml

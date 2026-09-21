@@ -19,6 +19,18 @@ except ImportError as exc:  # pragma: no cover
 SKILL_NAME_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 ALLOWED_FRONTMATTER = {"name", "description", "license", "compatibility", "metadata"}
 REQUIRED_RUNTIME = {
+    "scripts/state_store.py",
+    "scripts/state_views.py",
+    "scripts/state_context.py",
+    "scripts/state_exchange.py",
+    "scripts/state_routing.py",
+    "scripts/state_evidence.py",
+    "scripts/state_gate.py",
+    "scripts/state_migrate.py",
+    "vibe.ps1",
+    "vibe.sh",
+    "scripts/vibe_python.ps1",
+    "scripts/vibe_python.sh",
     "scripts/init_project.py",
     "scripts/loop_state.py",
     "scripts/loopctl.py",

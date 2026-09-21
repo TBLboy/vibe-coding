@@ -45,6 +45,52 @@ def write_test_executable(directory: Path, name: str, python_source: str) -> Pat
     return path
 
 
+def write_fake_interpreter(
+    directory: Path,
+    name: str,
+    marker: Path,
+    *,
+    pip_succeeds: bool = True,
+) -> Path:
+    """A stand-in interpreter that is Python 3.11+ but starts without the Vibe requirements."""
+    source = (
+        "import os, pathlib, sys\n"
+        "args = sys.argv[1:]\n"
+        "identity = os.environ.get('FAKE_PYTHON_IDENTITY', 'fake-python')\n"
+        f"marker = pathlib.Path({str(marker)!r})\n"
+        "if '-m' in args and 'pip' in args:\n"
+        f"    {'marker.touch()' if pip_succeeds else 'pass'}\n"
+        f"    raise SystemExit({0 if pip_succeeds else 1})\n"
+        "if args and args[0] == '-c':\n"
+        "    if 'yaml' in args[1]:\n"
+        "        if marker.exists():\n"
+        "            print(identity)\n"
+        "            raise SystemExit(0)\n"
+        "        print('ModuleNotFoundError: No module named yaml', file=sys.stderr)\n"
+        "        raise SystemExit(1)\n"
+        "    print(identity)\n"
+        "    raise SystemExit(0)\n"
+        "raise SystemExit(1)\n"
+    )
+    return write_test_executable(directory, name, source)
+
+
+def write_fake_conda(directory: Path, name: str, created: Path) -> Path:
+    return write_test_executable(
+        directory,
+        name,
+        "import pathlib, sys\n"
+        f"created = pathlib.Path({str(created)!r})\n"
+        "if len(sys.argv) > 1 and sys.argv[1] == 'create':\n"
+        "    created.touch()\n"
+        "    raise SystemExit(0)\n"
+        "if len(sys.argv) > 1 and sys.argv[1] == 'run' and created.exists():\n"
+        f"    print({str(Path(sys.executable).resolve())!r})\n"
+        "    raise SystemExit(0)\n"
+        "raise SystemExit(1)\n",
+    )
+
+
 class InstallerTests(unittest.TestCase):
     def test_fresh_install_is_core_only_by_default(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -205,6 +251,183 @@ class InstallerTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stdout)
             self.assertTrue(created.is_file(), result.stdout)
             self.assertEqual((home / "vibe-python").read_text(encoding="utf-8").strip(), str(Path(sys.executable).resolve()))
+
+    def test_bootstrap_repairs_configured_interpreter_in_place(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = Path(temporary)
+            home = workspace / "codex-home"
+            home.mkdir(parents=True)
+            marker = workspace / "pip-ran"
+            interpreter = write_fake_interpreter(workspace, "configured-python", marker)
+            config = home / "vibe-python"
+            config.write_text(str(interpreter) + "\n", encoding="utf-8")
+            env = os.environ.copy()
+            env.pop("VIBE_PYTHON", None)
+            env.pop("VIBE_PYTHON_REPAIR", None)
+            env["FAKE_PYTHON_IDENTITY"] = str(interpreter)
+            env["CONDA_EXE"] = str(write_test_executable(workspace, "conda-broken", "raise SystemExit(1)\n"))
+
+            result = subprocess.run(
+                [
+                    sys.executable, str(BOOTSTRAP),
+                    "--codex-home", str(home),
+                    "--requirements", str(ROOT / "runtime/scripts/requirements.txt"),
+                    "--print-python",
+                ],
+                env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stdout)
+            self.assertTrue(marker.is_file(), result.stdout)
+            self.assertIn("configured interpreter", result.stdout)
+            self.assertEqual(
+                Path(config.read_text(encoding="utf-8").strip()).resolve(),
+                Path(interpreter).resolve(),
+                result.stdout,
+            )
+
+    def test_bootstrap_switches_environment_only_when_explicitly_opted_in(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = Path(temporary)
+            home = workspace / "codex-home"
+            home.mkdir(parents=True)
+            marker = workspace / "pip-ran"
+            interpreter = write_fake_interpreter(workspace, "configured-python", marker, pip_succeeds=False)
+            config = home / "vibe-python"
+            config.write_text(str(interpreter) + "\n", encoding="utf-8")
+            created = workspace / "created"
+            manager = write_fake_conda(workspace, "conda", created)
+
+            def bootstrap(extra_env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+                env = os.environ.copy()
+                env.pop("VIBE_PYTHON", None)
+                env.pop("VIBE_PYTHON_REPAIR", None)
+                env["FAKE_PYTHON_IDENTITY"] = str(interpreter)
+                env["CONDA_EXE"] = str(manager)
+                env.update(extra_env)
+                return subprocess.run(
+                    [
+                        sys.executable, str(BOOTSTRAP),
+                        "--codex-home", str(home),
+                        "--requirements", str(ROOT / "runtime/scripts/requirements.txt"),
+                        "--print-python",
+                    ],
+                    env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False,
+                )
+
+            refused = bootstrap({})
+            self.assertNotEqual(refused.returncode, 0, refused.stdout)
+            self.assertIn("VIBE_PYTHON_REPAIR", refused.stdout)
+            self.assertFalse(created.is_file(), refused.stdout)
+            self.assertEqual(
+                Path(config.read_text(encoding="utf-8").strip()).resolve(),
+                Path(interpreter).resolve(),
+                refused.stdout,
+            )
+
+            opted_in = bootstrap({"VIBE_PYTHON_REPAIR": "1"})
+            self.assertEqual(opted_in.returncode, 0, opted_in.stdout)
+            self.assertTrue(created.is_file(), opted_in.stdout)
+            self.assertEqual(
+                Path(config.read_text(encoding="utf-8").strip()).resolve(),
+                Path(sys.executable).resolve(),
+                opted_in.stdout,
+            )
+
+    def test_bootstrap_refuses_to_rewrite_while_vibe_python_env_var_is_set(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = Path(temporary)
+            home = workspace / "codex-home"
+            home.mkdir(parents=True)
+            marker = workspace / "pip-ran"
+            interpreter = write_fake_interpreter(workspace, "env-python", marker, pip_succeeds=False)
+            config = home / "vibe-python"
+            config.write_text(str(workspace / "untouched") + "\n", encoding="utf-8")
+            created = workspace / "created"
+            env = os.environ.copy()
+            env["VIBE_PYTHON"] = str(interpreter)
+            env["VIBE_PYTHON_REPAIR"] = "1"
+            env["FAKE_PYTHON_IDENTITY"] = str(interpreter)
+            env["CONDA_EXE"] = str(write_fake_conda(workspace, "conda", created))
+
+            result = subprocess.run(
+                [
+                    sys.executable, str(BOOTSTRAP),
+                    "--codex-home", str(home),
+                    "--requirements", str(ROOT / "runtime/scripts/requirements.txt"),
+                    "--print-python",
+                ],
+                env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False,
+            )
+
+            self.assertNotEqual(result.returncode, 0, result.stdout)
+            self.assertIn("overrides", result.stdout)
+            self.assertFalse(created.is_file(), result.stdout)
+            self.assertEqual(config.read_text(encoding="utf-8"), str(workspace / "untouched") + "\n")
+
+    def test_bootstrap_does_not_invent_an_environment_for_a_missing_configured_interpreter(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = Path(temporary)
+            home = workspace / "codex-home"
+            home.mkdir(parents=True)
+            missing = workspace / "gone-python"
+            config = home / "vibe-python"
+            config.write_text(str(missing) + "\n", encoding="utf-8")
+            created = workspace / "created"
+            env = os.environ.copy()
+            env.pop("VIBE_PYTHON", None)
+            env.pop("VIBE_PYTHON_REPAIR", None)
+            env["CONDA_EXE"] = str(write_fake_conda(workspace, "conda", created))
+
+            result = subprocess.run(
+                [
+                    sys.executable, str(BOOTSTRAP),
+                    "--codex-home", str(home),
+                    "--requirements", str(ROOT / "runtime/scripts/requirements.txt"),
+                    "--print-python",
+                ],
+                env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False,
+            )
+
+            self.assertNotEqual(result.returncode, 0, result.stdout)
+            self.assertFalse(created.is_file(), result.stdout)
+            self.assertEqual(config.read_text(encoding="utf-8"), str(missing) + "\n")
+            self.assertIn("VIBE_PYTHON_REPAIR=1", result.stdout)
+
+    def test_bootstrap_does_not_treat_a_falsy_repair_value_as_opt_in(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = Path(temporary)
+            home = workspace / "codex-home"
+            home.mkdir(parents=True)
+            marker = workspace / "pip-ran"
+            interpreter = write_fake_interpreter(workspace, "configured-python", marker, pip_succeeds=False)
+            config = home / "vibe-python"
+            config.write_text(str(interpreter) + "\n", encoding="utf-8")
+            created = workspace / "created"
+            for value in ("0", "false", "no", "off", ""):
+                env = os.environ.copy()
+                env.pop("VIBE_PYTHON", None)
+                env["VIBE_PYTHON_REPAIR"] = value
+                env["FAKE_PYTHON_IDENTITY"] = str(interpreter)
+                env["CONDA_EXE"] = str(write_fake_conda(workspace, "conda", created))
+
+                result = subprocess.run(
+                    [
+                        sys.executable, str(BOOTSTRAP),
+                        "--codex-home", str(home),
+                        "--requirements", str(ROOT / "runtime/scripts/requirements.txt"),
+                        "--print-python",
+                    ],
+                    env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False,
+                )
+
+                self.assertNotEqual(result.returncode, 0, f"value={value!r}\n{result.stdout}")
+                self.assertFalse(created.is_file(), f"value={value!r}\n{result.stdout}")
+                self.assertEqual(
+                    Path(config.read_text(encoding="utf-8").strip()).resolve(),
+                    Path(interpreter).resolve(),
+                    f"value={value!r}\n{result.stdout}",
+                )
 
     def test_global_python_config_pins_hook_commands(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

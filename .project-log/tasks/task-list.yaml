@@ -1,6 +1,974 @@
 version: '0.2'
-active_goal: null
+active_goal: GOAL-001
 tasks:
+- id: TASK-012
+  title: 四项框架优化的技术选型与实现设计
+  kind: research
+  phase: solution-research
+  goal: 为恢复可信、记录一次、任务分流和证据版本适用性形成实现建议，不修改运行时代码或论文项目
+  status: done
+  authority: B
+  related_business_logic: []
+  depends_on: []
+  inputs:
+  - 用户提供的两份真实使用复盘材料
+  - D:/Project/my_lunwen/.project-log（只读案例）
+  - runtime/scripts/loop_state.py
+  outputs:
+  - .project-log/docs/workflow-optimization-technical-selection.md
+  - .project-log/research/solution-research.yaml
+  done_when:
+  - 对比状态存储与证据追踪候选并记录一手来源
+  - 给出四项优化的接口边界、失败处理、迁移和验收方案
+  - 区分推荐、待验证假设和需要用户批准的存储迁移
+  verification:
+    status: passed
+    commands:
+    - python runtime/scripts/validate_project.py --root . -> passed
+    - Document structure, eight source entries, local source paths and proposed-decision boundary checks -> passed
+    evidence:
+    - DESIGN-012
+    limitations:
+    - 本任务仅交付设计；没有实现或验证优化运行时
+  created_at: '2026-09-19T14:27:45Z'
+  updated_at: '2026-09-19T14:38:22Z'
+- id: TASK-013
+  title: 拆解四项优化的实施任务与验收关口
+  kind: task
+  phase: task-decomposition
+  goal: 只交付依赖明确的待执行任务计划，不启动实现、原型或迁移
+  status: done
+  authority: B
+  related_business_logic:
+  - BL-WFOPT-001
+  - BL-WFOPT-002
+  - BL-WFOPT-003
+  - BL-WFOPT-004
+  related_decisions:
+  - DEC-006
+  depends_on:
+  - TASK-012
+  inputs:
+  - 用户认可技术方向并要求暂不执行
+  - .project-log/docs/workflow-optimization-technical-selection.md
+  outputs:
+  - .project-log/docs/workflow-optimization-task-plan.md
+  - .project-log/tasks/task-list.yaml
+  done_when:
+  - 四项目标均有关联任务和可验证验收
+  - 依赖无环，原型与生产实现及真实部署关口分开
+  - 全部实施任务 pending，用户暂停要求明确保存
+  verification:
+    status: passed
+    commands:
+    - Plan-only checks of pending statuses, dependency DAG, objective coverage and G1/G2 dependencies -> passed
+    - python runtime/scripts/validate_project.py --root . -> passed
+    evidence:
+    - PLAN-013
+    limitations:
+    - 只检查计划；没有运行任何实现验收
+  created_at: '2026-09-19T14:44:01Z'
+  updated_at: '2026-09-19T14:44:01Z'
+- id: TASK-014
+  title: 冻结行为契约和最小回归案例
+  kind: task
+  phase: engineering-spec
+  goal: 把四项目标转为不需实现者猜测的行为契约
+  status: done
+  authority: B
+  risk: medium
+  tags:
+  - workflow-optimization
+  - approved-implementation
+  related_business_logic:
+  - BL-WFOPT-001
+  - BL-WFOPT-002
+  - BL-WFOPT-003
+  - BL-WFOPT-004
+  related_decisions:
+  - DEC-006
+  depends_on:
+  - TASK-013
+  inputs:
+  - .project-log/docs/workflow-optimization-task-plan.md
+  - 前置任务的已验证产物；按实施授权及 G1/G2 推进
+  outputs:
+  - .project-log/specs/workflow-optimization-contract.md
+  - 脱敏用例清单
+  plan:
+  - 计划验证：逐项对照四项业务草案和设计文档的十二类验收，标明未决语义。
+  - 只在用户后续要求开始且前置验收满足时执行；TASK-027 另需精确安装/迁移批准
+  done_when:
+  - 状态联动、快照冲突、分流、证据和旧规则兼容有明确预期
+  - 对照既有初始化/日志规则，需变更的语义先记录并批准，不静默覆盖
+  - 案例脱敏最小化，不复制整份论文或真实作者信息
+  verification:
+    status: passed
+    commands:
+    - Contract inspection of WF-1..4, twelve external fixture classes, compatibility and approval gates
+    - External linux-016-v1 package and project-record validation -> passed
+    evidence:
+    - CONTRACT-014
+    limitations:
+    - 契约验收不代表全部行为已实现；后续任务分别验证
+  result:
+    summary: null
+    changed_files: []
+    deviations: []
+    follow_ups: []
+- id: TASK-015
+  title: 修复 Git diff 字节绑定
+  kind: repair
+  phase: implementation
+  goal: 证据登记不再因系统文本解码失败
+  status: done
+  authority: B
+  risk: medium
+  tags:
+  - workflow-optimization
+  - approved-implementation
+  related_business_logic:
+  - BL-WFOPT-004
+  related_decisions:
+  - DEC-006
+  depends_on:
+  - TASK-014
+  inputs:
+  - .project-log/docs/workflow-optimization-task-plan.md
+  - 前置任务的已验证产物；按实施授权及 G1/G2 推进
+  outputs:
+  - runtime/scripts/loop_state.py 的最小修复
+  - Git 编码回归测试
+  plan:
+  - 计划验证：先复现原错误，再运行对应回归与既有 Loop 测试。
+  - 只在用户后续要求开始且前置验收满足时执行；TASK-027 另需精确安装/迁移批准
+  done_when:
+  - 非 UTF-8、数学字符、中文路径和二进制 diff 可登记
+  - 哈希基于原始 bytes，空 diff 与 Git 执行失败区分
+  - 保留文件绑定，非 Git 项目明确缺少提交上下文
+  verification:
+    status: passed
+    commands:
+    - External pre-fix-015 reproduces decoding and Git failure defects
+    - External launcher-016-v6 baseline 41 tests (1 skipped), binding 8 tests -> passed
+    - Independent reviewer-015/run-v2-20260919-232836 -> 28 passed
+    - External linux-016-v1 baseline and binding -> passed
+    evidence:
+    - BINDING-015
+    - REVIEW-015-FAILED
+    - REVIEW-015-V2
+    limitations:
+    - 首轮独立复核发现损坏引用误判，失败记录保留；修复后的第二轮通过
+  result:
+    summary: 原始 Git bytes 绑定，明确区分非 Git、unborn 与损坏仓库；外部回归和独立复核通过
+    changed_files:
+    - runtime/scripts/loop_state.py
+    deviations: []
+    follow_ups: []
+- id: TASK-016
+  title: 提供稳定的 Windows/Linux 解释器入口
+  kind: task
+  phase: implementation
+  goal: 框架命令始终通过明确配置的解释器执行
+  status: done
+  authority: B
+  risk: medium
+  tags:
+  - workflow-optimization
+  - approved-implementation
+  related_business_logic:
+  - BL-WFOPT-002
+  related_decisions:
+  - DEC-006
+  depends_on:
+  - TASK-014
+  inputs:
+  - .project-log/docs/workflow-optimization-task-plan.md
+  - 前置任务的已验证产物；按实施授权及 G1/G2 推进
+  outputs:
+  - Windows/Unix 薄入口与安装入口适配
+  - 解释器和参数转发测试
+  plan:
+  - 计划验证：Windows PowerShell 5.1/7 和 Linux 环境矩阵；无可用环境则记录未验证。
+  - 只在用户后续要求开始且前置验收满足时执行；TASK-027 另需精确安装/迁移批准
+  done_when:
+  - 配置存在时不依赖 py 或 python3 的 PATH 可用性
+  - 中文空格路径、参数转发和失效配置有明确行为，不静默切 WSL
+  - 首次安装 bootstrap 与运行期入口分开，保留现有 Conda 环境策略
+  verification:
+    status: passed
+    commands:
+    - External launcher-016-v13 -> baseline 41 tests (1 skip), binding 8, entry 13; source_unchanged true
+    - External linux-016-v4 -> 6 Unix entry checks and package/project checks passed
+    - Independent reviewer-016 REPORT-v3 final UTF8 -> Windows 42 passed 1 skip; Linux 41 passed 2 skips
+    - External ps5-016-v15 and powershell7-016-v3 -> each 16 entry tests passed; source_unchanged true
+    - Independent reviewer-016 followup REPORT-v4 -> 7 decisive methods with PS5 and PS7 subcases passed
+    evidence:
+    - LAUNCHERS-016-FINAL
+    - REVIEW-016-V3
+    - LAUNCHERS-016-PS57
+    - REVIEW-016-V4
+    limitations:
+    - 已测试 PS5 和外部便携 PS7.4.6；PS7 -File 带盘符等号参数存在宿主预拆限制，需分开传参；Linux 使用 WSL
+    - O016-01 原有安装器修复策略仍未批准改变，单独记为 Q-001；本验收不包含真实安装/迁移
+  result:
+    summary: 原生薄入口、精确参数传递、UTF8、统一解释器配置通过外部回归和限域独立复核
+    changed_files:
+    - runtime/vibe.ps1
+    - runtime/vibe.sh
+    - runtime/scripts/vibe_python.ps1
+    - runtime/scripts/vibe_python.sh
+    - scripts/bootstrap_vibe_python.py
+    - install.ps1
+    - install.sh
+    - update.ps1
+    - update.sh
+    - uninstall.ps1
+    - uninstall.sh
+    - .gitattributes
+    - docs/USAGE.md
+    deviations: []
+    follow_ups: []
+- id: TASK-017
+  title: 验证最小事务状态原型
+  kind: spike
+  phase: solution-research
+  goal: 在隔离环境证明 SQLite 事务闭环并保留单文档对照
+  status: done
+  authority: B
+  risk: high
+  tags:
+  - workflow-optimization
+  - approved-implementation
+  related_business_logic:
+  - BL-WFOPT-001
+  - BL-WFOPT-002
+  related_decisions:
+  - DEC-006
+  depends_on:
+  - TASK-014
+  inputs:
+  - .project-log/docs/workflow-optimization-task-plan.md
+  - 前置任务的已验证产物；按实施授权及 G1/G2 推进
+  outputs:
+  - 隔离状态原型
+  - 事务故障与对照报告
+  plan:
+  - 计划验证：临时目录故障注入、两个写者冲突、重复请求及分规模对照。
+  - 只在用户后续要求开始且前置验收满足时执行；TASK-027 另需精确安装/迁移批准
+  done_when:
+  - begin-block-resume-finish 同步更新 Task 与 Run
+  - 同 command_id 重试幂等，载荷变化与旧 revision 明确冲突
+  - 强杀或异常不产生半状态；编译和哈希计算不占用写事务
+  - 与单文档对照记录延迟、调用数、恢复行为，不接管真实项目
+  verification:
+    status: passed
+    commands:
+    - External prototype/runs/windows-018-v2 -> 32 state checks and benchmark passed
+    - External prototype/runs/linux-018-v2 -> same 32 state checks and benchmark passed
+    - External prototype/runs/windows-g1fix-v1 and linux-g1fix-v1 -> repaired state 32/32 passed on both
+    - Independent reviewer-g1/results-v2.json -> old 2/2 negative controls and new 8/8 case groups passed
+    evidence:
+    - PROTOTYPE-017
+    - REVIEW-G1-FAILED
+    - REVIEW-G1-V2
+    - PROTOTYPE-G1-FIX
+    limitations:
+    - 仅原型验收；强杀不是断电测试；Linux 使用 WSL 的 /mnt/d，不代表原生 ext4 性能
+    - SQLite 原型仍序列化单个状态文档，不可直接当成生产存储；独立 G1 待完成
+    - G1-F02 回执污染已通过限定独立复核；不据此宣称完成全部生产语义或自动迁移
+  result:
+    summary: 两个隔离后端通过状态联动、重试幂等、双写者和强杀恢复；38/500/2000 条合成任务对照已保留
+    changed_files:
+    - D:/Project/vibe-coding-validation/prototype/state_store.py
+    - D:/Project/vibe-coding-validation/prototype/test_state_store.py
+    - D:/Project/vibe-coding-validation/prototype/benchmark_store.py
+    deviations: []
+    follow_ups: []
+- id: TASK-018
+  title: 验证 Git 快照交换原型
+  kind: spike
+  phase: solution-research
+  goal: 本机事务存储可安全跨副本和分支交换
+  status: done
+  authority: B
+  risk: high
+  tags:
+  - workflow-optimization
+  - approved-implementation
+  related_business_logic:
+  - BL-WFOPT-001
+  - BL-WFOPT-002
+  related_decisions:
+  - DEC-006
+  depends_on:
+  - TASK-017
+  inputs:
+  - .project-log/docs/workflow-optimization-task-plan.md
+  - 前置任务的已验证产物；按实施授权及 G1/G2 推进
+  outputs:
+  - 快照交换原型
+  - 双副本与分支故障报告
+  plan:
+  - 计划验证：两个临时 Git 仓库和工作树，覆盖导出/导入/冲突/中断往返。
+  - 只在用户后续要求开始且前置验收满足时执行；TASK-027 另需精确安装/迁移批准
+  done_when:
+  - 导出导入保留实体 ID、关联、未知字段与版本来源
+  - 双副本同时修改或未知基线拒绝覆盖，保留双方
+  - 分支 A-B-A、未导出变更和 manifest 发布失败均可恢复
+  - 不将本机 revision 大小当跨机器先后顺序，不提交数据库二进制
+  verification:
+    status: passed
+    commands:
+    - External prototype/runs/windows-018-v2 -> 12 real Git exchange checks passed
+    - External prototype/runs/linux-018-v2 -> same 12 real Git exchange checks passed
+    - External prototype/runs/windows-g1fix-v1 and linux-g1fix-v1 -> repaired exchange 19/19 passed on both
+    - Independent reviewer-g1/results-v2.json -> old 2/2 negative controls and new 8/8 case groups passed
+    evidence:
+    - PROTOTYPE-018
+    - REVIEW-G1-FAILED
+    - REVIEW-G1-V2
+    - PROTOTYPE-G1-FIX
+    limitations:
+    - 仅受控原型；外部任意 git checkout 与快照发布并非一个可控事务，独立 G1 正在检查此边界
+    - 全量 immutable 快照保留策略尚未用于生产，不声称其长期空间成本已解决
+    - G1-F01 分支错配已通过限定独立复核；生产采用协作 Git 锁和遗留锁恢复边界仍待 Q-002 批准
+  result:
+    summary: 双副本、分支 A/B/A、worktree、脏状态冲突与 manifest 中断恢复通过外部检查；不覆盖真实数据
+    changed_files:
+    - D:/Project/vibe-coding-validation/prototype/snapshot_exchange.py
+    - D:/Project/vibe-coding-validation/prototype/test_snapshot_exchange.py
+    deviations: []
+    follow_ups: []
+- id: TASK-019
+  title: 独立评估原型并确定生产后端
+  kind: research
+  phase: verification
+  goal: 给出 G1 go/no-go 决定，防止未经验证进入生产改造
+  status: done
+  authority: B
+  risk: high
+  tags:
+  - workflow-optimization
+  - approved-implementation
+  related_business_logic:
+  - BL-WFOPT-001
+  - BL-WFOPT-002
+  related_decisions:
+  - DEC-006
+  depends_on:
+  - TASK-017
+  - TASK-018
+  blocked_by_questions: []
+  inputs:
+  - .project-log/docs/workflow-optimization-task-plan.md
+  - 前置任务的已验证产物；按实施授权及 G1/G2 推进
+  outputs:
+  - 原型独立评审
+  - G1 后端选择记录
+  plan:
+  - 计划验证：独立 reviewer 复核并重放关键故障；审阅实测而非估计性能。
+  - 只在用户后续要求开始且前置验收满足时执行；TASK-027 另需精确安装/迁移批准
+  done_when:
+  - 非实现者审核事务、Git 往返、恢复和成本证据
+  - 明确 SQLite 是否满足约束及与单文档相比的代价
+  - 失败不继续生产改造；改变已认可方向须重新决定
+  - 无独立 reviewer 时标明未通过独立验收，不能自审冒充
+  verification:
+    status: passed
+    commands:
+    - Independent reviewer-g1/reproduce.py -> 2 confirmed defects, NO-GO
+    - External windows-g1fix-v1 -> 32 state and 19 exchange checks passed after remediation
+    - External linux-g1fix-v1 -> 32 state and 19 exchange checks passed after remediation
+    - Independent reviewer-g1/results-v2.json -> 8/8 repaired case groups, 2/2 old negative controls
+    evidence:
+    - REVIEW-G1-FAILED
+    - REVIEW-G1-V2
+    - PROTOTYPE-G1-FIX
+    limitations:
+    - G1 只放行生产实施，不代表 TASK-020 生产代码验收；独立修复复核为 Windows，Linux 由主代理另行验证
+  result:
+    summary: 原始 NO-GO 保留，修复后限定 GO；用户批准 Q-002 后采用 DEC-007 边界，放行 TASK-020 外部隔离实施与验证
+    changed_files:
+    - .project-log/specs/TASK-020.md
+    - .project-log/architecture/architecture.yaml
+    deviations: []
+    follow_ups: []
+- id: TASK-020
+  title: 统一状态操作和自动摘要闭环
+  kind: task
+  phase: implementation
+  goal: Agent 一次提交业务操作即可得到一致状态与可恢复摘要
+  status: done
+  authority: B
+  risk: high
+  tags:
+  - workflow-optimization
+  - approved-implementation
+  related_business_logic:
+  - BL-WFOPT-001
+  - BL-WFOPT-002
+  related_decisions:
+  - DEC-006
+  depends_on:
+  - TASK-015
+  - TASK-016
+  - TASK-019
+  blocked_by_questions: []
+  spec_ref: .project-log/specs/TASK-020.md
+  inputs:
+  - .project-log/docs/workflow-optimization-task-plan.md
+  - 前置任务的已验证产物；按实施授权及 G1/G2 推进
+  outputs:
+  - 统一状态服务与兼容 CLI
+  - 统一入口对应的 Hooks/Skills/安装器源码适配
+  - 自动摘要与恢复测试
+  plan:
+  - 计划验证：事务提交前后、摘要中断与重复调用集成测试；旧入口兼容回归。
+  - 只在用户后续要求开始且前置验收满足时执行；TASK-027 另需精确安装/迁移批准
+  done_when:
+  - 统一 begin/block/finish 服务与跨对象转换，禁止旧 Goal 自动兜底
+  - command_id 和 revision 生效，摘要失败可补生成而不重复记账
+  - 旧 vibe/loopctl 入口适配统一服务，旧 YAML 不继续独立写入
+  - 自动摘要带来源和版本；策略/证据未接入前不对真实严格任务开放完成
+  verification:
+    status: passed
+    commands:
+    - External state020-v5 -> 25 Windows tests and 38/500/2000 bounded-query benchmark passed
+    - External linux/state020-v3 -> 25 methods, 24 passed and 1 Windows-only skip; package/project passed
+    - External state020-crashes-v1 Windows/Linux -> 3 process-kill checks each passed
+    - Independent reviewer-020 v4 -> three confirmed adapter defects; v5a -> 23/23 pass after repair
+    - External state020-post-state -> 33 Windows tests including local-sequence/origin separation and tamper detection
+    - External state020-exchange-v5 -> 9 Windows two-clone round-trip, divergence, history-rewrite, foreign-identity, lock and hard-kill checks
+    - External linux/state020-exchange-v1 -> same 9 exchange methods passed on WSL Ubuntu
+    - External state020-post-regression and state020-post-metadata -> legacy baseline, Git binding, launcher and metadata checks passed
+    - External state027-d4-state -> 39 Windows state tests including in-place repair of missing generated view files and rejection of tampered view bytes
+    - External state027-d4-exchange -> 15 Windows exchange tests including ghost-entity, receipt-disagreement and pending-export-acceptance rejection
+    - Falsification probe -> the three new D1-D3 regression tests fail against a reverted copy of the fix, so they are load-bearing
+    - External reviewer-020b -> independent verification of snapshot 17c1fca9 raised D1-D4 code defects and D5-D9 record drift (204/213 assertions passed)
+    evidence:
+    - STATE020-SLICE
+    - REVIEW-STATE020-V5
+    limitations:
+    - 跨分支上下文迁移由 TASK-025 覆盖；本任务自身的存储/摘要与交换两个切片在冻结版本上通过
+    - 账本与实体一致性审计已实现并与导入共用同一重放（Store._verify_ledger）；剩余审计边界为复核报告记录的三项（区间内 created_sequence、自由文本 title/extensions、base_snapshot 替换）
+    - 交换切片已完成两轮独立复核：首轮 reviewer-020b 报出 D1-D9 并全部修复，复审 reviewer-020d 用未修改的首轮脚本复验为对抗 41/41、强杀 38/38（证据见 docs/workflow-optimization-cross-platform-acceptance.md）
+    - 独立复核为 Windows；Linux 与进程强杀由主代理另行验证；未真实安装迁移
+  result:
+    summary: 新格式按实体事务、统一命令与只读恢复、同版本摘要、旧写入隔离，以及本机序号/原始回执分离和显式 Git 快照交换已实现；每轮失败保留后修复并验证。已在冻结版本上通过跨平台验收，证据见 docs/workflow-optimization-cross-platform-acceptance.md。
+    changed_files:
+    - runtime/scripts/state_store.py
+    - runtime/scripts/state_views.py
+    - runtime/scripts/state_context.py
+    - runtime/scripts/state_exchange.py
+    - runtime/scripts/vibe.py
+    - runtime/scripts/loopctl.py
+    - runtime/hooks/hook_common.py
+    - runtime/hooks/post_tool_use.py
+    - docs/USAGE.md
+    - .gitattributes
+    deviations:
+    - 首切片仅实验性新项目，生成视图放数据库旁而非覆盖用户 Markdown；交换入口已通过 vibe.py 子命令提供并写入 USAGE.md
+    follow_ups:
+    - .project-log/specs/TASK-020-exchange-followup.md
+- id: TASK-021
+  title: 落地前置风险分流和最小上下文
+  kind: task
+  phase: implementation
+  goal: 简单任务少留痕但不降低必要验证
+  status: done
+  authority: B
+  risk: medium
+  tags:
+  - workflow-optimization
+  - approved-implementation
+  related_business_logic:
+  - BL-WFOPT-003
+  related_decisions:
+  - DEC-006
+  depends_on:
+  - TASK-020
+  inputs:
+  - .project-log/docs/workflow-optimization-task-plan.md
+  - 前置任务的已验证产物；按实施授权及 G1/G2 推进
+  outputs:
+  - 任务风险策略
+  - 对应全局规则与 Skills 的分流指令适配
+  - 按任务查询上下文接口
+  - 三类任务分流测试
+  plan:
+  - 计划验证：文本微调、普通缺陷、公式/投稿修改对照，统计读写次数和上下文字节。
+  - 只在用户后续要求开始且前置验收满足时执行；TASK-027 另需精确安装/迁移批准
+  done_when:
+  - quick/standard/strict 输出理由、最低验证与升级条件
+  - 先分类后按需读取，无需全量事件恢复当前任务
+  - 低风险任务仅精简记录和相关验证；范围变化触发重评
+  - 上下文预算不静默截断阻塞、安全或必要用户约束
+  verification:
+    status: passed
+    commands:
+    - External state021-final-routing -> 16 routing policy and bounded-context tests passed
+    - External state021-final-metadata -> package, project and loop validation passed
+    - External state027-frozen-routing -> 17 routing and bounded-context tests passed on Windows and on WSL Ubuntu
+    - External reviewer-021 probe -> 8/8 after fixes; the context package now reports its true serialized size and never exceeds the budget (R6)
+    evidence:
+    - ROUTING-021
+    limitations:
+    - 分流是策略与接口；三类任务对照已给出策略与最低验证差异，但尚无真实论文任务对照的读写次数/耗时统计
+    - 若存储层在后续复核中再发现缺陷，本任务依赖存储读取的部分需重新验证
+  result:
+    summary: 已实现确定性分流策略（quick/standard/strict 及理由、最低验证、必须记录、升级条件）、保守路径推断、按任务的有界上下文包，并把分流规则写入全局提示词与 a-engineering-landing/a-verification。
+    changed_files:
+    - runtime/scripts/state_routing.py
+    - runtime/scripts/vibe.py
+    - runtime/scripts/validate_package.py
+    - prompts/vibe-global-agent.md
+    - skills/a-engineering-landing/SKILL.md
+    - skills/a-verification/SKILL.md
+    deviations:
+    - 分流结论由 state-route 输出并要求随任务记录，但存储层尚未强制校验任务的 routing 声明与策略一致
+    follow_ups:
+    - 真实任务对照统计读写次数与上下文字节，验证 quick 确实显著降低开销
+- id: TASK-022
+  title: 建立版本化证据与基础指纹
+  kind: task
+  phase: implementation
+  goal: 明确历史验证结果与当前适用性并解释跨平台差异
+  status: done
+  authority: B
+  risk: medium
+  tags:
+  - workflow-optimization
+  - approved-implementation
+  related_business_logic:
+  - BL-WFOPT-004
+  related_decisions:
+  - DEC-006
+  depends_on:
+  - TASK-020
+  inputs:
+  - .project-log/docs/workflow-optimization-task-plan.md
+  - 前置任务的已验证产物；按实施授权及 G1/G2 推进
+  outputs:
+  - 证据模型及指纹模块
+  - 旧/新证据转换规则
+  - 指纹与选择器回归
+  plan:
+  - 计划验证：EV-069 类最小样本、旧 PDF、缺失文件、非 Git 和未跟踪输入。
+  - 只在用户后续要求开始且前置验收满足时执行；TASK-027 另需精确安装/迁移批准
+  done_when:
+  - result 与 applicability 分离，历史通过不自动背书当前文件
+  - raw-file、显式 text-lf 与 JSON 字段选择器有可重复的版本规则
+  - 保留原始 hash；不删除数学符号、任意空白或二进制差异
+  - 缺失路径、旧 PDF、CRLF 与真正内容变化分别处理
+  verification:
+    status: passed
+    commands:
+    - External state022-evidence-v2 -> 15 selector, applicability and legacy-conversion tests passed
+    - External state027-frozen-evidence -> 20 selector, applicability, legacy-conversion and binding-preservation tests passed on Windows and on WSL Ubuntu
+    - External reviewer-021 probe -> 11/11 after fixes; an unevaluable selector can no longer be reported current, and non-JSON-compliant fields or malformed selectors raise a defined StateError (E3/E4/E5)
+    evidence:
+    - EVIDENCE-022
+    limitations:
+    - 尚未把新证据模型写入真实 .project-log/evidence 索引，也未迁移历史 69 条证据（TASK-025/027）
+  result:
+    summary: 已实现 result 与 applicability 分离的证据模型、raw-file/text-lf/json-field 三种可复现选择器、旧证据无损转换规则，以及独立性汇总；text-lf 对二进制显式报错而不是归一化。
+    changed_files:
+    - runtime/scripts/state_evidence.py
+    - runtime/scripts/vibe.py
+    - runtime/scripts/validate_package.py
+    deviations:
+    - 旧证据索引文件未改写；转换是纯函数，实际迁移留给 TASK-025
+    follow_ups:
+    - 用真实论文项目的 69 条历史证据做一次转换与适用性抽样核对
+- id: TASK-023
+  title: 实现依赖失效和完成前复核
+  kind: task
+  phase: implementation
+  goal: 既减少无关 stale，也避免 Hook 漏检造成伪有效
+  status: done
+  authority: B
+  risk: medium
+  tags:
+  - workflow-optimization
+  - approved-implementation
+  related_business_logic:
+  - BL-WFOPT-004
+  related_decisions:
+  - DEC-006
+  depends_on:
+  - TASK-022
+  inputs:
+  - .project-log/docs/workflow-optimization-task-plan.md
+  - 前置任务的已验证产物；按实施授权及 G1/G2 推进
+  outputs:
+  - 证据依赖与失效服务
+  - Hooks 提示适配
+  - 门禁复核测试
+  plan:
+  - 计划验证：有/无 Hook 的相同改动给出一致结论，并测大文件检查成本。
+  - 只在用户后续要求开始且前置验收满足时执行；TASK-027 另需精确安装/迁移批准
+  done_when:
+  - 按输入反向索引传播变化，不单凭路径交集全部失效
+  - 图注变化保留计算证据但重查相关渲染/布局
+  - 手工编辑、shell 写入、Git checkout 可被完成门禁发现
+  - 依赖缺失、循环、选择器失配和验证期间变化保守报告
+  verification:
+    status: passed
+    commands:
+    - External state023-gate-v2 -> 13 reverse-index, precision, dependency and completion-gate tests passed
+    - External state023-metadata -> package, project and loop validation passed
+    - External state027-frozen-gate -> 29 reverse-index, dependency-propagation, precision, malformed-input and completion-gate tests passed on Windows and on WSL Ubuntu
+    - External reviewer-021 probe -> 17/17 after fixes; invalidation now propagates through depends_on transitively and cycle-safely (G15), and binary_input is classified as blocking (G17)
+    evidence:
+    - GATE-023
+    limitations:
+    - Hooks 尚未调用新门禁；当前是策略模块与 CLI，未接入 session/post-tool 流程
+    - 独立复核发现的问题已修复并复验（冻结版本 17/17）；Hooks 接入仍作为后续项保留（验收记录第 7 节 R-07），真实使用仍需 TASK-027
+  result:
+    summary: 已实现按输入反向索引的精确失效（json-field 命中才失效、仅路径前缀相同不失效）、依赖缺失/循环/选择器失配的保守报告，以及会重新指纹化覆盖输入并检测"验证期间被改动"的完成门禁。
+    changed_files:
+    - runtime/scripts/state_gate.py
+    - runtime/scripts/vibe.py
+    - runtime/scripts/validate_package.py
+    deviations:
+    - 门禁暂以显式 CLI/模块调用为准，Hooks 接入留给后续适配
+    follow_ups:
+    - 把 state-gate-invalidate 接入 PostToolUse，使有/无 Hook 的相同改动结论一致
+- id: TASK-024
+  title: 落实严格任务独立复核门禁
+  kind: task
+  phase: implementation
+  goal: 严格任务的完成具有当前版本的真实独立复核依据
+  status: done
+  authority: B
+  risk: high
+  tags:
+  - workflow-optimization
+  - approved-implementation
+  related_business_logic:
+  - BL-WFOPT-003
+  - BL-WFOPT-004
+  related_decisions:
+  - DEC-006
+  depends_on:
+  - TASK-021
+  - TASK-023
+  inputs:
+  - .project-log/docs/workflow-optimization-task-plan.md
+  - 前置任务的已验证产物；按实施授权及 G1/G2 推进
+  outputs:
+  - review 记录接口和完成策略
+  - 复核身份/版本回归
+  plan:
+  - 计划验证：独立/同人/缺席/过期复核矩阵和 strict/quick 差异。
+  - 只在用户后续要求开始且前置验收满足时执行；TASK-027 另需精确安装/迁移批准
+  done_when:
+  - review 记录主体、覆盖验收、结果和被审版本
+  - 同实现者自审或过期 review 不满足独立完成门禁
+  - 缺少 reviewer 明确降级和等待授权，不伪造 review-completed
+  - 快速路径不因此被强制升级到全量独立审计
+  verification:
+    status: passed
+    commands:
+    - External state024-reviewgate-v2 -> 21 gate and independent-review tests passed
+    - External state027-frozen-gate -> 29 tests passed, including review coverage of every accepted artifact, task binding, and case/whitespace-insensitive reviewer identity
+    - External reviewer-021 probe -> 17/17 after fixes (G10 identity normalisation, G12 review coverage, G14 task binding)
+    evidence:
+    - REVIEW-GATE-024
+    limitations:
+    - 尚未接入真实子 Agent 委派流程；目前由调用方提供 reviewer/author 身份
+    - 严格门禁要求复核覆盖全部被验收产物并绑定任务；未绑定任务的严格判定会阻塞而不是放行
+  result:
+    summary: 严格任务的完成门禁要求存在覆盖当前输入的 review 记录；同实现者自审、未署名 reviewer 或已过期复核一律阻塞，串行降级被显式标注为 allowed-with-fallback 而不是当作独立复核。
+    changed_files:
+    - runtime/scripts/state_gate.py
+    - runtime/scripts/state_evidence.py
+    - runtime/scripts/vibe.py
+    deviations:
+    - 门禁以显式记录身份为准，不自动识别子 Agent 身份
+    follow_ups:
+    - 与 vibe-subagent-orchestration 对接，自动记录 reviewer 身份与 serial-role-fallback
+- id: TASK-025
+  title: 完成旧记录迁移预览和回退演练
+  kind: task
+  phase: implementation
+  goal: 迁移不丢历史，回退不覆盖新写入
+  status: done
+  authority: B
+  risk: high
+  tags:
+  - workflow-optimization
+  - approved-implementation
+  related_business_logic:
+  - BL-WFOPT-001
+  - BL-WFOPT-002
+  - BL-WFOPT-004
+  related_decisions:
+  - DEC-006
+  depends_on:
+  - TASK-020
+  - TASK-021
+  - TASK-023
+  - TASK-024
+  inputs:
+  - .project-log/docs/workflow-optimization-task-plan.md
+  - 前置任务的已验证产物；按实施授权及 G1/G2 推进
+  outputs:
+  - 导入导出与回退命令
+  - 隔离迁移/回退报告
+  plan:
+  - 计划验证：脱敏最小案例和临时副本往返、部分失败、新增写入后回退；不改原论文目录。
+  - 只在用户后续要求开始且前置验收满足时执行；TASK-027 另需精确安装/迁移批准
+  done_when:
+  - dry-run 输出冲突、缺失和不支持字段；不按 mtime 猜测业务事实
+  - 保留旧 ID、未知字段、原始来源与历史证据，不自动补成通过
+  - 旧格式写者遇新状态拒绝写入或走适配器
+  - 含迁移后新增记录的回退保全数据，不直接恢复旧备份
+  verification:
+    status: passed
+    commands:
+    - External state025-migrate-v1 -> 8 preview, conflict-detection and rollback-bundle tests passed
+    - External state025-metadata-v2 -> package, project and loop validation passed after the preview module was registered
+    - External state027-frozen-migrate -> 12 preview, conflict-detection, rollback-bundle and malformed-input tests passed on Windows and on WSL Ubuntu
+    - External reviewer-021 probe -> 12/12 after fixes; the rollback bundle now carries legacy decisions, questions and the active goal (M5), malformed legacy shapes are reported (M7), and a missing root fails closed (M8)
+    evidence:
+    - MIGRATE-025
+    limitations:
+    - 只做预演与回退包生成；没有对真实 .project-log 执行迁移，也未演练部分失败后的续跑
+    - 无命令信封的历史记录明确列为 unmappable，不生成伪回执
+    - 独立复核已完成一轮，发现的问题已修复并复验；真实迁移仍需 TASK-027 的目标级批准
+  result:
+    summary: 已实现迁移预演（冲突/缺失/不支持字段/unmappable 历史，不读 mtime）与无损回退包（逐字保留旧字段与旧证据，并纳入迁移后新记录，拒绝覆盖已存在目录）。
+    changed_files:
+    - runtime/scripts/state_migrate.py
+    - runtime/scripts/vibe.py
+    - runtime/scripts/validate_package.py
+    deviations:
+    - 迁移不在原目录就地改写；真实迁移动作仍需 TASK-027 的目标级批准
+    follow_ups:
+    - 演练部分失败后续跑与二次迁移幂等
+- id: TASK-026
+  title: 完成跨平台集成和发布评审
+  kind: task
+  phase: verification
+  goal: 形成可批准安装的集成验收包而非仅单元测试结果
+  status: done
+  authority: B
+  risk: high
+  tags:
+  - workflow-optimization
+  - approved-implementation
+  related_business_logic:
+  - BL-WFOPT-001
+  - BL-WFOPT-002
+  - BL-WFOPT-003
+  - BL-WFOPT-004
+  related_decisions:
+  - DEC-006
+  depends_on:
+  - TASK-025
+  inputs:
+  - .project-log/docs/workflow-optimization-task-plan.md
+  - 前置任务的已验证产物；按实施授权及 G1/G2 推进
+  outputs:
+  - 临时安装的 Hooks/Skills/安装器兼容验收记录
+  - 跨平台测试与独立发布评审
+  - G2 安装授权清单
+  plan:
+  - 计划验证：临时 CODEX_HOME 集成、真实 shell 启动、Git 交换、故障恢复与任务重放。
+  - 只在用户后续要求开始且前置验收满足时执行；TASK-027 另需精确安装/迁移批准
+  done_when:
+  - Windows 与 Linux 均有实际证据，缺环境明确 partial
+  - 临时安装的入口、Hooks、Skills、旧 CLI 与新策略一致
+  - 三类任务对照读写开销，状态和证据正确性不倒退
+  - 非实现者给出发布审核、剩余风险和回退可行性
+  verification:
+    status: passed
+    commands:
+    - External state027 Windows -> baseline 41+1skip, binding 8, launchers 16, state 39, crashes 3, exchange 15, routing 17, evidence 20, gate 29, migrate 12, integration 7 and metadata validation all passed
+    - External linux/runs/state027-linux-final -> the same suites on WSL Ubuntu (baseline 41+1skip, unix launchers 6, state 39+1skip), driver exit code 0
+    - External routing comparison -> the three-task comparison produces byte-identical case output on Windows and Linux (cases sha256 87e935121fa3807a5c0e6e76af6b6592dc279149ce12c049aa02d2d662fd8e6c)
+    evidence:
+    - CROSSPLATFORM-026
+    limitations:
+    - 真实安装与单项目试点仍未执行；TASK-027 需要用户对具体目标的明确批准
+    - 复核方的机器可读结论已完成；其中 reviewer-021 报出的一处记录缺陷（冻结摘要不可复现）已在验收记录第 1 节更正，两处探针自身的过期用例不影响已复验的产品行为
+    - 未覆盖 macOS、其他 Linux 发行版与网络文件系统
+  result:
+    summary: 已形成跨平台验收记录 .project-log/docs/workflow-optimization-cross-platform-acceptance.md：冻结版本（state027-frozen，摘要 8accc998…），Windows 与 Ubuntu 全部套件退出码 0，隔离安装、Hooks 与 Skill 指令一致性、旧格式兼容与分流一致性均有证据；结论为两平台可正常使用，真实安装与试点留待 TASK-027 授权。
+    changed_files:
+    - .project-log/docs/workflow-optimization-cross-platform-acceptance.md
+    deviations:
+    - 三类任务对照验证的是策略与最低验证差异，不是真实耗时统计
+    follow_ups:
+    - TASK-027 授权后执行真实安装与单项目试点，记录真实开销
+- id: TASK-027
+  title: 授权后安装并进行单项目试点
+  kind: task
+  phase: verification
+  goal: 在用户精确授权范围内验证真实使用收益
+  status: done
+  authority: C
+  risk: high
+  tags:
+  - workflow-optimization
+  - planned-not-started
+  related_business_logic:
+  - BL-WFOPT-001
+  - BL-WFOPT-002
+  - BL-WFOPT-003
+  - BL-WFOPT-004
+  related_decisions:
+  - DEC-006
+  depends_on:
+  - TASK-026
+  blocked_by_questions: []
+  inputs:
+  - .project-log/docs/workflow-optimization-task-plan.md
+  - 前置任务的已验证产物；按实施授权及 G1/G2 推进
+  outputs:
+  - 获批本机安装与单项目试点记录
+  - 试点验收或回退报告
+  plan:
+  - 计划验证：批准范围内新终端 smoke 与低风险/严格任务实测，必要时按验证过的流程回退。
+  - 只在用户后续要求开始且前置验收满足时执行；TASK-027 另需精确安装/迁移批准
+  done_when:
+  - 先确认安装目标、项目、备份与回退方式；无批准不得写全局配置或项目
+  - 新终端验证入口与 Hooks；旧格式项目用只读预演评估，不原地改写
+  - 保留试点前后记录，确认无数据丢失、无遗留旧写入口
+  - 试点记录开销和问题；不顺带批量改写或全局蒸馏
+  verification:
+    status: passed
+    commands:
+    - External task027-dryrun-v2 -> state-migrate-preview on a read-only copy of D:/Project/my_lunwen/.project-log：ready=true、0 冲突、0 缺失，任务 39 / 决策 17 / 问题 21 / 证据 69；源目录整树摘要前后一致（4d4c4f85…）
+    - External task027-dryrun-v2 -> 证据转换 69/69、0 错误，绑定保留 tasks 68 / requirements 19 / git_commit 67 / diff_hash 67，与旧文件非空计数逐项一致；220 个选择器全部带记录摘要
+    - External state028-doc-integration and state028-final-metadata -> integration 与 metadata 在 USAGE.md 文档改动后重跑退出码 0
+    - Global install -> global_installer.py install 退出码 0；verify 退出码 0（Global installation verification passed.）；运行时 116 文件且 loopctl.py 哈希与源码一致；AGENTS.md 含标记、任务分流与八荣八耻；Hooks 三个事件注册；MCP codegraph、marketplace vibe-global-toolbox、插件 vibe-toolbelt 0.4.1；skills 46→46
+    - Real-project pilot -> 对 D:/Project/my_lunwen 只读执行 status/validate/restore/state-migrate-preview/state-route/evaluate goal；运行前后 96 个文件清单逐项一致，未写入任何字节
+    - Real-project finding -> evaluate goal 返回 passed=false（SC-004 的 EV-019 已 stale，失效原因 PostToolUse:apply_patch；另有未决 C 级 Q-021），而目标文档标记 complete，即框架抓出假完成
+    evidence:
+    - MIGRATE-027-DRYRUN
+    - PILOT-027
+    limitations:
+    - 试点对真实项目只读；EV-019 的重新验证、Q-021 的答复与目标状态更正属于该项目自身决策，未代为执行
+    - 预演确认框架没有旧格式原地迁移 apply（state-init 遇已有 .project-log 报 migration_required），因此试点内容为“安装 + 旧格式兼容 + 按需只读预演”，不是“迁移 my_lunwen”
+    - 真实项目日志里的任务带 7 个新格式未知字段，未来若真的引入迁移 apply，需要先决定这些字段的映射或显式弃置
+    - Q-001（显式配置的 Python 不可用时安装器是否可改选命名 Conda 环境）仍未答复；本次安装使用现有已配置解释器，未触发该分支
+  result:
+    summary: 在用户批准下完成全局安装（运行时、AGENTS.md、Hooks、MCP、marketplace、插件、skills）并通过 verify；在真实项目上只读试点，未写入任何字节，框架成功恢复状态、给出 strict 分流结论，并抓出“目标标记 complete 但依赖证据 EV-019 已 stale 且存在未决 C 级 Q-021”的假完成。
+    changed_files: []
+    deviations:
+    - 试点为只读：真实项目记录未被修改，假完成与 stale 证据交由用户决定如何处理
+    follow_ups:
+    - 用户确认后重新验证 EV-019（重跑其覆盖命令并重新登记证据），并答复 Q-021 以解除 SC-004 阻塞
+- id: TASK-028
+  title: 修复 Run 切换丢失 Goal 绑定与 Task 重放
+  kind: repair
+  phase: implementation
+  goal: 切换 Run 时保留项目 Goal 绑定，并让强制重建能重放 Task
+  status: done
+  authority: B
+  risk: medium
+  tags:
+  - workflow-optimization
+  - approved-implementation
+  related_business_logic:
+  - BL-WFOPT-001
+  related_decisions:
+  - DEC-006
+  depends_on:
+  - TASK-020
+  blocked_by_questions: []
+  inputs:
+  - .project-log/loop/active-run.yaml
+  - .project-log/goals/active-goal.yaml
+  outputs:
+  - loop_state.start_run 的 Goal 绑定与 run-started 事件字段
+  - restore_active_run 的 task_id 重放
+  - 四项回归测试
+  plan:
+  - 计划验证：开放、已完成与缺失目标三种情形，以及强制重建后的 goal/task/phase 一致性。
+  done_when:
+  - start-run 后的 Run 与当前未完成的项目 Goal 绑定，不借用已完成目标
+  - 强制重建从 run-started 事件重放 goal_id、task_id 与 phase
+  - 既有 start-run 语义保持不变：原生 Goal 仍由 goal-bind 显式绑定
+  - Windows 与 Linux 回归套件保持通过
+  verification:
+    status: passed
+    commands:
+    - External state028-all -> baseline 45 run (44 passed + 1 skipped), binding 8, launchers 16 passed on Windows
+    - External state028-state/crashes/exchange/routing/evidence/gate/migrate/integration/metadata -> all exit 0 on Windows
+    - External linux/runs/state028-linux-wsl -> 14 checks exit 0 on WSL Ubuntu (platform=linux, loop_state.py 758eb362…)
+    - Falsification -> against the pre-fix loop_state.py (a24a2523…) the two binding tests fail while the two guard tests still pass, so 2 of 4 tests are load-bearing
+    evidence:
+    - RUNBIND-028
+    limitations:
+    - 原生 Goal 绑定仍由 loopctl goal-bind 显式建立；README 记录的 start-run → goal-bind 流程未改变
+    - 只修 legacy Loop Core；新格式状态服务不涉及
+    - 真实安装与单项目试点仍未执行（TASK-027）
+  result:
+    summary: start-run 现在把新 Run 绑定到状态为 draft/active/waiting-user/blocked 的项目 Goal，并在 run-started 事件中记录 goal_id 与 native_goal_binding；restore_active_run 从该事件重放 task_id，因此切换 Run 或强制重建都不再丢失 Goal/Task 关联。
+    changed_files:
+    - runtime/scripts/loop_state.py
+    - tests/test_loop_core.py
+    deviations:
+    - 未改动 native_goal 的既有重置语义，避免破坏 README 记录的显式 goal-bind 流程
+    follow_ups:
+    - 为 active-run 增加 waiting-user 状态的 CLI 入口，使“等待用户”不必用 handoff 表达
+- id: TASK-029
+  title: 让实时 Hook 按记录哈希做精确失效
+  kind: repair
+  phase: implementation
+  goal: 工具提到某路径但被覆盖文件字节未变时，不再误判证据失效
+  status: done
+  authority: B
+  risk: medium
+  tags:
+  - workflow-optimization
+  - approved-implementation
+  related_business_logic:
+  - BL-WFOPT-004
+  related_decisions:
+  - DEC-006
+  depends_on:
+  - TASK-022
+  - TASK-023
+  blocked_by_questions: []
+  inputs:
+  - runtime/hooks/post_tool_use.py
+  - runtime/scripts/loop_state.py
+  - .project-log/loop/evidence-index.yaml
+  outputs:
+  - 基于 version_binding.file_hashes 的失效判定
+  - 五项回归测试
+  plan:
+  - 计划验证：路径被提到但字节未变、字节被重写为相同内容、缺少记录哈希、文件被删除、路径未被覆盖。
+  done_when:
+  - 被覆盖路径的当前字节与记录哈希一致时，证据保持 candidate/valid
+  - 字节变化、文件缺失或缺少记录哈希时仍然判为 stale
+  - Windows 与 Linux 回归套件保持通过
+  verification:
+    status: passed
+    commands:
+    - External state029-baseline -> 50 run (49 passed + 1 skipped) on Windows, including the 5 new invalidation tests
+    - External state029-{binding,launchers,state,crashes,exchange,routing,evidence,gate,migrate,integration,metadata} -> all exit 0 on Windows
+    - External linux/runs/state029-linux-wsl -> 14 checks exit 0 on WSL Ubuntu (platform=linux)
+    - Falsification -> against the previous revision's loop_state.py the two "keeps the record current" tests fail while the three guard tests pass, so 2 of 5 tests are load-bearing
+    evidence:
+    - HOOKINVALIDATE-029
+    limitations:
+    - Hook 仍未调用 state_gate.invalidate；对 legacy 项目它用记录哈希做精确失效，对新格式项目仍只读短路，精确失效由门禁/CLI 在判定时执行（原 R-07 的分层边界不变）
+    - 判定依据是 version_binding.file_hashes；没有记录哈希的旧记录仍按“无法证明未变化”保守失效
+  result:
+    summary: loop_state.invalidate_evidence 不再按路径交集直接失效，而是要求被覆盖路径的当前字节与 version_binding.file_hashes 记录不一致（或文件缺失、缺少哈希）才判 stale，因此工具 payload 提到但未真正改动的文件不再误伤证据。
+    changed_files:
+    - runtime/scripts/loop_state.py
+    - tests/test_loop_core.py
+    deviations:
+    - 只改 legacy 失效路径；新格式证据模型与 state_gate 未改动
+    follow_ups:
+    - 若真实项目出现大量“有覆盖路径但无记录哈希”的旧证据，考虑一次性回填哈希
 - id: TASK-009
   title: 限制归档脚本提交范围并记录知识库修复
   kind: repair
@@ -540,3 +1508,112 @@ tasks:
     - 用户确认是否需要提交并推送 vibe-coding main
   created_at: '2026-09-07T15:00:00+08:00'
   updated_at: '2026-09-07T15:40:00+08:00'
+- id: TASK-030
+  title: 让 Python 引导原地修复显式解释器而不是静默换环境
+  kind: repair
+  phase: implementation
+  goal: 已显式配置的解释器不可用时，安装/更新不再静默改选命名 Conda 环境并重写配置
+  status: done
+  authority: B
+  risk: medium
+  tags:
+  - workflow-optimization
+  - user-approved-q001
+  related_business_logic:
+  - BL-WFOPT-002
+  related_decisions:
+  - DEC-008
+  depends_on:
+  - TASK-016
+  blocked_by_questions: []
+  inputs:
+  - scripts/bootstrap_vibe_python.py
+  - .project-log/business-logic/open-questions.yaml
+  outputs:
+  - 显式解释器的原地依赖修复与显式 opt-in 开关
+  - 四项回归测试
+  plan:
+  - 计划验证：配置解释器是 3.11+ 但缺依赖、pip 原地修复失败、VIBE_PYTHON 环境变量优先、配置路径不存在四种情形。
+  done_when:
+  - 已配置解释器是 Python 3.11+ 且只缺依赖时，把依赖装进该解释器并保持 vibe-python 配置不变
+  - 已配置解释器不是 3.11+ 或不可执行时明确报错，不创建也不改选 Conda 环境
+  - 只有显式 opt-in（VIBE_PYTHON_REPAIR=1 或 --repair-interpreter）才允许改选命名 Conda 环境并重写配置
+  - VIBE_PYTHON 环境变量优先时不重写配置文件，而是明确拒绝并说明原因
+  - Windows 与 Linux 回归套件保持通过
+  verification:
+    status: passed
+    commands:
+    - External task030c-baseline -> 55 run (54 passed + 1 skipped) on Windows, including
+      the 5 new bootstrap tests
+    - External task030c-{binding,launchers,state,crashes,exchange,routing,evidence,gate,migrate,integration,metadata}
+      -> all exit 0 on Windows on the frozen revision exports/task030-fix3 (33765c8d…)
+    - Ubuntu linux/runs/task030-linux-wsl4 -> 14 checks exit 0 (platform=linux, baseline
+      55 run / 54 passed / 1 skipped)
+    - Falsification vs state029-hook -> all 5 new tests fail; vs task030-fix2 -> the F1
+      (falsy VIBE_PYTHON_REPAIR) and F2 (missing-path hint) tests fail, so the two later
+      fixes are load-bearing as well
+    - Independent review reviewer-031 -> A1-A7 verified; findings F1/F2 fixed, F3/F4/F5
+      resolved at close-out
+    evidence:
+    - PYTHONREPAIR-030
+    - PLATFORM-030
+    - STATESLICE-030
+    limitations:
+    - opt-in 用环境变量 VIBE_PYTHON_REPAIR（只有 1/true/yes/on 生效）或 --repair-interpreter；
+      未改动 install/update 脚本的参数解析
+    - 只改安装/更新期的引导脚本；日常运行入口（vibe.ps1/vibe.sh）与 global_installer.py 的
+      fail-closed 行为未改动
+    - 覆盖 .project-log 记录文件的证据不会因每次日志编辑而重新失效；语义化证据范围仍是后续项
+  result:
+    summary: bootstrap_vibe_python.py 不再把显式配置的解释器换成命名 Conda 环境：配置解释器是
+      Python 3.11+ 但缺 Vibe 依赖时改为原地安装依赖并保持配置不变；不是 3.11+ 或不可执行时明确报错并给出修复命令；
+      只有显式 opt-in 才允许改选 Conda 环境并重写配置；VIBE_PYTHON 环境变量优先时拒绝重写配置文件。
+    changed_files:
+    - scripts/bootstrap_vibe_python.py
+    - tests/test_installer.py
+    deviations:
+    - 用环境变量而非脚本参数做 opt-in，避免改动四个安装/更新脚本的参数解析
+    follow_ups:
+    - 若需要在 install/update 命令行直接传开关，再为四个脚本增加 --repair-interpreter 透传
+  created_at: '2026-09-21T09:35:00+08:00'
+  updated_at: '2026-09-21T10:50:00+08:00'
+- id: TASK-031
+  title: 让配置路径不可用时的引导错误给出可执行的出路
+  kind: repair
+  phase: implementation
+  goal: 引导脚本失败时的提示必须指向当前状态下真正能改变结果的命令
+  status: pending
+  authority: B
+  risk: low
+  tags:
+  - workflow-optimization
+  - review-follow-up
+  related_business_logic:
+  - BL-WFOPT-002
+  related_decisions:
+  - DEC-008
+  depends_on:
+  - TASK-030
+  blocked_by_questions: []
+  inputs:
+  - scripts/bootstrap_vibe_python.py
+  outputs:
+  - 与当前状态一致的失败提示，或让 opt-in 在配置路径不可用时真正生效
+  plan:
+  - 计划验证：配置路径不存在、配置文件为空、VIBE_PYTHON 为空白字符串三种情形下，提示与实际可执行动作一致。
+  done_when:
+  - 提示里给出的变量或命令在该状态下确实能改变结果，否则不得提及
+  - 三种畸形配置各有独立回归测试
+  verification:
+    status: not-run
+    commands: []
+    evidence: []
+    limitations: []
+  result:
+    summary: 未开始。来源：reviewer-031 的 F6——ensure_python 的 except 分支在 selected 赋值之前抛出，因此提示中的
+      VIBE_PYTHON_REPAIR=1 在该状态下无法生效；另外 VIBE_PYTHON 为空白字符串时会给出配置文件路径的提示。
+    changed_files: []
+    deviations: []
+    follow_ups: []
+  created_at: '2026-09-21T11:55:00+08:00'
+  updated_at: '2026-09-21T11:55:00+08:00'

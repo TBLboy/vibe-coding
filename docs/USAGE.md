@@ -165,7 +165,28 @@ ${CODEX_HOME:-$HOME/.codex}/vibe-workflow/scripts/loopctl.py --help
 python scripts/global_installer.py verify
 ```
 
-实际执行 Vibe 控制层命令时，优先使用 `vibe-python` 指向的解释器，例如：
+日常运行可使用平台原生入口，它会读取 `vibe-python`，不要求 PATH 中存在 `py` 或 `python3`。
+
+Windows PowerShell：
+
+```powershell
+$CodexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $HOME '.codex' }
+& (Join-Path $CodexHome 'vibe-workflow\vibe.ps1') --root (Get-Location).Path status
+```
+
+Linux/macOS Bash：
+
+```bash
+bash "${CODEX_HOME:-$HOME/.codex}/vibe-workflow/vibe.sh" --root "$PWD" status
+```
+
+入口也支持 `--codex-home <目录>` 或 `--codex-home=<目录>`。通过 `pwsh -File` 从外部程序启动时，请使用分开的 `--codex-home "D:\配置目录"`：已测试的 PowerShell 7.4.6 宿主会在脚本收到参数前拆开 `--codex-home=D:\配置目录` 中的盘符冒号。入口对这种歧义报错并提示分开传参，不猜测重组路径。直接在 PowerShell 内调用脚本的等号形式不受此限制。
+
+解释器优先级为显式 `VIBE_PYTHON`、该目录的 `vibe-python`；配置必须是单行绝对可执行路径，Python 至少为 3.11。配置文件接受 UTF-8 BOM 与 CRLF，但不接受多条路径或相对路径。错误配置明确报错，不静默切换 PATH、WSL 或安装环境；子进程的文本输入输出明确使用 UTF-8。
+
+首次安装与日常运行分开：仅安装入口可以通过 `VIBE_BOOTSTRAP_PYTHON` 或自动发现的兼容解释器启动现有 Conda 初始化流程。日常入口只运行已配置环境。Windows 入口保留空参数、引号与反斜杠；跨平台测试使用隔离配置目录，不更改用户实际安装。
+
+直接调用校验脚本时，仍应使用 `vibe-python` 指向的解释器，例如：
 
 ```bash
 PY="$(cat "${CODEX_HOME:-$HOME/.codex}/vibe-python")"
@@ -773,3 +794,97 @@ vibe 恢复。请读取项目根目录的 AGENTS.md、.project-log/current-sessi
 ```
 
 这套工作流的目标不是让 Agent 写更多文字，而是让每个重要决定、实现和结论都能被恢复、质疑和验证。
+
+## 14. 事务状态预览（仅隔离测试项目）
+
+TASK-020 正在分片实施。此入口不是已发布迁移工具，不用于现有论文项目或真实全局安装。旧格式项目继续使用原有行为；任何已有 `.project-log` 都会被预览初始化器拒绝，不自动迁移、不覆盖用户笔记。
+
+在已经创建的空白测试目录中，通过配置好的原生 `vibe.ps1` / `vibe.sh` 入口调用：
+
+```text
+--root <test-project> state-init --experimental
+--root <test-project> state-apply --file <command.json>
+--root <test-project> state-task TASK-001
+--root <test-project> status
+--root <test-project> state-views
+--root <test-project> validate
+```
+
+例如 `command.json` 是 UTF-8 JSON，而不是需要跨 Shell 转义的内联字符串：
+
+```json
+{
+  "schema_version": 1,
+  "command_id": "create-task-001",
+  "expected_revision": 0,
+  "action": "task.create",
+  "payload": {"id": "TASK-001", "title": "隔离验证任务", "goal_id": null}
+}
+```
+
+每个新的业务操作使用新的 `command_id` 和最近观察到的 `revision`。网络或调用中断后，重试原始信封（包括原始 revision），返回原回执；不能修改同一 ID 的载荷或 revision。`goal.create` 显式创建目标；任务不自动继承历史目标。支持 `task.begin`、`task.wait`、`task.resume`、`task.handoff`、`task.finish`、`task.cancel`。等待用户必须记录问题引用和恢复条件。`task.finish` 只到 `implemented-unverified`，不能凭 `proof_ref` 宣布完成；证据和独立审核关口尚未接入。
+
+新格式标记为 `.project-log/state-format.json`。Git 项目数据库位于该 worktree 的 Git 管理目录下，按项目 ID 和分支上下文隔离；非 Git 测试项目位于 `.project-log/.state/`。不会把 SQLite 文件加入 Git。初次切换到没有本地状态的分支会明确失败，而不是沿用另一分支的状态。跨副本同步只在显式执行 `state-export`/`state-import` 时发生，见下文“显式快照交换”；日常任务命令不会触发同步。普通操作不占用或清理 `index.lock`。
+
+自动摘要保存在数据库旁的 `generated` 目录。以 `CURRENT.json` 指向的同一版本为一组读取，校验项目、上下文、revision 和内容哈希；不逐文件猜测哪个版本更新。`current-session.md`、`progress.md` 和 `handoff.md` 是派生视图，不是另外三份事实源，也不覆盖项目中的同名用户笔记。投影失败时业务提交仍成立，返回 `projection: pending`，可用 `state-views` 修复，不需要再次登记业务操作。生成内容由 revision 唯一决定，因此生成目录里缺失的文件（含 `manifest.json`）会在下次 `state-views` 或 `state-export` 时原地补写，结果中的 `repaired` 列出补写的文件名；已存在但字节不同的文件属于篡改，仍然失败关闭（`projection_incomplete`），不会被静默覆盖。
+
+新格式下，`loopctl restore/status` 与启动 Hook 只读恢复，不创建旧 YAML，不逐次工具调用追加完成事件。旧写命令明确拒绝，改用统一信封。初始化中断、缺失数据库、无法识别的标记或遗留投影锁均需保留现场并调查；不要删除标记、数据库或锁来让旧入口接管。此预览尚未获得完整 TASK-020/G2 发布验收。
+
+`.project-log/.state/` 是新格式保留的本机所有权目录，Git 项目也保留此目录用于防止格式标记丢失后回退到旧写入器。目录仍在而标记缺失时（包括切换到不含标记的旧分支），入口保守拒绝恢复，不自动补写旧 YAML；需要后续显式迁移/交换流程处理，不能通过删除目录绕过。Hook 从子目录启动时会识别上层新格式项目，路径别名也不能绕过旧写入保护。
+
+### 显式快照交换
+
+跨副本同步只在显式执行时发生，日常任务命令永远不占用 Git index 锁。快照对象写入 `.project-log/exchange/`，随 Git 提交分发；它们按内容寻址、不可变，且标记为不转换行尾，因此在不同平台克隆之间字节稳定。
+
+```text
+--root <test-project> state-attach                      # 新克隆：为当前 worktree 建立本机状态库
+--root <test-project> state-export                      # 发布本机状态为不可变快照
+--root <test-project> state-import                      # 校验并导入当前 worktree 已发布的快照
+--root <test-project> state-exchange                    # 只读查看本机/已发布版本、共同基线与待恢复状态
+--root <test-project> state-exchange-finish             # 崩溃后确认待发布快照就是已写入的指针
+--root <test-project> state-exchange-abandon --reason "..."   # 确认未发布后放弃待发布意图
+```
+
+典型流程：克隆 A 建立状态并 `state-export`，提交推送；克隆 B `state-attach` 后 `state-import` 取得 A 的状态；B 继续工作并 `state-export`；A 拉取后 `state-import` 取得 B 的新命令。两端各自的 `revision` 是本机提交序号，导入的历史命令保留原始分支上下文和原始 revision，因此本机序号与来源坐标不会互相污染。
+
+导入只在下列条件全部成立时接受，否则明确拒绝且不改动任何状态：
+
+- 快照摘要、指针与载荷哈希一致，且清单字段完整；
+- 项目身份相同，快照确实从本机记录的共同基线派生（否则 `snapshot_diverged`）；
+- 本机没有尚未发布的命令（否则 `unexported_changes`，两端版本都保留，不做覆盖式合并）；
+- 双方共享命令的请求与回执字节完全一致（否则 `history_rewritten`）；
+- 快照的实体表与其账本互相一致，不存在没有对应命令的实体行（否则 `invalid_snapshot`）；
+- 快照新增命令的回执与请求、运行和实体语义一致（否则 `invalid_snapshot`）。
+
+后两条在写入前重放整个账本，因此“能通过导入”与“能通过 `validate`”不会分离：被拒绝的快照不会改动本机任何字节，也不会把损坏状态再传播给下一个副本。
+
+普通命令只做本机事务，不读写快照，也不改变交换记录。发布窗口只在写入指针前后短暂持有 Git index 锁：
+
+- 锁被别人占用时报 `git_busy`，并保留对方的锁文件；
+- 进程被强杀可能遗留 `index.lock`，同时保留 `pending_kind=export` 与已写入的指针；
+- 恢复步骤是先确认没有其他 Git/Vibe 写入者，再处理遗留锁，然后用 `state-exchange-finish`（指针与待发布快照一致）或 `state-exchange-abandon`（确认未发布）结束待发布状态。Vibe 不会自动删除任何锁或自动清除待发布状态。
+
+待发布期间仍可接受新的本机命令：`pending_revision` 记录的是发布意图指向的 revision，可以落后于当前 `local_revision`，`state-exchange` 的 `unexported_commands` 会如实显示这些尚未发布的新命令。此时 `validate` 仍然干净，不需要任何修复动作。
+
+`state-export` 只有在快照真正发布并确认后才报告成功；如果交换已经完成、只是随后生成派生视图失败，命令返回 `projection_error`（而不是失败退出），指针与 `exported_local_revision` 已经更新，调用方不应据此重试导出。
+
+### 旧格式项目与迁移预演
+
+`state-init` 只用于**新建**测试项目。项目已经有 `.project-log` 时，它以 `migration_required`（`migration is not available`）明确拒绝，绝不原地改写现有记录。旧格式项目继续使用原有的 `loopctl` 记录链路；新格式入口对旧项目只做只读恢复并拒绝新格式写入。这条边界是有意的：新格式的实体与账本模型跟旧 YAML 不是一一对应，静默转换等于伪造历史，因此框架只提供“预演”，不提供自动 apply。
+
+需要评估“这个项目迁移会怎样”时，用只读预演而不是先动数据：
+
+```text
+--root <project> state-migrate-preview                          # 只读：报告保留/冲突/缺失/无法映射的内容
+--root <project> state-migrate-rollback --destination <dir>      # 生成逐字保留旧记录的回退包
+```
+
+预演的行为：
+
+- 不读取任何文件修改时间，也不猜测业务事实；
+- 冲突（缺失或重复 ID、未知任务状态）、缺失引用（任务依赖、问题、决策、运行任务）与未知任务字段分别列出；
+- 没有命令信封的历史记录归入 `unmappable_history`，不会为它们编造回执；
+- 旧证据按 `covers.files` 与 `version_binding.file_hashes` 转成 `raw-file` 选择器，并保留 `covers.tasks`、`covers.requirements`、`git_commit`、`diff_hash`；历史结论原样保留为 `passed` 或 `unknown`，不会因为转换就变成当前有效；
+- 预演是纯函数，不改动任何字节；回退包逐字保留旧字段、并拒绝覆盖已存在的目标目录。
+
+`state-migrate-rollback` 需要一个已存在的本机状态库（它把“迁移后新增的记录”也纳入回退包）。旧格式项目还没有状态库时，先用 `state-migrate-preview` 评估，不要直接改写 `.project-log`。

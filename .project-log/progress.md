@@ -2,12 +2,85 @@
 
 ## 当前状态
 
-- 当前阶段：implementation
-- 当前任务：TASK-011 将八荣八耻工作口诀加入通用 Agent 规则
-- 当前状态：已完成（源码与当前 Codex 已同步）
-- 最近验证：41 个 unittest（1 跳过）、包校验、项目校验、Loop 校验全部通过
+- 当前阶段：GOAL-001 已结算完成（`loopctl decide action=goal-complete`）；唯一遗留是 TASK-031（pending，B 级）
+- 当前任务：TASK-001..TASK-030 全部完成（done），含 TASK-027（全局安装与真实项目试点）、TASK-029（实时 Hook 精确失效）与 TASK-030（Python 引导原地修复显式解释器）
+- 当前状态：当前修订 `exports/task030-fix3`（摘要 `33765c8d…`）在 Windows 与 Ubuntu 上全部回归套件退出码 0；Q-001 已由用户答复并落地（`DEC-008`）；按框架规则失效 6 条漂移证据并登记 3 条锚定当前修订的新证据；`SC-001`/`SC-004`/`SC-007` 证据引用已更新；`evaluate goal` 返回 `passed: true`、`reasons: []`
+- 最近验证（当前修订 `exports/task030-fix3`）：Windows 基线 55 项（54 通过 + 1 跳过）、绑定 8、入口 16、状态 39、强杀 3、交换 15、分流 17、证据 20、门禁 29、迁移 12、安装集成 7、元数据通过；Ubuntu `linux/runs/task030-linux-wsl4` 14 项检查全部退出码 0（基线 55 项：54 通过 + 1 跳过）；`exports/state027-frozen` 与 `state029-hook` 的矩阵保留为历史基线；失败与被取代记录全部保留
 - 下一步：
-  - 用户确认后提交并推送 vibe-coding main 源码改动
+  - TASK-031（pending，B 级）：让配置路径不可用时的引导提示真正可执行（`reviewer-031` 的 F6）
+  - 工作区改动尚未提交，待用户决定是否 commit / push
+
+## 2026-09-21 TASK-030：Python 引导原地修复显式解释器（Q-001 落地）
+
+- 用户对 Q-001 选择“原地修复、绝不静默换环境”；`DEC-008` 记录该决定与选项。
+- `scripts/bootstrap_vibe_python.py`：显式配置的解释器只缺依赖时原地安装依赖且不改配置；不是 3.11+ 或不可执行时报错并给出出路；只有显式 opt-in（`VIBE_PYTHON_REPAIR` 为 `1`/`true`/`yes`/`on`，或 `--repair-interpreter`）才改选命名 Conda 环境并重写配置；`VIBE_PYTHON` 优先时拒绝重写。
+- 5 项回归测试；反证：最初修订 5/5 失败，上一修订仅 F1/F2 两项失败（两次修复均 load-bearing）。
+- 冻结修订 `exports/task030-fix3`（摘要 `33765c8d…`）；Windows `runs/task030c-*` 全部 exit 0，Ubuntu `linux/runs/task030-linux-wsl4` 14 项 exit 0。
+- 独立复核 `reviewer-031` 的 A1–A7 全部 verified，并提出 F1–F5；F1/F2 已改代码并复验，F3/F4/F5 已在记录与 Loop 状态层收口。
+
+## 2026-09-21 最终发布复核（reviewer-030）
+
+- `reviewer-030` 对 `exports/state029-hook` 做发布前独立复核：**A1–A8 全部 verified、0 项矛盾、结论 GO**；产物 `reviewer-030/REPORT.md` 与 `reviewer-030/runs/SUMMARY.json`。
+- 已登记 `GOALREVIEW-030`（`kind: review`、`subject: goal-final-review`、`status: valid`），`SC-007` 置为 `passed`、`required_evidence.independent-review` 指向它；`evaluate goal` 由四条理由降为一条（`open C-level questions: Q-001`）。
+- 唯一措辞问题（R-07 可被误读为“Hook 完全不失效”）已按复核建议收紧；验收记录新增第 13 节。
+
+## 2026-09-21 收口：任务关闭与证据更正
+
+- TASK-020..TASK-026 状态改为 `done`（`verification.status: passed`）；TASK-027 保持 `pending`（C 级授权）。
+- 复核报告：三份 `REPORT.md` 均已落盘（reviewer-020b / reviewer-020d / reviewer-021）；reviewer-021 为八个探针套件 88/88、0 矛盾、16 项缺陷全 `fixed`，reviewer-020d 改写两处过期探针后为 216/216。
+- 证据更正：验收记录原声明的冻结摘要 `9ee16bc8…` 与 `state_evidence.py` 哈希 `e04ff9ab…` 不可复现，已更正为 `8accc998…` 与 `1e9623098f…`；逐文件比对确认运行时代码与当前源码一致。
+- Loop 状态：Run 由 TASK-020-exchange 切换为 TASK-027/verification 并 handoff；`start_run` 清空 `goal_id` 的遗留缺陷已用 `state-repaired` 事件登记恢复。
+
+## 2026-09-21 TASK-028：Run 绑定修复
+
+- 修复 `loopctl start-run` 切换 Run 时丢失 `goal_id` 与不重放 `task_id` 的缺陷（`runtime/scripts/loop_state.py`），新增 4 项回归测试，并用“放回修复前代码后 2 项测试失败”反证其有效。
+- 复验：Windows `runs/state028-all` 与 9 个单独套件全部 exit 0；Ubuntu `linux/runs/state028-linux-wsl` 14 项检查全部 exit 0。验收记录新增第 9 节。
+- 误用 Windows 解释器启动 Linux 驱动器的 `linux/runs/state028-linux` 保留为审计记录，不作为 Linux 证据。
+
+## 2026-09-21 TASK-027 预备：真实项目日志只读迁移预演
+
+- 在 `my_lunwen` 的只读副本上跑 `state-migrate-preview`：`ready=true`、0 冲突、0 缺失；任务 39 / 决策 17 / 问题 21 / 证据 69；证据转换 69/69 无损（绑定保留与旧文件计数逐项一致）。
+- 更正边界：框架没有旧格式原地迁移 apply（`state-init` 遇已有 `.project-log` 报 `migration_required`），TASK-027 的试点是安装 + 旧格式兼容 + 按需只读预演；`docs/USAGE.md` 补上“旧格式项目与迁移预演”一节。
+- 复验：`integration`、`metadata` 在文档改动后重跑退出码 0。
+
+## 2026-09-21 TASK-029：实时 Hook 精确失效
+
+- 把 `loop_state.invalidate_evidence` 从“路径交集即失效”改为“被覆盖文件字节与记录哈希不一致才失效”，并新增 5 项回归测试；反证确认 2 项 load-bearing。
+- 复验：Windows `runs/state029-*` 全部 exit 0（baseline 50 项：49 通过 + 1 跳过）；Ubuntu `linux/runs/state029-linux-wsl` 14 项检查全部 exit 0。验收记录新增第 11 节。
+
+## 2026-09-21 TASK-027：全局安装与真实项目试点
+
+- 用户批准后完成全局安装：`install` 与 `verify` 均退出码 0；AGENTS.md、Hooks、MCP、marketplace、插件、skills 全部就位；安装前有安装器备份与独立快照两份。
+- 真实项目 `my_lunwen` 只读试点：96 个日志文件前后逐项一致（未写入）；`evaluate goal` 抓出假完成——目标标 `complete` 但 `EV-019` 已 stale（原因 `PostToolUse:apply_patch`）且 `Q-021` 未决。
+- 补登记 TASK-021～026 引用却缺失的 6 个证据；GOAL-001 的 SC-001～SC-006 置为 passed。验收记录新增第 12 节。
+
+## 2026-09-21 第二轮复核与跨平台验收
+
+- 交换切片复核（reviewer-020d，未修改的首轮脚本）：对抗 41/41、强杀 38/38，D1-D3 复验通过；两项失败确认为探针过期，待复核方改写后出报告。
+- 分流/证据/门禁/迁移复核（reviewer-021）：6 项代码缺陷已修复并由复核方自己的探针复验为 8/8、11/11、17/17、12/12；P6 为探针写死结论，待改为实测。
+- 跨平台验收记录：`docs/workflow-optimization-cross-platform-acceptance.md`（冻结版本 `exports/state027-final`，摘要 `5675d323…`）；Windows 与 Ubuntu 全部套件退出码 0。TASK-027 安装与试点仍需用户批准。
+
+## 2026-09-20 交换切片独立复核与修复
+
+- reviewer-020b：213 项断言 204 通过，D1-D9 已全部修复（代码 4 项 + 记录漂移 5 项），新增 D1-D4 回归测试并反证有效。
+- 证据：runs/state027-*、linux/runs/state027-linux-all（report.json 全部 exit 0）、reviewer-020b/REPORT.md。
+
+## 2026-09-20 首批实现与外部验证
+
+- 契约：specs/workflow-optimization-contract.md；Git 修复和平台入口已落源代码，SQLite 尚未进入生产。
+- 证据根目录：D:/Project/vibe-coding-validation；源码未被测试产物污染，真实论文项目和全局安装未修改。
+- 详细进度与失败保留见 current-session.md；后续不是重复原测试，而是事务/并发/快照原型。
+
+## 2026-09-19 四项优化任务拆解
+
+- `.project-log/docs/workflow-optimization-task-plan.md` 描述四批任务和 G1/G2 两个关口；机器任务状态以 task-list.yaml 为准。
+- TASK-014 是开工后的第一个候选；当前禁止自动执行。原型、代码实现、安装和迁移均未开始。
+
+## 2026-09-19 四项框架优化技术选型
+
+- RES-001 给出候选比较、统一状态接口、风险分流、证据指纹策略和分阶段验收。
+- 详细方案：`.project-log/docs/workflow-optimization-technical-selection.md`。
+- DEC-006 仅为提议：SQLite/文本快照方案须先经用户确认并完成隔离原型；不在真实论文项目试验。
 
 ## 2026-09-07T15:40:00+08:00 将八荣八耻口诀加入通用 Agent 规则
 

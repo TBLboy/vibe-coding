@@ -54,9 +54,13 @@ def explicit_project_root(payload: dict[str, Any]) -> Path | None:
 
 
 def find_project_root(start: Path) -> Path:
+    from state_context import is_transactional
+
     current = start if start.is_dir() else start.parent
     git_root: Path | None = None
     for candidate in (current, *current.parents):
+        if is_transactional(candidate):
+            return candidate
         if candidate == current and (candidate / ".project-log").is_dir():
             return candidate
         if git_root is None and (candidate / ".git").exists():
@@ -68,6 +72,10 @@ def find_project_root(start: Path) -> Path:
 
 def ensure_project(payload: dict[str, Any]) -> Path:
     root = explicit_project_root(payload) or find_project_root(candidate_cwd(payload))
+    from state_context import is_transactional
+
+    if is_transactional(root):
+        return root
     if not project_log(root).is_dir():
         initialize_project(root)
     initialize_loop(root)
@@ -109,6 +117,10 @@ def tool_name(payload: dict[str, Any]) -> str:
 
 
 def maybe_probe(root: Path, hook_name: str, payload: dict[str, Any]) -> None:
+    from state_context import is_transactional
+
+    if is_transactional(root):
+        return
     if os.environ.get("VIBE_HOOK_PROBE") != "1":
         return
     path = project_log(root) / "loop/hook-samples.jsonl"
@@ -118,6 +130,10 @@ def maybe_probe(root: Path, hook_name: str, payload: dict[str, Any]) -> None:
 
 
 def compact_context(root: Path, refresh_handoff: bool = False) -> str:
+    from state_context import compact_context as transactional_context, is_transactional
+
+    if is_transactional(root):
+        return transactional_context(root)
     state = load_active_run(root)
     if refresh_handoff:
         generate_handoff(root)

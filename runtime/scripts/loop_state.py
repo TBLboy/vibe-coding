@@ -91,6 +91,9 @@ def utc_now() -> str:
 
 
 def project_log(root: Path) -> Path:
+    from state_context import reject_legacy
+
+    reject_legacy(root)
     return root / ".project-log"
 
 
@@ -106,6 +109,9 @@ def load_yaml(path: Path) -> dict[str, Any]:
 
 
 def atomic_write_text(path: Path, text: str) -> None:
+    from state_context import reject_legacy_path
+
+    reject_legacy_path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     handle, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
     try:
@@ -256,6 +262,28 @@ def default_active_run() -> dict[str, Any]:
     return load_yaml(runtime_template() / "loop/active-run.yaml")
 
 
+GOAL_BINDING_STATUSES = {"draft", "active", "waiting-user", "blocked"}
+
+
+def project_goal_id(root: Path) -> str | None:
+    """Return the identifier of the current project goal, if one is still open."""
+    path = goal_path(root)
+    if not path.is_file():
+        return None
+    try:
+        goal = load_yaml(path).get("goal")
+    except Exception:  # noqa: BLE001
+        return None
+    if not isinstance(goal, dict):
+        return None
+    identifier = goal.get("id")
+    if not isinstance(identifier, str) or not identifier:
+        return None
+    if goal.get("status") not in GOAL_BINDING_STATUSES:
+        return None
+    return identifier
+
+
 def start_run(root: Path, phase: str = "business-intent", task_id: str | None = None) -> dict[str, Any]:
     if phase not in PHASES:
         raise ValueError(f"unsupported phase: {phase}")
@@ -263,11 +291,17 @@ def start_run(root: Path, phase: str = "business-intent", task_id: str | None = 
     state["run_id"] = f"RUN-{utc_now().replace('-', '').replace(':', '').replace('T', '-').replace('Z', '')}-{uuid.uuid4().hex[:8]}"
     state["phase"] = phase
     state["task_id"] = task_id
+    state["goal_id"] = project_goal_id(root)
     save_active_run(root, state)
     event = append_event(
         root,
         "run-started",
-        {"phase": phase, "task_id": task_id},
+        {
+            "phase": phase,
+            "task_id": task_id,
+            "goal_id": state.get("goal_id"),
+            "native_goal_binding": state.get("native_goal", {}).get("binding_status"),
+        },
     )
     return {"state": load_active_run(root), "event": event}
 
@@ -292,6 +326,7 @@ def restore_active_run(root: Path, force: bool = False) -> tuple[dict[str, Any],
             state["run_id"] = event.get("run_id")
             state["goal_id"] = event.get("goal_id")
             state["phase"] = event.get("phase") or state["phase"]
+            state["task_id"] = event.get("task_id")
         elif event.get("type") == "task-selected":
             state["task_id"] = event.get("task_id")
         elif event.get("type") == "handoff-generated":
@@ -364,33 +399,68 @@ def file_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def run_git(root: Path, arguments: list[str]) -> str | None:
-    result = subprocess.run(
-        ["git", *arguments],
-        cwd=root,
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.DEVNULL,
-        check=False,
-    )
-    return result.stdout.strip() if result.returncode == 0 else None
+def run_git(root: Path, arguments: list[str], *, missing_reference_ok: bool = False) -> bytes | None:
+    environment = os.environ.copy()
+    for variable in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR", "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES"):
+        environment.pop(variable, None)
+    try:
+        result = subprocess.run(
+            ["git", *arguments],
+            cwd=root,
+            env=environment,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+            timeout=30,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise RuntimeError(f"Cannot read Git version binding in {root}: {exc}") from exc
+    if result.returncode == 0:
+        return result.stdout
+    if missing_reference_ok and result.returncode == 1:
+        return None
+    detail = result.stderr.decode("utf-8", errors="replace").strip()
+    raise RuntimeError(f"Git version binding failed ({result.returncode}): {detail}")
 
 
 def version_binding(root: Path, files: list[str]) -> dict[str, Any]:
+    root = root.resolve()
     normalized = [normalize_project_path(root, item) for item in files]
-    commit = run_git(root, ["rev-parse", "HEAD"])
-    diff_args = ["diff", "--binary", "--no-ext-diff", "HEAD"]
-    if normalized:
-        diff_args.extend(["--", *normalized])
-    diff = run_git(root, diff_args)
     hashes: dict[str, str] = {}
     for item in normalized:
         path = root / item
         if path.is_file():
             hashes[item] = file_sha256(path)
+    commit = None
+    diff_hash = None
+    if any((parent / ".git").exists() for parent in (root, *root.parents)):
+        reference = run_git(root, ["rev-parse", "--verify", "--quiet", "HEAD"], missing_reference_ok=True)
+        if reference is None:
+            target = run_git(root, ["symbolic-ref", "--quiet", "HEAD"])
+            try:
+                branch = target.strip().decode("utf-8")
+            except UnicodeDecodeError as exc:
+                raise RuntimeError("Cannot identify the unborn Git branch") from exc
+            if not branch.startswith("refs/heads/"):
+                raise RuntimeError("Git HEAD is not a valid unborn branch")
+            existing = run_git(root, ["show-ref", "--verify", "--quiet", branch], missing_reference_ok=True)
+            if existing is not None:
+                raise RuntimeError("Git HEAD cannot resolve an existing branch")
+        if reference is not None:
+            try:
+                commit = reference.strip().decode("ascii")
+            except UnicodeDecodeError as exc:
+                raise RuntimeError("Git returned a non-ASCII commit identifier") from exc
+            if len(commit) not in {40, 64} or any(character not in "0123456789abcdef" for character in commit):
+                raise RuntimeError("Git returned an invalid commit identifier")
+            diff_args = ["diff", "--binary", "--no-ext-diff", "--no-textconv", "--no-color", "HEAD"]
+            if normalized:
+                diff_args.extend(["--", *normalized])
+            diff = run_git(root, diff_args)
+            diff_hash = hashlib.sha256(diff).hexdigest()
     return {
         "git_commit": commit,
-        "diff_hash": hashlib.sha256((diff or "").encode("utf-8")).hexdigest() if commit else None,
+        "diff_hash": diff_hash,
         "file_hashes": hashes,
     }
 
@@ -444,6 +514,30 @@ def record_evidence(
     return item
 
 
+def covered_bytes_changed(root: Path, item: dict[str, Any], touched: set[str]) -> bool:
+    """True when a touched, covered path no longer matches its recorded hash.
+
+    A tool payload naming a path is not evidence that the file changed. The recorded
+    hash from ``version_binding.file_hashes`` is the applicability anchor: while the
+    bytes still match it, the recorded result still describes the same input. Missing
+    files and missing hashes are treated as changed, so the decision never claims a
+    current result it cannot prove.
+    """
+    recorded = item.get("version_binding", {}).get("file_hashes", {})
+    if not isinstance(recorded, dict):
+        return True
+    for relative in sorted(touched):
+        expected = recorded.get(relative)
+        if not isinstance(expected, str) or not expected:
+            return True
+        target = root / relative
+        if not target.is_file():
+            return True
+        if file_sha256(target) != expected:
+            return True
+    return False
+
+
 def invalidate_evidence(root: Path, changed_paths: list[str], reason: str) -> list[str]:
     normalized = {normalize_project_path(root, item) for item in changed_paths}
     if not normalized:
@@ -456,7 +550,10 @@ def invalidate_evidence(root: Path, changed_paths: list[str], reason: str) -> li
             if item.get("status") not in {"candidate", "valid"}:
                 continue
             covered = set(item.get("covers", {}).get("files", []))
-            if normalized and not covered.intersection(normalized):
+            touched = covered.intersection(normalized)
+            if not touched:
+                continue
+            if not covered_bytes_changed(root, item, touched):
                 continue
             item["status"] = "stale"
             item["invalidated_at"] = utc_now()

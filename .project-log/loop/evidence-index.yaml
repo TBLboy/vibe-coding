@@ -158,7 +158,7 @@ evidence:
 - id: PYTHON-001
   kind: package-validation
   subject: Global Vibe Python resolver package validation and tests
-  status: valid
+  status: stale
   command: 'vibe-coding environment: validate_package.py, unittest, compileall'
   result_ref: .project-log/verification/evidence.yaml#PYTHON-001
   covers:
@@ -176,8 +176,10 @@ evidence:
       scripts/global_installer.py: f93067af1031a7919119834e3f29b75576fb072fe571fdf7f6d7e85f7633c36f
       tests/test_installer.py: 391d1df085599bba4b15f1b02a63014614976e9e615bf889bf3382ec649f6955
   recorded_at: '2026-07-27T10:09:55+08:00'
-  invalidated_at: null
-  invalidation_reason: null
+  invalidated_at: '2026-09-21T03:40:10Z'
+  invalidation_reason: 'TASK-030 close-out: covered runtime files changed in later
+    revisions (TASK-027 docs, TASK-028/029 runtime, TASK-030 installer) so the recorded
+    results no longer describe the same inputs'
 - id: PYTHON-002
   kind: configuration
   subject: Global Codex Hooks pinned to vibe-coding interpreter
@@ -224,7 +226,7 @@ evidence:
 - id: PYTHON-004
   kind: bootstrap-integration
   subject: Conda Vibe Python bootstrap and wrapper update
-  status: valid
+  status: stale
   command: bootstrap_vibe_python.py fake-Conda integration plus update.sh real global
     update
   result_ref: .project-log/verification/evidence.yaml#PYTHON-004
@@ -243,12 +245,13 @@ evidence:
     diff_hash: null
     file_hashes: {}
   recorded_at: '2026-07-27T10:17:25+08:00'
-  invalidated_at: null
-  invalidation_reason: null
+  invalidated_at: '2026-09-20T00:56:04Z'
+  invalidation_reason: Earlier own launcher evidence covers pre-UTF8/argv revisions;
+    new version verified separately, historical outcomes retained.
 - id: MCP-006
   kind: automated-test
   subject: Windows-compatible installer and CodeGraph regression suite
-  status: valid
+  status: stale
   command: py -3 -m unittest discover -s tests -v
   result_ref: 20 tests passed; 1 historical migration test skipped
   covers:
@@ -263,12 +266,14 @@ evidence:
     file_hashes:
       tests/test_installer.py: 67859ab403c465c69177da79971ca0d9050d7037abab5781e33a090bb0acc16e
   recorded_at: '2026-07-27T13:59:46Z'
-  invalidated_at: null
-  invalidation_reason: null
+  invalidated_at: '2026-09-21T03:40:10Z'
+  invalidation_reason: 'TASK-030 close-out: covered runtime files changed in later
+    revisions (TASK-027 docs, TASK-028/029 runtime, TASK-030 installer) so the recorded
+    results no longer describe the same inputs'
 - id: MCP-007
   kind: release-build
   subject: Vibe Coding 0.4.1 release archive after Windows test fixes
-  status: valid
+  status: stale
   command: py -3 build_release.py
   result_ref: dist/vibe-coding-codex-global-core-0.4.1.zip generated; release validation
     passed
@@ -286,8 +291,10 @@ evidence:
       build_release.py: 542724e14c91631c7a940741ac3d4127c4cb8961a760daeefb355603c859c474
       tests/test_installer.py: 67859ab403c465c69177da79971ca0d9050d7037abab5781e33a090bb0acc16e
   recorded_at: '2026-07-27T13:58:34Z'
-  invalidated_at: null
-  invalidation_reason: null
+  invalidated_at: '2026-09-21T03:40:10Z'
+  invalidation_reason: 'TASK-030 close-out: covered runtime files changed in later
+    revisions (TASK-027 docs, TASK-028/029 runtime, TASK-030 installer) so the recorded
+    results no longer describe the same inputs'
 - id: LOG-REPAIR-001
   kind: validation
   subject: 项目日志 schema、Loop 状态与 SessionStart 恢复视图修复
@@ -320,7 +327,7 @@ evidence:
 - id: DOC-USAGE-001
   kind: validation
   subject: docs/USAGE.md 完整用户指南扩充
-  status: valid
+  status: stale
   command: validate_package.py --root .; validate_project.py --root .; loopctl validate;
     python -m unittest discover -s tests -p test_*.py -q; markdown structural check
   result_ref: docs/USAGE.md 767 lines; 38 tests passed, 1 skipped
@@ -340,8 +347,10 @@ evidence:
       .project-log/tasks/task-list.yaml: 553cf08449237716e293a26a3f47648b30c2349259342066f5c7cef4b600a454
       .project-log/work-trace/trace.yaml: 0ce0603c8ec64673ff816cfac2d98d14469ff52a7fc7a9af06703ff04ad41ab2
   recorded_at: '2026-08-15T11:54:14Z'
-  invalidated_at: null
-  invalidation_reason: null
+  invalidated_at: '2026-09-20T13:48:35Z'
+  invalidation_reason: TASK-020 source changed for experimental format routing and
+    normalized state service; old-version evidence retained as stale, current regression
+    reported separately.
 - id: ARCHIVE-FIX-001
   kind: validation
   subject: 归档脚本范围修复与 vibe-coding 项目日志归档
@@ -387,5 +396,913 @@ evidence:
     file_hashes:
       .project-log/verification/evidence.yaml: 1c6b7619d5c951522d411f35569e5906efc02d9344607c7d11230ff448db44a3
   recorded_at: '2026-09-07T08:13:30Z'
+  invalidated_at: null
+  invalidation_reason: null
+- id: DESIGN-012
+  kind: research-check
+  subject: Four optimization technical recommendation; not runtime verification
+  status: valid
+  command: validate_project.py --root .; document structure/source/proposed-decision
+    checks
+  result_ref: .project-log/docs/workflow-optimization-technical-selection.md
+  covers:
+    files:
+    - .project-log/docs/workflow-optimization-technical-selection.md
+    requirements: []
+    tasks:
+    - TASK-012
+  version_binding:
+    git_commit: 7b32d6fc8f9516628277d7d89220919ec46aca3f
+    diff_hash: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+    file_hashes:
+      .project-log/docs/workflow-optimization-technical-selection.md: 04b96a43a8d284cdc562e858450da2509a8e414c7e2ac02a81474ae81c537043
+  recorded_at: '2026-09-19T14:38:22Z'
+  invalidated_at: null
+  invalidation_reason: null
+- id: PLAN-013
+  kind: plan-check
+  subject: Task decomposition only; no implementation executed
+  status: valid
+  command: Plan-only DAG/pending/coverage/gate checks; validate_project.py --root
+    .
+  result_ref: .project-log/docs/workflow-optimization-task-plan.md
+  covers:
+    files:
+    - .project-log/docs/workflow-optimization-task-plan.md
+    - .project-log/tasks/task-list.yaml
+    requirements: []
+    tasks:
+    - TASK-013
+  version_binding:
+    git_commit: 7b32d6fc8f9516628277d7d89220919ec46aca3f
+    diff_hash: f55c31d4955c4063d408149afc9bde50fde125a797241713991e3acb3b7eb59b
+    file_hashes:
+      .project-log/docs/workflow-optimization-task-plan.md: 48f2fb52ed9fedd1ceb79b5b1ac9e96cbb8f85c10c7611b19273209a8d91d717
+      .project-log/tasks/task-list.yaml: 5c77c497057ce0ea154ff5d83c47bc2ac97a0ea51ac94ed12f6404226e1c97c3
+  recorded_at: '2026-09-19T14:50:51Z'
+  invalidated_at: null
+  invalidation_reason: null
+- id: CONTRACT-014
+  kind: checkpoint
+  subject: Frozen contract and minimal fixture inventory; not implementation completion
+  status: valid
+  command: See immutable external report for commands, source/harness identities and
+    retained failures
+  result_ref: D:/Project/vibe-coding-validation/linux/runs/linux-016-v1/report.json
+  covers:
+    files:
+    - .project-log/specs/workflow-optimization-contract.md
+    requirements: []
+    tasks:
+    - TASK-014
+  version_binding:
+    git_commit: 7b32d6fc8f9516628277d7d89220919ec46aca3f
+    diff_hash: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+    file_hashes:
+      .project-log/specs/workflow-optimization-contract.md: e58f6db4f1a8c1240177d4c97db26f7d41991346b3972a55cce0e464076a9826
+  recorded_at: '2026-09-20T00:41:41Z'
+  invalidated_at: null
+  invalidation_reason: null
+- id: BINDING-015
+  kind: checkpoint
+  subject: Byte binding Windows/Linux regression
+  status: stale
+  command: See immutable external report for commands, source/harness identities and
+    retained failures
+  result_ref: D:/Project/vibe-coding-validation/linux/runs/linux-016-v2/report.json
+  covers:
+    files:
+    - runtime/scripts/loop_state.py
+    requirements: []
+    tasks:
+    - TASK-015
+  version_binding:
+    git_commit: 7b32d6fc8f9516628277d7d89220919ec46aca3f
+    diff_hash: 52b25d17a61d23af341eef77f8d14a8f684d7df4bad728c2e2938255b80bf02c
+    file_hashes:
+      runtime/scripts/loop_state.py: 4cb6fd9833c22e606a177dadcdd5d318a2e247cf7196cc21b0144c46ddcb8019
+  recorded_at: '2026-09-20T00:41:41Z'
+  invalidated_at: '2026-09-20T13:48:35Z'
+  invalidation_reason: TASK-020 source changed for experimental format routing and
+    normalized state service; old-version evidence retained as stale, current regression
+    reported separately.
+- id: REVIEW-015-FAILED
+  kind: review
+  subject: Historical independent failure on old module hash recorded in report; no
+    current source coverage claimed
+  status: failed
+  command: See immutable external report for commands, source/harness identities and
+    retained failures
+  result_ref: D:/Project/vibe-coding-validation/reviewer-015/REPORT.md
+  covers:
+    files: []
+    requirements: []
+    tasks:
+    - TASK-015
+  version_binding:
+    git_commit: 7b32d6fc8f9516628277d7d89220919ec46aca3f
+    diff_hash: 5c10c7f04426f2528fd5e5fe0152d3c038303214dc351580861bc9f56d63f139
+    file_hashes: {}
+  recorded_at: '2026-09-20T00:41:41Z'
+  invalidated_at: null
+  invalidation_reason: null
+- id: REVIEW-015-V2
+  kind: review
+  subject: 'Independent reviewed version: 28 checks passed'
+  status: stale
+  command: See immutable external report for commands, source/harness identities and
+    retained failures
+  result_ref: D:/Project/vibe-coding-validation/reviewer-015/REPORT-v2.md
+  covers:
+    files:
+    - runtime/scripts/loop_state.py
+    requirements: []
+    tasks:
+    - TASK-015
+  version_binding:
+    git_commit: 7b32d6fc8f9516628277d7d89220919ec46aca3f
+    diff_hash: 52b25d17a61d23af341eef77f8d14a8f684d7df4bad728c2e2938255b80bf02c
+    file_hashes:
+      runtime/scripts/loop_state.py: 4cb6fd9833c22e606a177dadcdd5d318a2e247cf7196cc21b0144c46ddcb8019
+  recorded_at: '2026-09-20T00:41:41Z'
+  invalidated_at: '2026-09-20T13:48:35Z'
+  invalidation_reason: TASK-020 source changed for experimental format routing and
+    normalized state service; old-version evidence retained as stale, current regression
+    reported separately.
+- id: REVIEW-016-V2-FAILED
+  kind: review
+  subject: Historical argument/config boundary findings; original source hashes and
+    failed cases retained in report
+  status: failed
+  command: See immutable external report for commands, source/harness identities and
+    retained failures
+  result_ref: D:/Project/vibe-coding-validation/reviewer-016/REPORT-v2.md
+  covers:
+    files: []
+    requirements: []
+    tasks:
+    - TASK-016
+  version_binding:
+    git_commit: 7b32d6fc8f9516628277d7d89220919ec46aca3f
+    diff_hash: c3283a4890f2993193e2437adf54dd4b25e06a91984bef27ce695b446aeff121
+    file_hashes: {}
+  recorded_at: '2026-09-20T00:41:41Z'
+  invalidated_at: null
+  invalidation_reason: null
+- id: LAUNCHERS-016-WINDOWS
+  kind: checkpoint
+  subject: Latest own 11-check regression passed; final independent re-review still
+    pending
+  status: stale
+  command: See immutable external report for commands, source/harness identities and
+    retained failures
+  result_ref: D:/Project/vibe-coding-validation/runs/launcher-016-v11/report.json
+  covers:
+    files:
+    - runtime/vibe.ps1
+    - runtime/scripts/vibe_python.ps1
+    - install.ps1
+    - update.ps1
+    - uninstall.ps1
+    - scripts/bootstrap_vibe_python.py
+    requirements: []
+    tasks:
+    - TASK-016
+  version_binding:
+    git_commit: 7b32d6fc8f9516628277d7d89220919ec46aca3f
+    diff_hash: e4289196a732a6bb16dfb0f2510768d382ab2746a6437f286083c1bfb640d323
+    file_hashes:
+      runtime/vibe.ps1: 6f918bb669ffc4c3b704f3484b7fc09afdd35bbc8834429b55dad3de0fedf925
+      runtime/scripts/vibe_python.ps1: c44b838db9a89eca985be46f0a43c38892632bd89640a8739ca5ee70fb174c30
+      install.ps1: 4749e17a0e46ad43f3fbbf77b4854b47bb4ae1225b584e7bcf0f4dcd42bb2a07
+      update.ps1: 797a4cfdc5fe777164258dd632639ee6e73bd8a058b7e302ce6328fcb86c650b
+      uninstall.ps1: 25f0ae60d60f1ff1497d0207b2f2f1df5cad9da256fdddcf2e99cdd6ac9d3837
+      scripts/bootstrap_vibe_python.py: 02197dccf45afb4b3ac436268c54cf25560710c88cc592142f662c5cc77593fa
+  recorded_at: '2026-09-20T00:41:41Z'
+  invalidated_at: '2026-09-20T00:56:04Z'
+  invalidation_reason: Earlier own launcher evidence covers pre-UTF8/argv revisions;
+    new version verified separately, historical outcomes retained.
+- id: PROTOTYPE-017
+  kind: checkpoint
+  subject: 'External-only transaction prototype: Windows/Linux 32 checks; code version
+    hashes in linked reports, G1 pending'
+  status: candidate
+  command: See immutable external report for commands, source/harness identities and
+    retained failures
+  result_ref: D:/Project/vibe-coding-validation/prototype/runs/linux-018-v2/report.json
+  covers:
+    files: []
+    requirements: []
+    tasks:
+    - TASK-017
+  version_binding:
+    git_commit: 7b32d6fc8f9516628277d7d89220919ec46aca3f
+    diff_hash: 474469abf34c4ba4f0c3141d1d30b3e01526db42ef55a9bf400993873f418fec
+    file_hashes: {}
+  recorded_at: '2026-09-20T00:41:41Z'
+  invalidated_at: null
+  invalidation_reason: null
+- id: PROTOTYPE-018
+  kind: checkpoint
+  subject: 'External-only exchange prototype: Windows/Linux 12 Git checks; code version
+    hashes in linked reports, G1 pending'
+  status: candidate
+  command: See immutable external report for commands, source/harness identities and
+    retained failures
+  result_ref: D:/Project/vibe-coding-validation/prototype/runs/windows-018-v2/report.json
+  covers:
+    files: []
+    requirements: []
+    tasks:
+    - TASK-018
+  version_binding:
+    git_commit: 7b32d6fc8f9516628277d7d89220919ec46aca3f
+    diff_hash: 4338784831337794bf2677190f93f96dfc69c8cbdb8c5753edcdeb09902bbfb8
+    file_hashes: {}
+  recorded_at: '2026-09-20T00:41:42Z'
+  invalidated_at: null
+  invalidation_reason: null
+- id: LAUNCHERS-016-FINAL
+  kind: regression
+  subject: 'Windows: baseline 41 with 1 skip, binding 8, entry 13; Linux entry 6 in
+    linux-016-v4. External only; source_unchanged true.'
+  status: stale
+  command: See linked immutable run reports and source manifests
+  result_ref: D:/Project/vibe-coding-validation/runs/launcher-016-v13/report.json
+  covers:
+    files:
+    - runtime/vibe.ps1
+    - runtime/vibe.sh
+    - runtime/scripts/vibe_python.ps1
+    - runtime/scripts/vibe_python.sh
+    - scripts/bootstrap_vibe_python.py
+    - install.ps1
+    - install.sh
+    - update.ps1
+    - update.sh
+    - uninstall.ps1
+    - uninstall.sh
+    - .gitattributes
+    requirements: []
+    tasks:
+    - TASK-016
+  version_binding:
+    git_commit: 7b32d6fc8f9516628277d7d89220919ec46aca3f
+    diff_hash: dcd2c801b9099000f3bf0bbee28ff2a19d66c7d6a774e4c2378aace212c74970
+    file_hashes:
+      runtime/vibe.ps1: 6f918bb669ffc4c3b704f3484b7fc09afdd35bbc8834429b55dad3de0fedf925
+      runtime/vibe.sh: c2c4af3faa0e66747cc0598ab64a1272ed01fb732515d6db8528eb7793d6753d
+      runtime/scripts/vibe_python.ps1: 723fed69b79e7447aa86c2619e06de1ad6e54f4d7f78607ac08994ac9f647c13
+      runtime/scripts/vibe_python.sh: 2934e25593ff18e2295779fa3097045937307d7f71118df701bc50fb9f92f15f
+      scripts/bootstrap_vibe_python.py: 24b615678cf593a48ad4fd01b49a583b08c56d416cccfd9ef640071117e54cd3
+      install.ps1: 4749e17a0e46ad43f3fbbf77b4854b47bb4ae1225b584e7bcf0f4dcd42bb2a07
+      install.sh: 5415aa99a7d7275e85b3d446ef92614185da17bec0abe2182d5d4bbd5d013689
+      update.ps1: 797a4cfdc5fe777164258dd632639ee6e73bd8a058b7e302ce6328fcb86c650b
+      update.sh: 786e5981016134bd6aeb183003d6293587f33bf76c2b9f87c63b013b12c2ffdd
+      uninstall.ps1: 25f0ae60d60f1ff1497d0207b2f2f1df5cad9da256fdddcf2e99cdd6ac9d3837
+      uninstall.sh: d6c457acf520f511e76ddf3af518af93004433466a076a22420fc2bf4a92c5b0
+      .gitattributes: 1d5d71dcc6ccd28ab46a335349ecc74742ca4b81f4fcad212f8d134f70f1f13e
+  recorded_at: '2026-09-20T00:56:04Z'
+  invalidated_at: '2026-09-20T13:07:56Z'
+  invalidation_reason: 'PS7 argument-guard delta after v3: retain historical pass,
+    register current narrower follow-up and own full launcher regressions separately.'
+- id: REVIEW-016-V3
+  kind: review
+  subject: 'Independent current-source bounded PASS: Windows 42 pass 1 skip, Linux
+    41 pass 2 skips. O016-01 excluded and unresolved as Q-001; PS7 not tested.'
+  status: stale
+  command: See linked immutable run reports and source manifests
+  result_ref: D:/Project/vibe-coding-validation/reviewer-016/REPORT-v3.md
+  covers:
+    files:
+    - runtime/vibe.ps1
+    - runtime/vibe.sh
+    - runtime/scripts/vibe_python.ps1
+    - runtime/scripts/vibe_python.sh
+    - scripts/bootstrap_vibe_python.py
+    - install.ps1
+    - install.sh
+    - update.ps1
+    - update.sh
+    - uninstall.ps1
+    - uninstall.sh
+    - .gitattributes
+    requirements: []
+    tasks:
+    - TASK-016
+  version_binding:
+    git_commit: 7b32d6fc8f9516628277d7d89220919ec46aca3f
+    diff_hash: dcd2c801b9099000f3bf0bbee28ff2a19d66c7d6a774e4c2378aace212c74970
+    file_hashes:
+      runtime/vibe.ps1: 6f918bb669ffc4c3b704f3484b7fc09afdd35bbc8834429b55dad3de0fedf925
+      runtime/vibe.sh: c2c4af3faa0e66747cc0598ab64a1272ed01fb732515d6db8528eb7793d6753d
+      runtime/scripts/vibe_python.ps1: 723fed69b79e7447aa86c2619e06de1ad6e54f4d7f78607ac08994ac9f647c13
+      runtime/scripts/vibe_python.sh: 2934e25593ff18e2295779fa3097045937307d7f71118df701bc50fb9f92f15f
+      scripts/bootstrap_vibe_python.py: 24b615678cf593a48ad4fd01b49a583b08c56d416cccfd9ef640071117e54cd3
+      install.ps1: 4749e17a0e46ad43f3fbbf77b4854b47bb4ae1225b584e7bcf0f4dcd42bb2a07
+      install.sh: 5415aa99a7d7275e85b3d446ef92614185da17bec0abe2182d5d4bbd5d013689
+      update.ps1: 797a4cfdc5fe777164258dd632639ee6e73bd8a058b7e302ce6328fcb86c650b
+      update.sh: 786e5981016134bd6aeb183003d6293587f33bf76c2b9f87c63b013b12c2ffdd
+      uninstall.ps1: 25f0ae60d60f1ff1497d0207b2f2f1df5cad9da256fdddcf2e99cdd6ac9d3837
+      uninstall.sh: d6c457acf520f511e76ddf3af518af93004433466a076a22420fc2bf4a92c5b0
+      .gitattributes: 1d5d71dcc6ccd28ab46a335349ecc74742ca4b81f4fcad212f8d134f70f1f13e
+  recorded_at: '2026-09-20T00:56:05Z'
+  invalidated_at: '2026-09-20T13:07:56Z'
+  invalidation_reason: 'PS7 argument-guard delta after v3: retain historical pass,
+    register current narrower follow-up and own full launcher regressions separately.'
+- id: REVIEW-G1-FAILED
+  kind: review
+  subject: 'Historical independent G1 NO-GO: old external prototype cross-branch export
+    and malformed idempotent receipt; exact inspected hashes in report'
+  status: failed
+  command: External reviewer-g1/reproduce.py; two decisive reproductions, no baseline
+    rerun
+  result_ref: D:/Project/vibe-coding-validation/reviewer-g1/REPORT.md
+  covers:
+    files: []
+    requirements: []
+    tasks:
+    - TASK-017
+    - TASK-018
+    - TASK-019
+  version_binding:
+    git_commit: 7b32d6fc8f9516628277d7d89220919ec46aca3f
+    diff_hash: eaa35fc0e84b09c4788c1dc23b81d04bedd586e2f584c1fd08ba6d31096f534f
+    file_hashes: {}
+  recorded_at: '2026-09-20T01:09:31Z'
+  invalidated_at: null
+  invalidation_reason: null
+- id: PROTOTYPE-G1-FIX
+  kind: experimental-regression
+  subject: External repaired prototype Windows/Linux each 32 state and 19 exchange
+    tests passed; independent re-review pending, not production acceptance
+  status: candidate
+  command: External prototype/run_prototype.py --label {windows,linux}-g1fix-v1; source/harness
+    hashes in reports
+  result_ref: D:/Project/vibe-coding-validation/prototype/runs/linux-g1fix-v1/report.json
+  covers:
+    files: []
+    requirements: []
+    tasks:
+    - TASK-017
+    - TASK-018
+    - TASK-019
+  version_binding:
+    git_commit: 7b32d6fc8f9516628277d7d89220919ec46aca3f
+    diff_hash: a44e0d5ab8d220b3c6b7ee0850ee046b51855c135fb51c9b3483430af4cc6fe2
+    file_hashes: {}
+  recorded_at: '2026-09-20T01:09:32Z'
+  invalidated_at: null
+  invalidation_reason: null
+- id: REVIEW-G1-V2
+  kind: review
+  subject: 'Independent bounded remediation GO: old 2/2 negative controls, new 8/8
+    case groups; project/store identity and receipts repaired. Not production approval;
+    Q-002 coordination policy unresolved.'
+  status: valid
+  command: External reviewer-g1/v2/review_v2.py old and new; exact prototype hashes
+    in results-v2.json
+  result_ref: D:/Project/vibe-coding-validation/reviewer-g1/REPORT-v2.md
+  covers:
+    files: []
+    requirements: []
+    tasks:
+    - TASK-017
+    - TASK-018
+    - TASK-019
+  version_binding:
+    git_commit: 7b32d6fc8f9516628277d7d89220919ec46aca3f
+    diff_hash: 5797e55f56c981db1f7ccabf731afb727fee37b61b1846cb3346204c50d2c8b0
+    file_hashes: {}
+  recorded_at: '2026-09-20T13:04:19Z'
+  invalidated_at: null
+  invalidation_reason: null
+- id: LAUNCHERS-016-PS57
+  kind: regression
+  subject: Own external PS5 and portable PS7.4.6 each 16 entry checks pass, including
+    argv, UTF8, isolated installation, host ambiguity rejection; source unchanged
+  status: stale
+  command: See external version-bound report and exact command/harness manifests
+  result_ref: D:/Project/vibe-coding-validation/runs/powershell7-016-v3/report.json
+  covers:
+    files:
+    - runtime/vibe.ps1
+    - runtime/scripts/vibe_python.ps1
+    - install.ps1
+    - update.ps1
+    - uninstall.ps1
+    - docs/USAGE.md
+    requirements: []
+    tasks:
+    - TASK-016
+  version_binding:
+    git_commit: 7b32d6fc8f9516628277d7d89220919ec46aca3f
+    diff_hash: 64a7f7c1832fd7a38c757f32a253cc6a8bef65e454d7c45ebe51f00a4215675c
+    file_hashes:
+      runtime/vibe.ps1: c4718f1b7b903abc7e0ffa1449d6140a2f62ff78b833c23fdf0bc5bbce8f61ba
+      runtime/scripts/vibe_python.ps1: cbe0b3792fbdc32d38906c35f4eeef3a1ccc0124a98477310c29cc887fa7b219
+      install.ps1: f4710959316c06e1649dcab49ae057f28500eb412a11d17deba6b814f52e72d2
+      update.ps1: 698fa3d04214163e61d409dbc3f44262ef3a8c1d09ac38ff00e18d80116edb8c
+      uninstall.ps1: 9d1ce5794ca3d4ad7782f0f15ec431cb5589e19f1fe51371927df948ffcb9702
+      docs/USAGE.md: a1873d56f0b5b4826d95a7c23de58a98073d9023a94921618fef71d1ac1f579c
+  recorded_at: '2026-09-20T13:07:56Z'
+  invalidated_at: '2026-09-20T13:48:35Z'
+  invalidation_reason: TASK-020 source changed for experimental format routing and
+    normalized state service; old-version evidence retained as stale, current regression
+    reported separately.
+- id: REVIEW-016-V4
+  kind: review
+  subject: 'Independent PS5/PS7 bounded argument-validation review: 7 methods with
+    both hosts; preserves native PS7 -File limitation, O016-01 still excluded; not
+    full baseline repeat'
+  status: stale
+  command: See external version-bound report and exact command/harness manifests
+  result_ref: D:\Project\vibe-coding-validation\reviewer-016\followup-ps7-v4-20260920-205756\REPORT-v4.md
+  covers:
+    files:
+    - runtime/vibe.ps1
+    - runtime/scripts/vibe_python.ps1
+    - install.ps1
+    - update.ps1
+    - uninstall.ps1
+    - docs/USAGE.md
+    requirements: []
+    tasks:
+    - TASK-016
+  version_binding:
+    git_commit: 7b32d6fc8f9516628277d7d89220919ec46aca3f
+    diff_hash: 64a7f7c1832fd7a38c757f32a253cc6a8bef65e454d7c45ebe51f00a4215675c
+    file_hashes:
+      runtime/vibe.ps1: c4718f1b7b903abc7e0ffa1449d6140a2f62ff78b833c23fdf0bc5bbce8f61ba
+      runtime/scripts/vibe_python.ps1: cbe0b3792fbdc32d38906c35f4eeef3a1ccc0124a98477310c29cc887fa7b219
+      install.ps1: f4710959316c06e1649dcab49ae057f28500eb412a11d17deba6b814f52e72d2
+      update.ps1: 698fa3d04214163e61d409dbc3f44262ef3a8c1d09ac38ff00e18d80116edb8c
+      uninstall.ps1: 9d1ce5794ca3d4ad7782f0f15ec431cb5589e19f1fe51371927df948ffcb9702
+      docs/USAGE.md: a1873d56f0b5b4826d95a7c23de58a98073d9023a94921618fef71d1ac1f579c
+  recorded_at: '2026-09-20T13:07:56Z'
+  invalidated_at: '2026-09-20T13:48:35Z'
+  invalidation_reason: TASK-020 source changed for experimental format routing and
+    normalized state service; old-version evidence retained as stale, current regression
+    reported separately.
+- id: STATE020-SLICE
+  kind: regression
+  subject: 'Bounded first slice: Windows 25/25; Linux 24 pass 1 Windows-only skip;
+    Windows/Linux 3 kill cases each; 38/500/2000 bounded query benchmark; legacy regression
+    passed. No production exchange or deployment.'
+  status: stale
+  command: See external immutable reports, source hashes and scoped acceptance matrix
+  result_ref: D:/Project/vibe-coding-validation/runs/state020-v5/report.json
+  covers:
+    files:
+    - runtime/scripts/state_store.py
+    - runtime/scripts/state_views.py
+    - runtime/scripts/state_context.py
+    - runtime/scripts/vibe.py
+    - runtime/scripts/loopctl.py
+    - runtime/scripts/loop_state.py
+    - runtime/scripts/init_project.py
+    - runtime/scripts/validate_project.py
+    - runtime/scripts/validate_package.py
+    - runtime/hooks/hook_common.py
+    - runtime/hooks/post_tool_use.py
+    - docs/USAGE.md
+    requirements: []
+    tasks:
+    - TASK-020
+  version_binding:
+    git_commit: 7b32d6fc8f9516628277d7d89220919ec46aca3f
+    diff_hash: 9b48e6e978529bdb1a65ca4d045e3a76672e5790e8c08980508f2b45adf554a5
+    file_hashes:
+      runtime/scripts/state_store.py: d1e836ad201582d4f633c8d0ae19c270f6aadd60f4d4f2d8220e7ac4f0aa0d8a
+      runtime/scripts/state_views.py: 3e3ca0776b3918242c6fd70c441a00577e06fed3aa078e841505b8a52432776d
+      runtime/scripts/state_context.py: ff8a2fce5b69b7afbbb65832c47582f9d71dbbef8b0d16dc89845804c63ae63b
+      runtime/scripts/vibe.py: f1be5f9518b6a8caa6eece8199d1239c5d712bcb3e315b3a494ba0ff4566ee69
+      runtime/scripts/loopctl.py: ec11800021f5a520bd0d5fa3eb3777f0a7fe56d723ac0d4ce46d282a809df9bd
+      runtime/scripts/loop_state.py: a24a2523008dd173ec791fd8f98f823b62aaebbb554abeae596bab2c874e6a0c
+      runtime/scripts/init_project.py: fe2b49c712668c3e7f2ece812fae161e43416511114a9d0e1720586a4ccba13c
+      runtime/scripts/validate_project.py: 21172b0ab290660a280ba23e4cddae0919be1b511bf4b5a5c80ebc0efa848f63
+      runtime/scripts/validate_package.py: 23bb744e13eae3d13e25048dca405d95086471dfcc2bba3a8895ae6382d91cf7
+      runtime/hooks/hook_common.py: fe9948e9873f7d798bae4695d8dcb78b30664d8caf927fab8e8ca4a78fb30881
+      runtime/hooks/post_tool_use.py: 13fd8617f0cf6952161e557477ac1b04e3151d73c8ce2f31e90eb44336b06d3f
+      docs/USAGE.md: 2bf60eceee327dcb071209c31a425dc7867116b1a99efc891ab4e0d5a9c98ea7
+  recorded_at: '2026-09-20T13:48:36Z'
+  invalidated_at: '2026-09-21T03:40:10Z'
+  invalidation_reason: 'TASK-030 close-out: covered runtime files changed in later
+    revisions (TASK-027 docs, TASK-028/029 runtime, TASK-030 installer) so the recorded
+    results no longer describe the same inputs'
+- id: REVIEW-STATE020-FAILED
+  kind: review
+  subject: 'Historical NO-GO: alias writer bypass, orphan format fallback and nested
+    Hook root; original failing snapshots preserved.'
+  status: failed
+  command: See external immutable reports, source hashes and scoped acceptance matrix
+  result_ref: D:/Project/vibe-coding-validation/reviewer-020/REPORT-v4.md
+  covers:
+    files: []
+    requirements: []
+    tasks:
+    - TASK-020
+  version_binding:
+    git_commit: 7b32d6fc8f9516628277d7d89220919ec46aca3f
+    diff_hash: 7ae88e9f08b08010c9c92c95502de1a3d639b87efdfa29ce1d3ee97e5c5989bd
+    file_hashes: {}
+  recorded_at: '2026-09-20T13:48:36Z'
+  invalidated_at: null
+  invalidation_reason: null
+- id: REVIEW-STATE020-V5
+  kind: review
+  subject: Independent Windows 23/23 scoped remediation GO; missing-marker, alias
+    and nested-root defects fixed. Local audit cannot yet validate imported receipt
+    run relationships; no complete TASK-020/release approval.
+  status: stale
+  command: See external immutable reports, source hashes and scoped acceptance matrix
+  result_ref: D:/Project/vibe-coding-validation/reviewer-020/REPORT-v5.md
+  covers:
+    files:
+    - runtime/scripts/state_store.py
+    - runtime/scripts/state_views.py
+    - runtime/scripts/state_context.py
+    - runtime/scripts/vibe.py
+    - runtime/scripts/loopctl.py
+    - runtime/scripts/loop_state.py
+    - runtime/scripts/init_project.py
+    - runtime/scripts/validate_project.py
+    - runtime/scripts/validate_package.py
+    - runtime/hooks/hook_common.py
+    - runtime/hooks/post_tool_use.py
+    - docs/USAGE.md
+    requirements: []
+    tasks:
+    - TASK-020
+  version_binding:
+    git_commit: 7b32d6fc8f9516628277d7d89220919ec46aca3f
+    diff_hash: 9b48e6e978529bdb1a65ca4d045e3a76672e5790e8c08980508f2b45adf554a5
+    file_hashes:
+      runtime/scripts/state_store.py: d1e836ad201582d4f633c8d0ae19c270f6aadd60f4d4f2d8220e7ac4f0aa0d8a
+      runtime/scripts/state_views.py: 3e3ca0776b3918242c6fd70c441a00577e06fed3aa078e841505b8a52432776d
+      runtime/scripts/state_context.py: ff8a2fce5b69b7afbbb65832c47582f9d71dbbef8b0d16dc89845804c63ae63b
+      runtime/scripts/vibe.py: f1be5f9518b6a8caa6eece8199d1239c5d712bcb3e315b3a494ba0ff4566ee69
+      runtime/scripts/loopctl.py: ec11800021f5a520bd0d5fa3eb3777f0a7fe56d723ac0d4ce46d282a809df9bd
+      runtime/scripts/loop_state.py: a24a2523008dd173ec791fd8f98f823b62aaebbb554abeae596bab2c874e6a0c
+      runtime/scripts/init_project.py: fe2b49c712668c3e7f2ece812fae161e43416511114a9d0e1720586a4ccba13c
+      runtime/scripts/validate_project.py: 21172b0ab290660a280ba23e4cddae0919be1b511bf4b5a5c80ebc0efa848f63
+      runtime/scripts/validate_package.py: 23bb744e13eae3d13e25048dca405d95086471dfcc2bba3a8895ae6382d91cf7
+      runtime/hooks/hook_common.py: fe9948e9873f7d798bae4695d8dcb78b30664d8caf927fab8e8ca4a78fb30881
+      runtime/hooks/post_tool_use.py: 13fd8617f0cf6952161e557477ac1b04e3151d73c8ce2f31e90eb44336b06d3f
+      docs/USAGE.md: 2bf60eceee327dcb071209c31a425dc7867116b1a99efc891ab4e0d5a9c98ea7
+  recorded_at: '2026-09-20T13:48:36Z'
+  invalidated_at: '2026-09-21T03:40:10Z'
+  invalidation_reason: 'TASK-030 close-out: covered runtime files changed in later
+    revisions (TASK-027 docs, TASK-028/029 runtime, TASK-030 installer) so the recorded
+    results no longer describe the same inputs'
+- id: RUNBIND-028
+  kind: test
+  subject: task-028-run-goal-binding
+  status: stale
+  command: state028 Windows suites + WSL Ubuntu all-suite + falsification against
+    the pre-fix loop_state.py
+  result_ref: null
+  covers:
+    files:
+    - runtime/scripts/loop_state.py
+    - tests/test_loop_core.py
+    requirements: []
+    tasks:
+    - TASK-028
+  version_binding:
+    git_commit: 7b32d6fc8f9516628277d7d89220919ec46aca3f
+    diff_hash: d3f0674a3593ab4873191085d35a270c5871952ae41caa209686e1aa256c1b29
+    file_hashes:
+      runtime/scripts/loop_state.py: 758eb36299609ba958c7d525145cec4651c8f40b4f62fd8a79a9f241b2d139e7
+      tests/test_loop_core.py: 7faaf1f8165c63e9d19291a485fe6246e5d8b9470e3e04b086da3a805ab14246
+  recorded_at: '2026-09-20T17:41:25Z'
+  invalidated_at: '2026-09-21T03:40:10Z'
+  invalidation_reason: 'TASK-030 close-out: covered runtime files changed in later
+    revisions (TASK-027 docs, TASK-028/029 runtime, TASK-030 installer) so the recorded
+    results no longer describe the same inputs'
+- id: MIGRATE-027-DRYRUN
+  kind: integration
+  subject: legacy migration preview on a read-only copy of the real project log
+  status: valid
+  command: state-migrate-preview against task027-dryrun-v2/my_lunwen-copy; source
+    tree digest 4d4c4f8550574516... unchanged
+  result_ref: null
+  covers:
+    files:
+    - docs/USAGE.md
+    requirements: []
+    tasks:
+    - TASK-027
+  version_binding:
+    git_commit: 7b32d6fc8f9516628277d7d89220919ec46aca3f
+    diff_hash: d1482f83e1468a7a42b6b73e2f1e363ae07528a86b20a01cd2f53887f133a18e
+    file_hashes:
+      docs/USAGE.md: 2c20ff34fd82d37d776043a24bc0194efe7eeec06086354f68a32c81190f9e56
+  recorded_at: '2026-09-20T17:57:43Z'
+  invalidated_at: null
+  invalidation_reason: null
+- id: HOOKINVALIDATE-029
+  kind: test
+  subject: hash-based evidence invalidation in the live hook
+  status: valid
+  command: state029-baseline (50 tests) + state029 Windows suites + WSL state029-linux-wsl
+    + falsification against the previous loop_state.py
+  result_ref: null
+  covers:
+    files:
+    - runtime/scripts/loop_state.py
+    - tests/test_loop_core.py
+    requirements: []
+    tasks:
+    - TASK-029
+  version_binding:
+    git_commit: 7b32d6fc8f9516628277d7d89220919ec46aca3f
+    diff_hash: 2c16739e4e2145a78d29860daf15a90961b5129bfb35c08a3ab35f1cafd9e4d9
+    file_hashes:
+      runtime/scripts/loop_state.py: 7c403182ada0612b8272cb6182b726104ad451b17a96280c9142a4fc1033ff21
+      tests/test_loop_core.py: 9f58805188f51d15330dc46cb524ebebe9133c1d559fc84d7b60add9c8c5410f
+  recorded_at: '2026-09-20T18:18:06Z'
+  invalidated_at: null
+  invalidation_reason: null
+- id: PILOT-027
+  kind: integration
+  subject: authorised global install and real-project pilot
+  status: valid
+  command: 'global_installer.py install (exit 0) + verify (exit 0); read-only pilot
+    on D:/Project/my_lunwen: status/validate/restore/state-migrate-preview/state-route/evaluate
+    goal, 96 log files byte-identical before and after'
+  result_ref: null
+  covers:
+    files:
+    - docs/USAGE.md
+    requirements: []
+    tasks:
+    - TASK-027
+  version_binding:
+    git_commit: 7b32d6fc8f9516628277d7d89220919ec46aca3f
+    diff_hash: d1482f83e1468a7a42b6b73e2f1e363ae07528a86b20a01cd2f53887f133a18e
+    file_hashes:
+      docs/USAGE.md: 2c20ff34fd82d37d776043a24bc0194efe7eeec06086354f68a32c81190f9e56
+  recorded_at: '2026-09-21T01:08:21Z'
+  invalidated_at: null
+  invalidation_reason: null
+- id: ROUTING-021
+  kind: test
+  subject: risk routing policy and bounded task context
+  status: valid
+  command: Windows runs/state027-frozen-routing 17/17 and linux/runs/state027-linux-frozen
+    17/17; reviewer-021 probe 8/8
+  result_ref: null
+  covers:
+    files:
+    - runtime/scripts/state_routing.py
+    requirements: []
+    tasks:
+    - TASK-021
+  version_binding:
+    git_commit: 7b32d6fc8f9516628277d7d89220919ec46aca3f
+    diff_hash: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+    file_hashes:
+      runtime/scripts/state_routing.py: 3b5541291c49ed86e5c530110f627beda9ffd1907ac6371150fa184fe1c093ec
+  recorded_at: '2026-09-21T01:09:04Z'
+  invalidated_at: null
+  invalidation_reason: null
+- id: EVIDENCE-022
+  kind: test
+  subject: versioned evidence, selectors and legacy conversion
+  status: valid
+  command: Windows runs/state027-frozen-evidence 20/20 and linux/runs/state027-linux-frozen
+    20/20; reviewer-021 probe 11/11
+  result_ref: null
+  covers:
+    files:
+    - runtime/scripts/state_evidence.py
+    requirements: []
+    tasks:
+    - TASK-022
+  version_binding:
+    git_commit: 7b32d6fc8f9516628277d7d89220919ec46aca3f
+    diff_hash: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+    file_hashes:
+      runtime/scripts/state_evidence.py: 1e9623098f62980cba9a52bf910568c2505a6d619ee89b899571e0d8cfecc919
+  recorded_at: '2026-09-21T01:09:05Z'
+  invalidated_at: null
+  invalidation_reason: null
+- id: GATE-023
+  kind: test
+  subject: reverse index, dependency invalidation and completion gate
+  status: valid
+  command: Windows runs/state027-frozen-gate 29/29 and linux/runs/state027-linux-frozen
+    29/29; reviewer-021 probe 17/17
+  result_ref: null
+  covers:
+    files:
+    - runtime/scripts/state_gate.py
+    requirements: []
+    tasks:
+    - TASK-023
+  version_binding:
+    git_commit: 7b32d6fc8f9516628277d7d89220919ec46aca3f
+    diff_hash: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+    file_hashes:
+      runtime/scripts/state_gate.py: 02cfbcf50b0016341ad1d45491d7df421549399b410343849a4b6ecf3f942d46
+  recorded_at: '2026-09-21T01:09:05Z'
+  invalidated_at: null
+  invalidation_reason: null
+- id: REVIEW-GATE-024
+  kind: review
+  subject: strict independent review gate
+  status: valid
+  command: reviewer-021 probes G10 identity normalisation, G12 review coverage and
+    G14 task binding all pass on the frozen revision
+  result_ref: null
+  covers:
+    files:
+    - runtime/scripts/state_gate.py
+    requirements: []
+    tasks:
+    - TASK-024
+  version_binding:
+    git_commit: 7b32d6fc8f9516628277d7d89220919ec46aca3f
+    diff_hash: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+    file_hashes:
+      runtime/scripts/state_gate.py: 02cfbcf50b0016341ad1d45491d7df421549399b410343849a4b6ecf3f942d46
+  recorded_at: '2026-09-21T01:09:05Z'
+  invalidated_at: null
+  invalidation_reason: null
+- id: MIGRATE-025
+  kind: test
+  subject: migration preview and lossless rollback bundle
+  status: valid
+  command: Windows runs/state027-frozen-migrate 12/12 and linux/runs/state027-linux-frozen
+    12/12; reviewer-021 probe 13/13
+  result_ref: null
+  covers:
+    files:
+    - runtime/scripts/state_migrate.py
+    requirements: []
+    tasks:
+    - TASK-025
+  version_binding:
+    git_commit: 7b32d6fc8f9516628277d7d89220919ec46aca3f
+    diff_hash: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+    file_hashes:
+      runtime/scripts/state_migrate.py: 4e7aa41142b9195267fd428d5d80d78c7406ad9a7dfce95f1a5447e9b9a5187a
+  recorded_at: '2026-09-21T01:09:05Z'
+  invalidated_at: null
+  invalidation_reason: null
+- id: CROSSPLATFORM-026
+  kind: integration
+  subject: external-cross-platform-release
+  status: valid
+  command: 'Windows runs/state027-frozen-* and linux/runs/state027-linux-frozen: all
+    suites exit 0; three-task routing comparison byte-identical (cases sha256 87e93512...);
+    state029-hook re-verification runs/state029-* and linux/runs/state029-linux-wsl'
+  result_ref: null
+  covers:
+    files:
+    - docs/USAGE.md
+    requirements: []
+    tasks:
+    - TASK-026
+  version_binding:
+    git_commit: 7b32d6fc8f9516628277d7d89220919ec46aca3f
+    diff_hash: d1482f83e1468a7a42b6b73e2f1e363ae07528a86b20a01cd2f53887f133a18e
+    file_hashes:
+      docs/USAGE.md: 2c20ff34fd82d37d776043a24bc0194efe7eeec06086354f68a32c81190f9e56
+  recorded_at: '2026-09-21T01:09:06Z'
+  invalidated_at: null
+  invalidation_reason: null
+- id: GOALREVIEW-030
+  kind: review
+  subject: goal-final-review
+  status: valid
+  command: 'reviewer-030 final release review of exports/state029-hook: A1-A8 all
+    verified, 0 contradictions, verdict GO; artifacts D:/Project/vibe-coding-validation/reviewer-030/REPORT.md
+    and reviewer-030/runs/SUMMARY.json'
+  result_ref: null
+  covers:
+    files:
+    - runtime/scripts/loop_state.py
+    - runtime/hooks/post_tool_use.py
+    requirements: []
+    tasks:
+    - TASK-026
+  version_binding:
+    git_commit: 7b32d6fc8f9516628277d7d89220919ec46aca3f
+    diff_hash: 1e7dbb6a687dbb5b7d042e92e674eb29c8c3d64e0adcbd4f0f829f505cf3fc60
+    file_hashes:
+      runtime/scripts/loop_state.py: 7c403182ada0612b8272cb6182b726104ad451b17a96280c9142a4fc1033ff21
+      runtime/hooks/post_tool_use.py: 13fd8617f0cf6952161e557477ac1b04e3151d73c8ce2f31e90eb44336b06d3f
+  recorded_at: '2026-09-21T01:24:39Z'
+  invalidated_at: null
+  invalidation_reason: null
+- id: PYTHONREPAIR-030
+  kind: test
+  subject: explicit interpreter is repaired in place and never silently replaced
+  status: valid
+  command: External task030c-baseline -> 55 run (54 passed + 1 skipped) incl. 5 new
+    bootstrap tests; falsification vs state029-hook -> all 5 fail, vs task030-fix2
+    -> the F1/F2 tests fail
+  result_ref: null
+  covers:
+    files:
+    - scripts/bootstrap_vibe_python.py
+    - tests/test_installer.py
+    requirements: []
+    tasks:
+    - TASK-030
+  version_binding:
+    git_commit: 7b32d6fc8f9516628277d7d89220919ec46aca3f
+    diff_hash: 015728f1be85079cc80be227a717b21f791ec7b5f1523aa4f2e26ff0f55131a1
+    file_hashes:
+      scripts/bootstrap_vibe_python.py: 9f3fe49f36092e784d2ca050a4caba19a95708f4ef6de87f8762bbecb47dfdcd
+      tests/test_installer.py: 9b67711d0d72f6cf6744a407d19a7d14354ce8bcc3485322e3c1c7c2fe6f8eea
+  recorded_at: '2026-09-21T03:40:30Z'
+  invalidated_at: null
+  invalidation_reason: null
+- id: STATESLICE-030
+  kind: test
+  subject: state slice, exchange and run binding on the task030-fix3 revision
+  status: valid
+  command: External task030c-{state,crashes,exchange,evidence,gate,migrate} -> all
+    exit 0 on Windows; linux/runs/task030-linux-wsl4 -> 14 checks exit 0; supersedes
+    the drifted STATE020-SLICE, REVIEW-STATE020-V5 and RUNBIND-028
+  result_ref: null
+  covers:
+    files:
+    - runtime/scripts/loop_state.py
+    - runtime/scripts/state_store.py
+    - runtime/scripts/state_views.py
+    - runtime/scripts/state_context.py
+    - runtime/scripts/state_exchange.py
+    - runtime/scripts/vibe.py
+    - runtime/scripts/validate_package.py
+    - tests/test_loop_core.py
+    requirements: []
+    tasks:
+    - TASK-030
+  version_binding:
+    git_commit: 7b32d6fc8f9516628277d7d89220919ec46aca3f
+    diff_hash: 3c9f2d19e84240a0e52c26413f0527b01a0bc2ffc8a3fadf5e27b9da0a40805a
+    file_hashes:
+      runtime/scripts/loop_state.py: 7c403182ada0612b8272cb6182b726104ad451b17a96280c9142a4fc1033ff21
+      runtime/scripts/state_store.py: 88bebdfd3577dd801ac1231da25683cd366db4180453ee722719e7ed03915927
+      runtime/scripts/state_views.py: abf01e0e9a5a4dac2082d558403bb9262e007d38e7502132066c05fece719091
+      runtime/scripts/state_context.py: 0ec4f21de659ae60cd30d5e098f1015a10e44a0cbe0e1c49e62cbab9edbf15ed
+      runtime/scripts/state_exchange.py: 5642dbca795035a6fa319f6ac52fbdb2f1b22d4fcbeb72709bfc3614c9458243
+      runtime/scripts/vibe.py: c934e241400fe77b397a7b60bd382dc7639a6125154ea550eacc738edfef1bc3
+      runtime/scripts/validate_package.py: 62b3c8ffc459e79c5f2df61ae7182c3d414000fe15987df5fd6106275a99ca71
+      tests/test_loop_core.py: 9f58805188f51d15330dc46cb524ebebe9133c1d559fc84d7b60add9c8c5410f
+  recorded_at: '2026-09-21T03:40:31Z'
+  invalidated_at: null
+  invalidation_reason: null
+- id: PLATFORM-030
+  kind: integration
+  subject: cross-platform matrix on the task030-fix3 revision
+  status: valid
+  command: Windows runs/task030c-{baseline,binding,launchers,state,crashes,exchange,routing,evidence,gate,migrate,integration,metadata}
+    all exit 0; Ubuntu linux/runs/task030-linux-wsl4 14 checks exit 0 (platform=linux)
+  result_ref: null
+  covers:
+    files:
+    - scripts/bootstrap_vibe_python.py
+    - runtime/scripts/loop_state.py
+    requirements: []
+    tasks:
+    - TASK-030
+  version_binding:
+    git_commit: 7b32d6fc8f9516628277d7d89220919ec46aca3f
+    diff_hash: 0a207ba110a2c4208499f6ef77743dacc00290c35f85cd2fd6e4e9a6d1565e02
+    file_hashes:
+      scripts/bootstrap_vibe_python.py: 9f3fe49f36092e784d2ca050a4caba19a95708f4ef6de87f8762bbecb47dfdcd
+      runtime/scripts/loop_state.py: 7c403182ada0612b8272cb6182b726104ad451b17a96280c9142a4fc1033ff21
+  recorded_at: '2026-09-21T03:40:31Z'
+  invalidated_at: null
+  invalidation_reason: null
+- id: GOALREVIEW-031
+  kind: review
+  subject: goal-final-review
+  status: valid
+  command: 'reviewer-031 delta release review of exports/task030-fix3: V1-V7 verified
+    (F1/F2 fixes reproduced, digest 33765c8d, Windows 55 / Linux 14/14 green, 0 valid-but-stale
+    goal references, validators and evaluate goal pass); verdict GO for TASK-030 and
+    for closing GOAL-001; follow-ups F7 (rebuild handoff) and F9 (this record) closed
+    at close-out, F6 tracked as TASK-031'
+  result_ref: null
+  covers:
+    files:
+    - scripts/bootstrap_vibe_python.py
+    - tests/test_installer.py
+    requirements: []
+    tasks:
+    - TASK-030
+  version_binding:
+    git_commit: 7b32d6fc8f9516628277d7d89220919ec46aca3f
+    diff_hash: 015728f1be85079cc80be227a717b21f791ec7b5f1523aa4f2e26ff0f55131a1
+    file_hashes:
+      scripts/bootstrap_vibe_python.py: 9f3fe49f36092e784d2ca050a4caba19a95708f4ef6de87f8762bbecb47dfdcd
+      tests/test_installer.py: 9b67711d0d72f6cf6744a407d19a7d14354ce8bcc3485322e3c1c7c2fe6f8eea
+  recorded_at: '2026-09-21T04:03:12Z'
   invalidated_at: null
   invalidation_reason: null

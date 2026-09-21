@@ -1,2 +1,36 @@
 version: "0.2"
-architectures: []
+architectures:
+- id: ARCH-001
+  status: active
+  goal: 一次状态命令、一致事务、可重建摘要和有边界的显式 Git 交换
+  related_business_logic:
+  - BL-WFOPT-001
+  - BL-WFOPT-002
+  decision_refs:
+  - DEC-006
+  - DEC-007
+  components:
+  - 现有 vibe.py/loopctl.py 作为入口；新项目状态服务是唯一写入者
+  - 标准库 SQLite 的按实体事务仓储，不直接复用原型单行 JSON
+  - 事务后生成摘要与显式 Git 快照交换器
+  interfaces:
+  - 提议的命令信封包含 schema_version、command_id、expected_revision、action、payload
+  - 状态和按 ID 查询只读，返回冲突而非隐式修复
+  data_flows:
+  - 命令校验到短事务更新再到可重试投影；发布失败不否定已接受结果
+  - 显式导入经过内容哈希、结构语义、历史不可变与共同基线校验
+  state_and_concurrency:
+  - 本机 revision 只用于本机乐观并发，历史回执不重新编号
+  - Q-002 已批准显式交换时短暂 Git index 协作锁；日常命令不锁 Git，异常遗留锁人工核实
+  failure_paths:
+  - 重复命令原回执返回；载荷冲突和旧 revision 明确拒绝
+  - 外部非协作 Git 操作不承诺事务保证；遗留 Git 锁不自动删除
+  security_and_privacy:
+  - my_lunwen 只读；合成测试数据和临时配置均在外部验证目录
+  - 不把哈希通过当作语义正确或授权，不自动改动 Git 仓库历史
+  observability:
+  - 记录操作 ID、版本、失败分类、待发布状态和精确恢复步骤
+  deployment_and_compatibility:
+  - 仅显式迁移的新格式项目使用新写入路径；实际安装迁移仍另行授权
+  open_questions:
+  - Q-001

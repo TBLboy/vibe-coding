@@ -99,6 +99,20 @@ def main() -> int:
     args = parser.parse_args()
     root = args.root.expanduser().resolve()
     try:
+        from state_context import is_transactional, open_store, refresh_views
+
+        if is_transactional(root):
+            if args.command in {"restore", "status"}:
+                output(open_store(root).status(), args.json)
+            elif args.command == "validate":
+                errors = open_store(root).validate()
+                output({"errors": errors}, args.json)
+                return int(bool(errors))
+            elif args.command == "handoff":
+                output(refresh_views(root), args.json)
+            else:
+                raise ValueError("unsupported_legacy_command: use vibe state-apply; legacy writes disabled for format 2")
+            return 0
         if args.command == "init":
             output({"created": initialize_loop(root)}, args.json)
         elif args.command == "restore":
