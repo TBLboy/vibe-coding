@@ -24,6 +24,7 @@ import shutil
 import subprocess
 import sys
 import time
+from urllib.parse import unquote, urlsplit
 
 
 SKILL_DIR = Path(__file__).resolve().parent.parent
@@ -237,14 +238,43 @@ def config_value(kb_root: Path, key: str) -> str:
 
 
 def repository_identity(path: Path) -> str | None:
-    """Absolute Git directory of a local repository-looking path, or None."""
-    probe = subprocess.run(
-        ["git", "-C", str(path), "rev-parse", "--absolute-git-dir"],
-        capture_output=True, text=True, check=False,
-    )
-    if probe.returncode:
+    """Repository identity shared by every worktree of ``path``, or None.
+
+    Linked worktrees have distinct git directories but one common directory, so the
+    common directory is what decides whether a push target is really this repository.
+    """
+    for arguments in (
+        ("rev-parse", "--path-format=absolute", "--git-common-dir"),
+        ("rev-parse", "--absolute-git-dir"),
+    ):
+        probe = subprocess.run(
+            ["git", "-C", str(path), *arguments],
+            capture_output=True, text=True, check=False,
+        )
+        if probe.returncode:
+            continue
+        value = probe.stdout.strip()
+        if not value:
+            continue
+        resolved = Path(value)
+        if not resolved.is_absolute():
+            resolved = path / resolved
+        return str(resolved.resolve())
+    return None
+
+
+def local_path_of(target: str) -> Path | None:
+    """Filesystem path a push target names, or None when it is not a local path."""
+    parsed = urlsplit(target)
+    if parsed.scheme == "file":
+        if parsed.netloc not in ("", "localhost"):
+            return None
+        return Path(unquote(parsed.path))
+    if parsed.scheme:
         return None
-    return probe.stdout.strip() or None
+    if "@" in target.split("/", 1)[0] and ":" in target:
+        return None  # scp-like ssh target, for example git@github.com:owner/repo.git
+    return Path(target)
 
 
 def reject_self_reference(kb_root: Path, target: str) -> None:
@@ -254,8 +284,10 @@ def reject_self_reference(kb_root: Path, target: str) -> None:
     repository, so pushing and then verifying would be a self-satisfying loop that
     proves nothing about any remote.
     """
-    candidate = target[7:] if target.startswith("file://") else target
-    path = Path(candidate)
+    candidate = local_path_of(target)
+    if candidate is None:
+        return
+    path = candidate
     if not path.is_absolute():
         path = kb_root / path
     path = path.resolve()
@@ -349,7 +381,9 @@ def push_and_verify(
     )
     if pushed.returncode:
         detail = pushed.stderr.strip() or pushed.stdout.strip()
-        raise ArchiveError(f"git push {remote} HEAD:{remote_ref} failed: {detail}")
+        raise ArchiveError(
+            f"git push {remote} {commit[:12]}:{remote_ref} failed: {detail}"
+        )
     for url in urls:
         probed, reported = remote_revision(kb_root, url, remote_ref)
         if not probed:
