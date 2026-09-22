@@ -330,6 +330,82 @@ class ArchiveSkillTests(unittest.TestCase):
         ).stdout
         self.assertEqual(published, (self.log / LEDGER_RELATIVE).read_bytes())
 
+    def test_archive_pushes_the_upstream_even_when_remote_push_config_diverges(self) -> None:
+        # A bare `git push` obeys remote.<name>.push and can publish an unrelated ref.
+        subprocess.run(["git", "-C", str(self.kb), "branch", "other"], check=True)
+        subprocess.run(
+            ["git", "-C", str(self.kb), "config", "remote.origin.push",
+             "refs/heads/other:refs/heads/other"],
+            check=True,
+        )
+
+        result = self.archive()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.remote_ledger(), self.events)
+        published = subprocess.run(
+            ["git", "--git-dir", str(self.remote), "rev-parse", "HEAD"],
+            text=True, stdout=subprocess.PIPE, check=True,
+        ).stdout.strip()
+        self.assertEqual(
+            published, subprocess.run(
+                ["git", "-C", str(self.kb), "rev-parse", "HEAD"],
+                text=True, stdout=subprocess.PIPE, check=True,
+            ).stdout.strip(),
+        )
+
+    def test_archive_detects_a_remote_that_rewrites_the_ref(self) -> None:
+        hook = self.remote / "hooks" / "post-receive"
+        hook.write_text(
+            "#!/bin/sh\nwhile read old new ref; do\n"
+            '  git update-ref -m "revert" "$ref" "$old" "$new"\ndone\n',
+            encoding="utf-8",
+        )
+        hook.chmod(0o755)
+
+        result = self.archive()
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("did not reach", result.stderr)
+        self.assertFalse(self.remote_has_ledger())
+
+    def test_archive_refuses_a_branch_without_upstream(self) -> None:
+        subprocess.run(["git", "-C", str(self.kb), "checkout", "-q", "-b", "local-only"], check=True)
+        before = self.commits()
+
+        result = self.archive()
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("has no upstream", result.stderr)
+        self.assertEqual(self.commits(), before)
+
+    def test_archive_refuses_a_detached_head(self) -> None:
+        subprocess.run(["git", "-C", str(self.kb), "checkout", "-q", "--detach"], check=True)
+        before = self.commits()
+
+        result = self.archive()
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("not on a branch", result.stderr)
+        self.assertEqual(self.commits(), before)
+
+    def test_read_committed_ledger_rejects_invalid_utf8(self) -> None:
+        self.assertEqual(self.archive().returncode, 0)
+        (self.archived / LEDGER_RELATIVE).write_bytes(b"\xff\xfe not utf8\n")
+        subprocess.run(
+            ["git", "-C", str(self.kb), "add", "--",
+             f"工程记录/work/.project-log/{LEDGER_RELATIVE.as_posix()}"],
+            check=True,
+        )
+        subprocess.run(["git", "-C", str(self.kb), "commit", "-qm", "bad ledger"], check=True)
+
+        with self.assertRaises(archive_module.ArchiveError) as caught:
+            archive_module.read_committed_ledger(
+                self.kb, "工程记录/work/.project-log/ledger/v1/ledger.jsonl"
+            )
+
+        self.assertIn("not valid UTF-8", str(caught.exception))
+
 
 if __name__ == "__main__":
     unittest.main()

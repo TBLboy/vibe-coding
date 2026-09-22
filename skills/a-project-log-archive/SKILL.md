@@ -37,12 +37,15 @@ Only the `工程记录/` subdirectory within the knowledge base will be affected
    excluding `.state/`, `.git`, `.migration/`, `legacy/new-writes/` and copying the ledger separately.
 7. Stage only `工程记录/<project-name>`, verify the staged ledger is byte-identical to the
    local ledger, then `git commit --only -- 工程记录/<project-name>`, re-verify the
-   committed blob, and `git push`.
+   committed blob, and push `HEAD` to the checked-out branch's upstream ref with an
+   explicit refspec.
 8. Fail loudly instead of reporting `no-changes` whenever either blob differs from the
    local ledger: an ignored, `skip-worktree`, or `assume-unchanged` ledger keeps the index
    stale while unrelated files still stage, and a content filter or end-of-line
    conversion rewrites the ledger on the way into Git. Both would otherwise be reported
    as a successful archive.
+9. Fail unless the remote ref reports the archived revision after the push, so a remote
+   hook that rewrites or rejects the ref cannot be mistaken for a successful archive.
 
 Re-running the archive is idempotent: unchanged logs produce no commit.
 
@@ -68,6 +71,11 @@ python3 "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/skills/a-project-log-arc
   otherwise rewritten ledger can never be reported as archived.
 - Rejects content filters and end-of-line conversion on the ledger path by design: the
   ledger must reach the remote as the exact bytes that were written locally.
+- Pushes to the upstream of the checked-out branch only, with an explicit refspec, so
+  `remote.<name>.push` or `push.default` can never redirect the archive to another ref.
+  Detached HEAD and branches without an upstream are refused before anything is committed.
+- Verifies the remote ref after pushing and reports failure when the remote no longer
+  holds the archived revision.
 - Never copies the local SQLite cache (`.state/`) or Git internals.
 - Merges instead of replacing, so an existing KB copy is never deleted wholesale.
 - Commits with an explicit pathspec, so `<kb>/工程记录/` is the only thing the archive
