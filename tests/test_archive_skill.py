@@ -432,9 +432,14 @@ class ArchiveSkillTests(unittest.TestCase):
             ["git", "-C", str(self.kb), "symbolic-ref", "--short", "HEAD"],
             text=True, stdout=subprocess.PIPE, check=True,
         ).stdout.strip()
-        subprocess.run(
-            ["git", "-C", str(self.kb), "remote", "add", "probe", url], check=True
+        added = subprocess.run(
+            ["git", "-C", str(self.kb), "remote", "add", "probe", url],
+            capture_output=True, check=False,
         )
+        if added.returncode:
+            subprocess.run(
+                ["git", "-C", str(self.kb), "remote", "set-url", "probe", url], check=True
+            )
         subprocess.run(
             ["git", "-C", str(self.kb), "config", f"branch.{branch}.remote", "probe"],
             check=True,
@@ -454,6 +459,43 @@ class ArchiveSkillTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn("resolves to the knowledge base itself", result.stderr)
         self.assertEqual(self.commits(), before)
+
+    def test_archive_refuses_file_url_host_forms_that_name_itself(self) -> None:
+        # Git's file transport opens the path component for any authority, so each of
+        # these targets reaches the knowledge base itself. They must all fail closed:
+        # reporting "pushed" while the real remote holds nothing is the failure this
+        # guard exists to prevent.
+        for authority in (
+            "LOCALHOST",
+            "localhost.",
+            "127.0.0.1",
+            "random.invalid",
+            "localhost:123",
+            "%6cocalhost",
+        ):
+            with self.subTest(authority=authority):
+                self.point_upstream_at(f"file://{authority}{self.kb}")
+                before = self.commits()
+
+                result = self.archive()
+
+                self.assertEqual(result.returncode, 1, result.stdout)
+                self.assertNotIn('"pushed"', result.stdout)
+                self.assertEqual(self.commits(), before)
+                self.assertFalse(self.remote_has_ledger())
+
+    def test_archive_leaves_the_knowledge_base_clean_when_the_target_is_rejected(self) -> None:
+        # Rejecting the publish target must not leave the copied 工程记录/ tree behind.
+        self.point_upstream_at(f"file://random.invalid{self.kb}")
+
+        result = self.archive()
+
+        self.assertEqual(result.returncode, 1)
+        status = subprocess.run(
+            ["git", "-C", str(self.kb), "status", "--porcelain"],
+            text=True, stdout=subprocess.PIPE, check=True,
+        ).stdout
+        self.assertEqual(status, "")
 
     def test_archive_refuses_a_linked_worktree_of_itself(self) -> None:
         linked = self.kb.parent / "linked-worktree"

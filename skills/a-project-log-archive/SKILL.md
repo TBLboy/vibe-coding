@@ -76,7 +76,14 @@ python3 "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/skills/a-project-log-arc
   `remote.<name>.push` or `push.default` can never redirect the archive to another ref.
   Detached HEAD and branches without an upstream are refused before anything is committed.
 - Refuses a push target that resolves back to the knowledge base itself, because pushing
-  and verifying against the same repository would prove nothing.
+  and verifying against the same repository would prove nothing. `file://` URLs carrying
+  a host component (`file://localhost./…`, `file://127.0.0.1/…`, `file://random.invalid/…`,
+  `file://localhost:123/…`, `file://%6cocalhost/…`) are refused outright: Git still opens a
+  local path for them, but the rendering is platform-dependent, so they are treated as
+  unverifiable rather than as a remote. Plain paths, `file:///absolute/path` and
+  `file://localhost/absolute/path` remain supported.
+- Resolves the publish target **before** copying anything into the knowledge base, so a
+  rejected upstream, detached HEAD, or self-referential remote leaves the KB worktree clean.
 - Verifies every configured push URL after pushing and reports failure when any of them
   does not hold the archived revision.
 - Pushes the whole fast-forward range of the archive branch, exactly like a normal

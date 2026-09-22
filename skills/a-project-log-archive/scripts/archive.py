@@ -34,6 +34,9 @@ LEDGER_RELATIVE = Path("ledger") / "v1" / "ledger.jsonl"
 MARKER = "state-format.json"
 # Machine-local or derivable: never archived.
 EXCLUDED_NAMES = {".state", ".git", ".migration", "new-writes", "ledger"}
+# Authorities a file:// push target may carry. Anything else is a form whose meaning
+# depends on the platform, so it is refused rather than interpreted.
+CANONICAL_FILE_AUTHORITIES = ("", "localhost")
 
 
 class ArchiveError(RuntimeError):
@@ -264,11 +267,14 @@ def repository_identity(path: Path) -> str | None:
 
 
 def local_path_of(target: str) -> Path | None:
-    """Filesystem path a push target names, or None when it is not a local path."""
+    """Filesystem path a push target names, or None when it is not a local path.
+
+    Git's ``file://`` transport opens the *path* component, whatever the authority says,
+    so ``file://random.invalid/tmp/kb`` reads ``/tmp/kb`` just like ``file:///tmp/kb``.
+    The path is therefore what must be compared against the knowledge base.
+    """
     parsed = urlsplit(target)
     if parsed.scheme == "file":
-        if parsed.netloc not in ("", "localhost"):
-            return None
         return Path(unquote(parsed.path))
     if parsed.scheme:
         return None
@@ -283,7 +289,22 @@ def reject_self_reference(kb_root: Path, target: str) -> None:
     ``git push . HEAD:refs/heads/x`` and ``git ls-remote .`` both read the local
     repository, so pushing and then verifying would be a self-satisfying loop that
     proves nothing about any remote.
+
+    ``file://`` URLs carrying a host component are refused outright: git accepts forms
+    such as ``file://localhost./``, ``file://127.0.0.1/``, ``file://random.invalid/``,
+    ``file://localhost:123/`` and ``file://%6cocalhost/`` and still opens a local path,
+    but the rendering is platform- and version-dependent, so the archive cannot prove a
+    non-self target here and fails closed instead of guessing.
     """
+    parsed = urlsplit(target)
+    if parsed.scheme == "file" and parsed.netloc.lower() not in CANONICAL_FILE_AUTHORITIES:
+        raise ArchiveError(
+            f"the archive target {target!r} is a file:// URL with a host component "
+            f"({parsed.netloc!r}). Git resolves such a target differently per platform, "
+            "so the archive cannot prove it is not the knowledge base itself and refuses "
+            "to run. Use a plain path, file:///absolute/path, or "
+            "file://localhost/absolute/path instead."
+        )
     candidate = local_path_of(target)
     if candidate is None:
         return
@@ -400,7 +421,12 @@ def push_and_verify(
             )
 
 
-def git_push(kb_root: Path, project_name: str, local_ledger: Path) -> str:
+def git_push(
+    kb_root: Path,
+    project_name: str,
+    local_ledger: Path,
+    target: tuple[str, str, list[str]] | None = None,
+) -> str:
     """Stage, commit, and push only this project's archive directory.
 
     Staging alone cannot prove the log landed: ``skip-worktree``/``assume-unchanged``
@@ -408,10 +434,13 @@ def git_push(kb_root: Path, project_name: str, local_ledger: Path) -> str:
     stage, and a clean filter can rewrite the ledger on the way into Git. Both the staged
     blob and the committed blob are therefore compared byte-for-byte against the local
     ledger, and the run refuses to push a commit whose ledger is not identical.
+
+    ``target`` is the already-validated ``push_target`` result; callers pass it so an
+    unusable upstream is rejected before the knowledge base worktree is modified.
     """
     relative = str(Path("工程记录") / project_name)
     ledger_relative = str(Path("工程记录") / project_name / ".project-log" / LEDGER_RELATIVE)
-    remote, remote_ref, urls = push_target(kb_root)
+    remote, remote_ref, urls = target if target is not None else push_target(kb_root)
     rule = ignored_rule(kb_root, ledger_relative)
     if rule is not None:
         raise ArchiveError(
@@ -545,8 +574,12 @@ def archive(project_root: Path, kb_base: Path) -> dict:
     committed = read_committed_ledger(kb_root, ledger_relative)
     ledger["kb_committed"] = len(committed)
     ledger["appended"] = max(0, len(local_events) - len(committed))
+    # Resolve the publish target before touching the knowledge base worktree: an
+    # unusable upstream or a self-referential remote must not leave a half-written
+    # 工程记录/ directory behind.
+    target = push_target(kb_root)
     copied = copy_project_log(source, destination)
-    pushed = git_push(kb_root, project_name, source / LEDGER_RELATIVE)
+    pushed = git_push(kb_root, project_name, source / LEDGER_RELATIVE, target)
     return {
         "project": project_name,
         "project_id": local_id,
