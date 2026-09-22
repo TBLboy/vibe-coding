@@ -23,6 +23,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import time
 
 
 SKILL_DIR = Path(__file__).resolve().parent.parent
@@ -263,6 +264,50 @@ def push_target(kb_root: Path) -> tuple[str, str]:
     return remote, ref
 
 
+def remote_revision(kb_root: Path, remote: str, ref: str, attempts: int = 3) -> tuple[bool, str | None]:
+    """``(probe_succeeded, revision)`` for ``ref`` on ``remote``.
+
+    ``git ls-remote`` exit status 0 means matching refs were listed and 2 means the remote
+    answered but holds no such ref. Any other status is a transport or configuration
+    failure, which must not be mistaken for "the remote does not have the commit".
+    """
+    for attempt in range(attempts):
+        probe = subprocess.run(
+            ["git", "-C", str(kb_root), "ls-remote", "--exit-code", remote, ref],
+            capture_output=True, text=True, check=False,
+        )
+        if probe.returncode in (0, 2):
+            fields = probe.stdout.split()
+            return True, fields[0] if fields else None
+        if attempt + 1 < attempts:
+            time.sleep(attempt + 1)
+    return False, None
+
+
+def push_and_verify(kb_root: Path, remote: str, remote_ref: str, commit: str) -> None:
+    """Push ``HEAD`` to the upstream ref and refuse to claim success unless it lands."""
+    pushed = subprocess.run(
+        ["git", "-C", str(kb_root), "push", "--porcelain", remote, f"HEAD:{remote_ref}"],
+        capture_output=True, text=True, check=False,
+    )
+    if pushed.returncode:
+        detail = pushed.stderr.strip() or pushed.stdout.strip()
+        raise ArchiveError(f"git push {remote} HEAD:{remote_ref} failed: {detail}")
+    probed, reported = remote_revision(kb_root, remote, remote_ref)
+    if not probed:
+        raise ArchiveError(
+            f"the push to {remote} {remote_ref} reported success, but the remote ref could "
+            f"not be verified (network or credentials). Re-run the archive to confirm; a "
+            f"completed push is not repeated and the commit {commit} is already local."
+        )
+    if reported != commit:
+        raise ArchiveError(
+            f"the archive commit did not reach {remote} {remote_ref}: the remote reports "
+            f"{reported or '<missing>'} but the archived revision is {commit}. "
+            "Check for a remote hook that rewrites, rejects, or delays the ref update."
+        )
+
+
 def git_push(kb_root: Path, project_name: str, local_ledger: Path) -> str:
     """Stage, commit, and push only this project's archive directory.
 
@@ -320,6 +365,19 @@ def git_push(kb_root: Path, project_name: str, local_ledger: Path) -> str:
         check=False,
     )
     if pending.returncode == 0:
+        # Nothing to commit, but an earlier run may have committed and then failed to
+        # push. Reporting no-changes would leave the archive stranded locally forever.
+        current = revision(kb_root, "HEAD")
+        if current is not None:
+            probed, reported = remote_revision(kb_root, remote, remote_ref)
+            if not probed:
+                raise ArchiveError(
+                    f"cannot verify {remote} {remote_ref}; the archive will not claim "
+                    "success without confirming the remote holds the committed log"
+                )
+            if reported != current:
+                push_and_verify(kb_root, remote, remote_ref, current)
+                return "pushed"
         return "no-changes"
     if pending.returncode != 1:
         raise ArchiveError(
@@ -354,24 +412,7 @@ def git_push(kb_root: Path, project_name: str, local_ledger: Path) -> str:
             "HEAD moved after the archive commit, so the revision that was verified is no "
             "longer the checked-out one; refusing to push"
         )
-    pushed = subprocess.run(
-        ["git", "-C", str(kb_root), "push", "--porcelain", remote, f"HEAD:{remote_ref}"],
-        capture_output=True, text=True, check=False,
-    )
-    if pushed.returncode:
-        detail = pushed.stderr.strip() or pushed.stdout.strip()
-        raise ArchiveError(f"git push {remote} HEAD:{remote_ref} failed: {detail}")
-    observed = subprocess.run(
-        ["git", "-C", str(kb_root), "ls-remote", "--exit-code", remote, remote_ref],
-        capture_output=True, text=True, check=False,
-    )
-    reported = observed.stdout.split()[0] if observed.stdout.split() else None
-    if observed.returncode != 0 or reported != archive_commit:
-        raise ArchiveError(
-            f"the archive commit did not reach {remote} {remote_ref}: the remote reports "
-            f"{reported or '<missing>'} but the archived revision is {archive_commit}. "
-            "Check for a remote hook that rewrites, rejects, or delays the ref update."
-        )
+    push_and_verify(kb_root, remote, remote_ref, archive_commit)
     return "pushed"
 
 
