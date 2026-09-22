@@ -13,7 +13,7 @@ into `${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}` by the OpenCode installer.
 | Lifecycle slash commands | `commands/vibe-*.md` | adapted |
 | Reusable workflow Skills | top-level `skills/*/SKILL.md` | supported |
 | Default agent and task permissions | `opencode.json` | supported |
-| Session/compaction/tool hooks | `TASK-071` plugin | deferred to plugin task |
+| Session/compaction/tool hooks | `plugins/vibe-workflow.ts` | supported |
 | Goal and automatic continuation | `TASK-072` plugin integration | deferred to Goal task |
 | Install/update/uninstall | `TASK-073` installer | deferred to installer task |
 
@@ -64,3 +64,26 @@ executes project test code with the reviewer's user privileges.
 | `/vibe-retro` | Run retrospective and evidence-backed distillation |
 
 Natural-language triggers remain valid; commands are thin entry points, not a second workflow.
+
+## Plugin Hooks
+
+`plugins/vibe-workflow.ts` is registered by `opencode.json` and never advances a task, completes a
+Goal, rewrites business logic, or edits Skills:
+
+| Hook | Behavior |
+|---|---|
+| `experimental.chat.system.transform` | Inject a bounded `vibe status` snapshot |
+| `experimental.session.compacting` | Refresh generated views, then inject state and preservation rules |
+| `tool.execute.after` | Debounce a `vibe evidence refresh` after file-writing tools |
+| `vibe_workflow_status` | Read-only tool exposing `vibe status` / `vibe context <task>` |
+
+Its runtime is resolved from `VIBE_RUNTIME_SCRIPT`, `VIBE_RUNTIME`, the OpenCode config directory,
+or a development fallback; when none is available the hooks degrade to an explicit "no runtime"
+message. Its only writes are `vibe evidence refresh` and the generated local views produced by
+`vibe state-views`; neither changes task, Goal, or business facts.
+Installing these assets and their `@opencode-ai/plugin` dependency is `TASK-073`.
+
+The unit tests import the plugin directly and exercise every hook; live OpenCode import/registration
+was verified once with a real non-`--pure` OpenCode run. `opencode debug config --pure` only resolves
+the config and does not import external plugins. A real model-driven session, compaction, and write
+tool loop still belongs to TASK-075.

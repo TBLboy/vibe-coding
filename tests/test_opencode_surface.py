@@ -198,8 +198,20 @@ class OpenCodeIsolatedLoadTests(unittest.TestCase):
             home = root / "home"
             shutil.copytree(OPENCODE, config)
             shutil.copytree(ROOT / "skills", config / "skills")
+            global_node_modules = Path(
+                os.environ.get("OPENCODE_NODE_MODULES", Path.home() / ".config/opencode/node_modules")
+            )
+            plugin_package = global_node_modules / "@opencode-ai/plugin"
             for relative in (".config", ".local/share", ".local/state", ".cache"):
                 (home / relative).mkdir(parents=True, exist_ok=True)
+            if plugin_package.is_dir():
+                node_modules = config / "node_modules"
+                node_modules.mkdir()
+                (node_modules / "@opencode-ai").mkdir()
+                os.symlink(plugin_package, node_modules / "@opencode-ai/plugin")
+                sdk_package = global_node_modules / "@opencode-ai/sdk"
+                if sdk_package.is_dir():
+                    os.symlink(sdk_package, node_modules / "@opencode-ai/sdk")
 
             environment = os.environ.copy()
             environment.update({
@@ -220,6 +232,18 @@ class OpenCodeIsolatedLoadTests(unittest.TestCase):
             resolved_config = json.loads(resolved.stdout)
             self.assertEqual(resolved_config["default_agent"], "vibe-main")
             self.assertEqual(set(resolved_config["command"]), EXPECTED_COMMANDS)
+            # `--pure` resolves config without external plugins; it proves the plugin spec is
+            # resolvable but not that OpenCode imports the plugin module.
+            self.assertEqual(len(resolved_config.get("plugin", [])), 1)
+            self.assertTrue(
+                Path(resolved_config["plugin"][0].removeprefix("file://")).is_absolute(),
+                resolved_config["plugin"],
+            )
+
+            # Non-pure debug agent performs the real plugin load in OpenCode.
+            # Runtime plugin import/execution is covered by tests/test_opencode_plugin.py and the
+            # non-pure OpenCode load recorded in TASK-071 evidence; a live TUI/CLI session with a
+            # real model belongs to TASK-075.
 
             listed = subprocess.run(
                 ["opencode", "debug", "skill", "--pure"],
