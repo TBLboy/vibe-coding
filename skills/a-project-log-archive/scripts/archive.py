@@ -236,8 +236,63 @@ def config_value(kb_root: Path, key: str) -> str:
     return probe.stdout.strip() if probe.returncode == 0 else ""
 
 
-def push_target(kb_root: Path) -> tuple[str, str]:
-    """Resolve the single remote and ref this archive is allowed to publish to.
+def repository_identity(path: Path) -> str | None:
+    """Absolute Git directory of a local repository-looking path, or None."""
+    probe = subprocess.run(
+        ["git", "-C", str(path), "rev-parse", "--absolute-git-dir"],
+        capture_output=True, text=True, check=False,
+    )
+    if probe.returncode:
+        return None
+    return probe.stdout.strip() or None
+
+
+def reject_self_reference(kb_root: Path, target: str) -> None:
+    """Refuse a push target that resolves to the knowledge base repository itself.
+
+    ``git push . HEAD:refs/heads/x`` and ``git ls-remote .`` both read the local
+    repository, so pushing and then verifying would be a self-satisfying loop that
+    proves nothing about any remote.
+    """
+    candidate = target[7:] if target.startswith("file://") else target
+    path = Path(candidate)
+    if not path.is_absolute():
+        path = kb_root / path
+    path = path.resolve()
+    if not path.exists():
+        return
+    identity = repository_identity(path)
+    own = repository_identity(kb_root)
+    if identity is not None and own is not None and identity == own:
+        raise ArchiveError(
+            f"the archive target {target!r} resolves to the knowledge base itself; pushing "
+            "and verifying against the same repository would prove nothing, so the archive "
+            "refuses to run"
+        )
+
+
+def push_urls(kb_root: Path, remote: str) -> list[str]:
+    """Every URL ``git push <remote>`` would contact, in order."""
+    probe = subprocess.run(
+        ["git", "-C", str(kb_root), "remote", "get-url", "--push", "--all", remote],
+        capture_output=True, text=True, check=False,
+    )
+    if probe.returncode:
+        reject_self_reference(kb_root, remote)
+        raise ArchiveError(
+            f"cannot resolve the push URL(s) of remote {remote!r} in {kb_root}: "
+            f"{probe.stderr.strip() or 'git remote get-url failed'}"
+        )
+    urls = [line.strip() for line in probe.stdout.splitlines() if line.strip()]
+    if not urls:
+        raise ArchiveError(f"remote {remote!r} in {kb_root} has no push URL")
+    for url in urls:
+        reject_self_reference(kb_root, url)
+    return urls
+
+
+def push_target(kb_root: Path) -> tuple[str, str, list[str]]:
+    """Resolve the single remote, ref, and push URLs this archive may publish to.
 
     A bare ``git push`` obeys ``remote.<name>.push`` and ``push.default``, so it can
     publish an unrelated ref while the archive commit stays local. The upstream of the
@@ -261,7 +316,7 @@ def push_target(kb_root: Path) -> tuple[str, str]:
             f"branch {name} has no upstream in {kb_root}, so the archive cannot decide "
             f"where to publish. Set one first:\n  git -C {kb_root} push -u <remote> {name}"
         )
-    return remote, ref
+    return remote, ref, push_urls(kb_root, remote)
 
 
 def remote_revision(kb_root: Path, remote: str, ref: str, attempts: int = 3) -> tuple[bool, str | None]:
@@ -284,28 +339,31 @@ def remote_revision(kb_root: Path, remote: str, ref: str, attempts: int = 3) -> 
     return False, None
 
 
-def push_and_verify(kb_root: Path, remote: str, remote_ref: str, commit: str) -> None:
-    """Push ``HEAD`` to the upstream ref and refuse to claim success unless it lands."""
+def push_and_verify(
+    kb_root: Path, remote: str, remote_ref: str, commit: str, urls: list[str]
+) -> None:
+    """Push ``commit`` to the upstream ref and verify every URL it lands on."""
     pushed = subprocess.run(
-        ["git", "-C", str(kb_root), "push", "--porcelain", remote, f"HEAD:{remote_ref}"],
+        ["git", "-C", str(kb_root), "push", "--porcelain", remote, f"{commit}:{remote_ref}"],
         capture_output=True, text=True, check=False,
     )
     if pushed.returncode:
         detail = pushed.stderr.strip() or pushed.stdout.strip()
         raise ArchiveError(f"git push {remote} HEAD:{remote_ref} failed: {detail}")
-    probed, reported = remote_revision(kb_root, remote, remote_ref)
-    if not probed:
-        raise ArchiveError(
-            f"the push to {remote} {remote_ref} reported success, but the remote ref could "
-            f"not be verified (network or credentials). Re-run the archive to confirm; a "
-            f"completed push is not repeated and the commit {commit} is already local."
-        )
-    if reported != commit:
-        raise ArchiveError(
-            f"the archive commit did not reach {remote} {remote_ref}: the remote reports "
-            f"{reported or '<missing>'} but the archived revision is {commit}. "
-            "Check for a remote hook that rewrites, rejects, or delays the ref update."
-        )
+    for url in urls:
+        probed, reported = remote_revision(kb_root, url, remote_ref)
+        if not probed:
+            raise ArchiveError(
+                f"the push to {url} reported success, but the remote ref could not be "
+                "verified (network or credentials). Re-run the archive to confirm; a "
+                f"completed push is not repeated and the commit {commit} is already local."
+            )
+        if reported != commit:
+            raise ArchiveError(
+                f"the archive commit did not reach {url} {remote_ref}: the remote reports "
+                f"{reported or '<missing>'} but the archived revision is {commit}. "
+                "Check for a remote hook that rewrites, rejects, or delays the ref update."
+            )
 
 
 def git_push(kb_root: Path, project_name: str, local_ledger: Path) -> str:
@@ -319,7 +377,7 @@ def git_push(kb_root: Path, project_name: str, local_ledger: Path) -> str:
     """
     relative = str(Path("工程记录") / project_name)
     ledger_relative = str(Path("工程记录") / project_name / ".project-log" / LEDGER_RELATIVE)
-    remote, remote_ref = push_target(kb_root)
+    remote, remote_ref, urls = push_target(kb_root)
     rule = ignored_rule(kb_root, ledger_relative)
     if rule is not None:
         raise ArchiveError(
@@ -369,15 +427,16 @@ def git_push(kb_root: Path, project_name: str, local_ledger: Path) -> str:
         # push. Reporting no-changes would leave the archive stranded locally forever.
         current = revision(kb_root, "HEAD")
         if current is not None:
-            probed, reported = remote_revision(kb_root, remote, remote_ref)
-            if not probed:
-                raise ArchiveError(
-                    f"cannot verify {remote} {remote_ref}; the archive will not claim "
-                    "success without confirming the remote holds the committed log"
-                )
-            if reported != current:
-                push_and_verify(kb_root, remote, remote_ref, current)
-                return "pushed"
+            for url in urls:
+                probed, reported = remote_revision(kb_root, url, remote_ref)
+                if not probed:
+                    raise ArchiveError(
+                        f"cannot verify {url} {remote_ref}; the archive will not claim "
+                        "success without confirming the remote holds the committed log"
+                    )
+                if reported != current:
+                    push_and_verify(kb_root, remote, remote_ref, current, urls)
+                    return "pushed"
         return "no-changes"
     if pending.returncode != 1:
         raise ArchiveError(
@@ -412,7 +471,7 @@ def git_push(kb_root: Path, project_name: str, local_ledger: Path) -> str:
             "HEAD moved after the archive commit, so the revision that was verified is no "
             "longer the checked-out one; refusing to push"
         )
-    push_and_verify(kb_root, remote, remote_ref, archive_commit)
+    push_and_verify(kb_root, remote, remote_ref, archive_commit, urls)
     return "pushed"
 
 

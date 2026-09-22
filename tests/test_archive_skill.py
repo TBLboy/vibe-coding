@@ -408,6 +408,46 @@ class ArchiveSkillTests(unittest.TestCase):
         self.assertIn("has no upstream", result.stderr)
         self.assertEqual(self.commits(), before)
 
+    def test_archive_refuses_a_self_referential_remote(self) -> None:
+        # `git push . HEAD:refs/heads/x` and `git ls-remote .` both read this repository,
+        # so pushing and verifying would be a self-satisfying loop.
+        branch = subprocess.run(
+            ["git", "-C", str(self.kb), "symbolic-ref", "--short", "HEAD"],
+            text=True, stdout=subprocess.PIPE, check=True,
+        ).stdout.strip()
+        subprocess.run(
+            ["git", "-C", str(self.kb), "config", f"branch.{branch}.remote", "."], check=True
+        )
+        before = self.commits()
+
+        result = self.archive()
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("resolves to the knowledge base itself", result.stderr)
+        self.assertEqual(self.commits(), before)
+        self.assertFalse(self.remote_has_ledger())
+
+    def test_archive_verifies_every_push_url(self) -> None:
+        second = self.kb.parent / "kb-remote-2.git"
+        subprocess.run(["git", "init", "-q", "--bare", str(second)], check=True)
+        for url in (str(self.remote), str(second)):
+            subprocess.run(
+                ["git", "-C", str(self.kb), "remote", "set-url", "--add", "--push",
+                 "origin", url],
+                check=True,
+            )
+
+        result = self.archive()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        for repository in (self.remote, second):
+            published = subprocess.run(
+                ["git", "--git-dir", str(repository), "cat-file", "blob",
+                 "HEAD:工程记录/work/.project-log/ledger/v1/ledger.jsonl"],
+                capture_output=True, check=True,
+            ).stdout
+            self.assertEqual(published, (self.log / LEDGER_RELATIVE).read_bytes())
+
     def test_archive_refuses_a_detached_head(self) -> None:
         subprocess.run(["git", "-C", str(self.kb), "checkout", "-q", "--detach"], check=True)
         before = self.commits()
