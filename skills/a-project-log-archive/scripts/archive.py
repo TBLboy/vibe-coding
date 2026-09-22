@@ -9,9 +9,9 @@ Archiving is a merge, never a replacement:
   and ``legacy/new-writes/`` rollback bundles are never copied.
 * The project identity in ``state-format.json`` must match, so two unrelated
   projects that share a folder name can never silently overwrite each other.
-* A silent archive is treated as a failure: if the local ledger holds commands the
-  knowledge base lacks but staging produces no Git change, the run stops loudly
-  instead of reporting ``no-changes``.
+* A silent archive is treated as a failure: the ledger staged in the knowledge base
+  index must be byte-identical to the local ledger, so an ignored, skipped, or
+  otherwise unstaged ledger can never be reported as archived.
 * Re-running the archive is idempotent.
 """
 from __future__ import annotations
@@ -93,13 +93,12 @@ def read_ledger(path: Path) -> list[dict]:
     return events
 
 
-def verify_ledger_superset(local: Path, kb: Path) -> dict:
+def compare_ledgers(local_events: list[dict], kb_events: list[dict]) -> dict:
     """Refuse unless the KB ledger is an exact prefix of the local ledger.
 
-    Returns the number of local-only commands, which is the tail the archive adds.
+    Returns the event counts; the caller adds the tail length measured against the
+    committed baseline.
     """
-    local_events = read_ledger(local)
-    kb_events = read_ledger(kb)
     if len(kb_events) > len(local_events):
         raise ArchiveError(
             f"the knowledge base ledger holds {len(kb_events)} commands but the local "
@@ -119,8 +118,31 @@ def verify_ledger_superset(local: Path, kb: Path) -> dict:
     return {
         "local_events": len(local_events),
         "kb_events": len(kb_events),
-        "appended": len(local_events) - len(kb_events),
     }
+
+
+def read_committed_ledger(kb_root: Path, ledger_relative: str) -> list[dict]:
+    """Read the ledger as committed at HEAD, or an empty list when HEAD has none."""
+    probe = subprocess.run(
+        ["git", "-C", str(kb_root), "show", f"HEAD:{ledger_relative}"],
+        capture_output=True, text=True, check=False,
+    )
+    if probe.returncode:
+        return []
+    events: list[dict] = []
+    for number, line in enumerate(probe.stdout.splitlines(), start=1):
+        if not line.strip():
+            continue
+        try:
+            event = json.loads(line)
+        except ValueError as error:
+            raise ArchiveError(
+                f"HEAD:{ledger_relative}:{number} is not valid JSON: {error}"
+            ) from error
+        if type(event) is not dict or "command_id" not in event:
+            raise ArchiveError(f"HEAD:{ledger_relative}:{number} is not a ledger event")
+        events.append(event)
+    return events
 
 
 def _ignore(_directory: str, names: list[str]) -> set[str]:
@@ -155,25 +177,37 @@ def ignored_rule(kb_root: Path, relative: str) -> str | None:
     )
     if tracked.returncode == 0:
         return None
+    if tracked.returncode != 1:
+        # Only exit status 1 means "not tracked"; anything else means Git could not
+        # answer, which must not be mistaken for a healthy path.
+        raise ArchiveError(
+            f"cannot inspect the knowledge base repository at {kb_root}: "
+            f"{tracked.stderr.strip() or 'git ls-files failed'}"
+        )
     probe = subprocess.run(
         ["git", "-C", str(kb_root), "check-ignore", "-v", "--", relative],
         capture_output=True, text=True, check=False,
     )
-    if probe.returncode != 0:
-        # 1 means "not ignored"; 128 means the probe itself failed (for example a
-        # non-repository root). Neither proves the path is unreachable, so the caller
-        # falls through to the ordinary staging checks.
+    if probe.returncode == 1:
         return None
+    if probe.returncode != 0:
+        # 0 means "ignored", 1 means "not ignored"; any other status means the probe
+        # failed, so fail closed instead of assuming the ledger is reachable.
+        raise ArchiveError(
+            f"cannot determine whether {relative} is ignored by {kb_root}: "
+            f"{probe.stderr.strip() or 'git check-ignore failed'}"
+        )
     return probe.stdout.strip() or "(matched an ignore rule)"
 
 
-def git_push(kb_root: Path, project_name: str, expected_appended: int = 0) -> str:
+def git_push(kb_root: Path, project_name: str, local_ledger: Path) -> str:
     """Stage, commit, and push only this project's archive directory.
 
-    ``expected_appended`` is the number of ledger commands this run adds. When it is
-    positive, Git must observe a change: an empty staging area means the new commands
-    never reached version control, which used to be reported as a successful
-    ``no-changes`` run and silently dropped log history.
+    Before committing, the ledger staged in the index must hash-match the local ledger.
+    Staging alone cannot prove that: ``skip-worktree``/``assume-unchanged`` entries and
+    paths excluded by ``.gitignore`` keep the index ledger stale while unrelated files
+    still stage, which used to make the archive report success while the log tail never
+    reached version control.
     """
     relative = str(Path("工程记录") / project_name)
     ledger_relative = str(Path("工程记录") / project_name / ".project-log" / LEDGER_RELATIVE)
@@ -193,22 +227,49 @@ def git_push(kb_root: Path, project_name: str, expected_appended: int = 0) -> st
     )
     if completed.returncode:
         raise ArchiveError(f"git add failed: {completed.stderr.strip()}")
-    staged = subprocess.run(
+
+    local_hash = subprocess.run(
+        ["git", "-C", str(kb_root), "hash-object", "--", str(local_ledger)],
+        capture_output=True, text=True, check=False,
+    )
+    if local_hash.returncode:
+        raise ArchiveError(f"cannot hash the local ledger: {local_hash.stderr.strip()}")
+    staged_hash = subprocess.run(
+        ["git", "-C", str(kb_root), "rev-parse", f":{ledger_relative}"],
+        capture_output=True, text=True, check=False,
+    )
+    if staged_hash.returncode:
+        raise ArchiveError(
+            f"the knowledge base index does not hold {ledger_relative}, so the ledger "
+            "would never reach the remote. Check that the knowledge base tracks the "
+            "ledger:\n"
+            f"  git -C {kb_root} check-ignore -v -- {ledger_relative}\n"
+            f"  git -C {kb_root} ls-files --error-unmatch -- {ledger_relative}"
+        )
+    if staged_hash.stdout.strip() != local_hash.stdout.strip():
+        raise ArchiveError(
+            f"the staged ledger differs from the local ledger; the archive would publish "
+            f"a stale history. Re-stage it explicitly:\n"
+            f"  git -C {kb_root} update-index --no-skip-worktree -- {ledger_relative}\n"
+            f"  git -C {kb_root} update-index --no-assume-unchanged -- {ledger_relative}"
+        )
+
+    pending = subprocess.run(
         ["git", "-C", str(kb_root), "diff", "--cached", "--quiet", "--", relative],
         check=False,
     )
-    if staged.returncode == 0:
-        if expected_appended > 0:
-            raise ArchiveError(
-                f"the local ledger holds {expected_appended} command(s) the knowledge base "
-                f"lacks, but staging {relative} produced no Git change; the archive would "
-                "silently drop them. Confirm the knowledge base tracks the ledger:\n"
-                f"  git -C {kb_root} check-ignore -v -- {ledger_relative}\n"
-                f"  git -C {kb_root} status --ignored --short -- {relative}"
-            )
+    if pending.returncode == 0:
         return "no-changes"
+    if pending.returncode != 1:
+        raise ArchiveError(
+            "cannot inspect the staged archive; refusing to commit blindly. "
+            f"Re-run: git -C {kb_root} diff --cached -- {relative}"
+        )
     committed = subprocess.run(
-        ["git", "-C", str(kb_root), "commit", "-m", f"archive: {project_name}"],
+        [
+            "git", "-C", str(kb_root), "commit", "--only", "-m",
+            f"archive: {project_name}", "--", relative,
+        ],
         capture_output=True, text=True, check=False,
     )
     if committed.returncode:
@@ -247,11 +308,18 @@ def archive(project_root: Path, kb_base: Path) -> dict:
             "ledger for this name; refusing to archive"
         )
 
-    ledger = verify_ledger_superset(source / LEDGER_RELATIVE, destination / LEDGER_RELATIVE)
-    copied = copy_project_log(source, destination)
-    pushed = git_push(
-        Path(kb_base).expanduser(), project_name, expected_appended=ledger["appended"]
+    local_events = read_ledger(source / LEDGER_RELATIVE)
+    kb_events = read_ledger(destination / LEDGER_RELATIVE)
+    ledger = compare_ledgers(local_events, kb_events)
+    kb_root = Path(kb_base).expanduser()
+    ledger_relative = str(
+        Path("工程记录") / project_name / ".project-log" / LEDGER_RELATIVE
     )
+    committed = read_committed_ledger(kb_root, ledger_relative)
+    ledger["kb_committed"] = len(committed)
+    ledger["appended"] = max(0, len(local_events) - len(committed))
+    copied = copy_project_log(source, destination)
+    pushed = git_push(kb_root, project_name, source / LEDGER_RELATIVE)
     return {
         "project": project_name,
         "project_id": local_id,

@@ -220,18 +220,62 @@ class ArchiveSkillTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("no-changes", result.stdout)
 
-    def test_git_push_refuses_appended_commands_without_a_git_change(self) -> None:
+    def test_archive_refuses_when_the_index_ledger_is_stale(self) -> None:
+        # A skip-worktree entry keeps the index ledger at the old revision while other
+        # files still stage, so "something was committed" cannot prove the tail landed.
         self.assertEqual(self.archive().returncode, 0)
+        subprocess.run(
+            [
+                "git", "-C", str(self.kb), "update-index", "--skip-worktree", "--",
+                str(self.archived / LEDGER_RELATIVE),
+            ],
+            check=True,
+        )
+        self.events.append(event("c" * 32, "task.create"))
+        write_ledger(self.log / LEDGER_RELATIVE, self.events)
+        before = self.commits()
 
-        with self.assertRaises(archive_module.ArchiveError) as caught:
-            archive_module.git_push(self.kb, "work", expected_appended=2)
+        result = self.archive()
 
-        self.assertIn("produced no Git change", str(caught.exception))
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("differs from the local ledger", result.stderr)
+        self.assertEqual(self.commits(), before)
+        self.assertEqual(len(self.remote_ledger()), 2)
 
-    def test_git_push_reports_no_changes_when_nothing_was_appended(self) -> None:
+    def test_archive_reports_no_changes_when_the_worktree_ledger_was_restored(self) -> None:
+        # The committed ledger already matches; restoring a deleted worktree copy is not
+        # a new archive tail and must not be misreported as one.
         self.assertEqual(self.archive().returncode, 0)
+        (self.archived / LEDGER_RELATIVE).unlink()
 
-        self.assertEqual(archive_module.git_push(self.kb, "work", expected_appended=0), "no-changes")
+        result = self.archive()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("no-changes", result.stdout)
+        self.assertIn('"appended": 0', result.stdout)
+
+    def test_archive_commit_excludes_unrelated_staged_files(self) -> None:
+        self.assertEqual(self.archive().returncode, 0)
+        (self.kb / "unrelated-secret.txt").write_text("secret\n", encoding="utf-8")
+        subprocess.run(
+            ["git", "-C", str(self.kb), "add", "--", "unrelated-secret.txt"], check=True
+        )
+        self.events.append(event("c" * 32, "task.create"))
+        write_ledger(self.log / LEDGER_RELATIVE, self.events)
+
+        result = self.archive()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        published = subprocess.run(
+            ["git", "-C", str(self.kb), "show", "--name-only", "--pretty=format:", "HEAD"],
+            text=True, stdout=subprocess.PIPE, check=True,
+        ).stdout.split()
+        self.assertNotIn("unrelated-secret.txt", published)
+        still_staged = subprocess.run(
+            ["git", "-C", str(self.kb), "diff", "--cached", "--name-only"],
+            text=True, stdout=subprocess.PIPE, check=True,
+        ).stdout
+        self.assertIn("unrelated-secret.txt", still_staged)
 
 
 if __name__ == "__main__":
