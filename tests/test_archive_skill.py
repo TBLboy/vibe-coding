@@ -427,6 +427,50 @@ class ArchiveSkillTests(unittest.TestCase):
         self.assertEqual(self.commits(), before)
         self.assertFalse(self.remote_has_ledger())
 
+    def point_upstream_at(self, url: str) -> None:
+        branch = subprocess.run(
+            ["git", "-C", str(self.kb), "symbolic-ref", "--short", "HEAD"],
+            text=True, stdout=subprocess.PIPE, check=True,
+        ).stdout.strip()
+        subprocess.run(
+            ["git", "-C", str(self.kb), "remote", "add", "probe", url], check=True
+        )
+        subprocess.run(
+            ["git", "-C", str(self.kb), "config", f"branch.{branch}.remote", "probe"],
+            check=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(self.kb), "config", f"branch.{branch}.merge",
+             "refs/heads/archive-target"],
+            check=True,
+        )
+
+    def test_archive_refuses_a_file_url_to_itself(self) -> None:
+        self.point_upstream_at(f"file://localhost{self.kb}")
+        before = self.commits()
+
+        result = self.archive()
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("resolves to the knowledge base itself", result.stderr)
+        self.assertEqual(self.commits(), before)
+
+    def test_archive_refuses_a_linked_worktree_of_itself(self) -> None:
+        linked = self.kb.parent / "linked-worktree"
+        subprocess.run(
+            ["git", "-C", str(self.kb), "worktree", "add", "-q", "-b", "linked-wt",
+             str(linked)],
+            check=True,
+        )
+        self.point_upstream_at(str(linked))
+        before = self.commits()
+
+        result = self.archive()
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("resolves to the knowledge base itself", result.stderr)
+        self.assertEqual(self.commits(), before)
+
     def test_archive_verifies_every_push_url(self) -> None:
         second = self.kb.parent / "kb-remote-2.git"
         subprocess.run(["git", "init", "-q", "--bare", str(second)], check=True)
