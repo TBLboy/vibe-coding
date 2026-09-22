@@ -58,6 +58,26 @@ def read_marker(root: Path) -> dict:
         raise StateError("invalid_format", str(exc)) from exc
 
 
+def _git_marker(path: Path) -> Path | None:
+    """Return ``path`` when it is a real Git marker, otherwise None.
+
+    A normal repository uses a ``.git`` directory containing ``HEAD``; a linked
+    worktree or submodule uses a ``.git`` file. Anything else - notably an empty
+    ``.git`` directory left behind by an aborted ``git init`` - is not a
+    repository and must not change how the work directory is identified.
+    """
+    try:
+        if path.is_symlink() or not path.exists():
+            return None
+        if path.is_file():
+            return path
+        if path.is_dir() and (path / "HEAD").is_file():
+            return path
+    except OSError:
+        return None
+    return None
+
+
 def git_context(root: Path) -> tuple[str, Path]:
     """Return the project-scoped state identity and the local state directory.
 
@@ -66,10 +86,20 @@ def git_context(root: Path) -> tuple[str, Path]:
     Git worktree the SQLite cache lives under the repository's Git directory, so it
     is never tracked or archived; a plain work directory keeps it in
     ``.project-log/.state``.
+
+    A plain work directory is the supported layout for a Project Log that owns
+    several nested repositories: the log sits beside them and reaches Git through
+    the knowledge-base archive. Detection looks for a real ``.git`` marker rather
+    than any directory named ``.git``, so an empty stray ``.git`` in an ancestor
+    (a common accident in a home directory) does not turn the work directory into
+    a false repository and abort every command.
     """
     root = root.resolve()
-    repository_present = any((parent / ".git").exists() for parent in (root, *root.parents))
-    if not repository_present:
+    marker = next(
+        (parent for parent in (root, *root.parents) if _git_marker(parent / ".git") is not None),
+        None,
+    )
+    if marker is None:
         identity = {"root": str(root), "branch": "local"}
         directory = root / ".project-log" / ".state"
     else:

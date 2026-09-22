@@ -145,6 +145,50 @@ class ProjectLogInitTests(unittest.TestCase):
             self.assertIn("Git worktree root", result.stdout)
             self.assertFalse((nested / ".project-log").exists())
 
+    def test_plain_work_directory_ignores_an_empty_ancestor_git_directory(self) -> None:
+        """An empty stray `.git` is not a repository and must not block init.
+
+        A plain work directory is the supported layout for a Project Log that owns
+        nested repositories, so an aborted `git init` in a parent directory (a
+        common accident in a home directory) cannot be allowed to abort every
+        command with a git_context_error.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = Path(temporary)
+            (workspace / ".git").mkdir()
+            work = workspace / "work"
+            work.mkdir()
+
+            result = run_vibe("--root", str(work), "init")
+
+            self.assertEqual(result.returncode, 0, result.stdout)
+            self.assertTrue((work / ".project-log/state-format.json").is_file())
+            status = run_vibe("--root", str(work), "status")
+            self.assertEqual(status.returncode, 0, status.stdout)
+
+    @unittest.skipUnless(shutil.which("git"), "git is required")
+    def test_plain_work_directory_keeps_the_log_outside_a_nested_repository(self) -> None:
+        """The work directory owns the log; the nested code repository stays separate."""
+        with tempfile.TemporaryDirectory() as temporary:
+            work = Path(temporary) / "work"
+            repository = work / "code"
+            repository.mkdir(parents=True)
+            subprocess.run(["git", "init", "-q", str(repository)], check=True)
+
+            result = run_vibe("--root", str(work), "init")
+
+            self.assertEqual(result.returncode, 0, result.stdout)
+            # The log lives beside the repository, and the repository does not track it.
+            self.assertTrue((work / ".project-log/state-format.json").is_file())
+            self.assertFalse((repository / ".project-log").exists())
+            tracked = subprocess.run(
+                ["git", "-C", str(repository), "status", "--porcelain"],
+                text=True, stdout=subprocess.PIPE, check=True,
+            ).stdout
+            self.assertNotIn("project-log", tracked)
+            # A non-Git work directory keeps its SQLite cache inside the Project Log.
+            self.assertTrue((work / ".project-log" / ".state").is_dir())
+
 
 if __name__ == "__main__":
     unittest.main()
