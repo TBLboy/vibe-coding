@@ -44,8 +44,9 @@ Only the `工程记录/` subdirectory within the knowledge base will be affected
    stale while unrelated files still stage, and a content filter or end-of-line
    conversion rewrites the ledger on the way into Git. Both would otherwise be reported
    as a successful archive.
-9. Fail unless the remote ref reports the archived revision after the push, so a remote
-   hook that rewrites or rejects the ref cannot be mistaken for a successful archive.
+9. Fail unless **every** push URL of that remote reports the archived revision after the
+   push, so a remote hook that rewrites or rejects the ref cannot be mistaken for a
+   successful archive.
 
 Re-running the archive is idempotent: unchanged logs produce no commit.
 
@@ -74,8 +75,16 @@ python3 "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/skills/a-project-log-arc
 - Pushes to the upstream of the checked-out branch only, with an explicit refspec, so
   `remote.<name>.push` or `push.default` can never redirect the archive to another ref.
   Detached HEAD and branches without an upstream are refused before anything is committed.
-- Verifies the remote ref after pushing and reports failure when the remote no longer
-  holds the archived revision.
+- Refuses a push target that resolves back to the knowledge base itself, because pushing
+  and verifying against the same repository would prove nothing.
+- Verifies every configured push URL after pushing and reports failure when any of them
+  does not hold the archived revision.
+- Pushes the whole fast-forward range of the archive branch, exactly like a normal
+  `git push`. Only the archive commit itself is path-limited to `工程记录/<project-name>`,
+  so keep unrelated local work off the branch that receives the archive.
+- Re-attempts a push an earlier run left behind: when nothing new needs committing but the
+  upstream ref does not hold the current revision, the archive pushes instead of reporting
+  `no-changes`.
 - Never copies the local SQLite cache (`.state/`) or Git internals.
 - Merges instead of replacing, so an existing KB copy is never deleted wholesale.
 - Commits with an explicit pathspec, so `<kb>/工程记录/` is the only thing the archive
