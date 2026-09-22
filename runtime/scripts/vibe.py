@@ -233,6 +233,10 @@ def main() -> int:
     exchange_sub.add_parser("finish")
     exchange_abandon = exchange_sub.add_parser("abandon")
     exchange_abandon.add_argument("--reason", required=True)
+    ledger = sub.add_parser("ledger", help="manage the Git-tracked Format 3 ledger")
+    ledger_sub = ledger.add_subparsers(dest="ledger_action", required=True)
+    ledger_sub.add_parser("export")
+    ledger_sub.add_parser("verify")
     migrate = sub.add_parser("migrate", help="manage legacy format migration")
     migrate_sub = migrate.add_subparsers(dest="migrate_action", required=True)
     migrate_sub.add_parser("preview")
@@ -437,6 +441,13 @@ def main() -> int:
                 result = acknowledge_export(root)
             else:
                 result = abandon_export(root, args.reason)
+        elif args.command == "ledger":
+            from state_ledger import export_ledger, verify_ledger
+
+            if args.ledger_action == "export":
+                result = export_ledger(open_store(root))
+            else:
+                result = verify_ledger(root)
         elif args.command == "migrate":
             if args.migrate_action == "preview":
                 result = migration_preview(root)

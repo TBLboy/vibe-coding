@@ -670,6 +670,17 @@ vibe 恢复当前项目，先读取 current-session、任务、证据和 Loop �
 
 归档前应先完成当前阶段验证。归档 Skill 会把项目日志同步到用户指定的个人知识库；归档本身不应删除项目工作区中的 `.project-log/`。
 
+### 导出与校验 Format 3 账本
+
+```bash
+PY="$(cat "${CODEX_HOME:-$HOME/.codex}/vibe-python")"
+VIBE="$HOME/.codex/vibe-workflow/scripts/vibe.py"
+"$PY" "$VIBE" --root . ledger export
+"$PY" "$VIBE" --root . ledger verify
+```
+
+`ledger export` 把结构化历史逐条无损写入 `.project-log/ledger/v1/ledger.jsonl`（追加式、Git 跟踪），可以重复执行且幂等；`ledger verify` 从账本重放并与本机 SQLite 逐表比对，输出 `matches` 与 `mismatches`。账本是唯一持久事实源，`.project-log/.state/` 下的 SQLite 只是可重建缓存，归档时不要提交 `.state/`。
+
 ---
 
 ## 10. 常见问题排查

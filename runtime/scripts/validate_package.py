@@ -23,6 +23,8 @@ ALLOWED_FRONTMATTER = {"name", "description", "license", "compatibility", "metad
 REQUIRED_RUNTIME = {
     "scripts/framework_info.py",
     "scripts/state_store.py",
+    "scripts/state_replay.py",
+    "scripts/state_ledger.py",
     "scripts/state_views.py",
     "scripts/state_context.py",
     "scripts/state_exchange.py",
