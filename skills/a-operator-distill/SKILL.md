@@ -2,7 +2,7 @@
 name: a-operator-distill
 description: Distill repeated, evidence-backed project lessons and user working preferences into staged personal operating rules, reusable Skills, templates, or tool improvements without fossilizing one-off behavior.
 license: MIT
-compatibility: codex
+compatibility: opencode
 metadata:
   stage: distillation
   output: knowledge-candidates

@@ -2,7 +2,7 @@
 name: a-project-log-archive
 description: Archive the current project's .project-log to the centralized knowledge base for later analysis. Use when the user wants to save progress, archive records, or sync project logs.
 license: MIT
-compatibility: codex
+compatibility: opencode
 metadata:
   type: tool-skill-pack
   output: synced-and-pushed-project-log
@@ -42,7 +42,7 @@ Re-running the archive is idempotent: unchanged logs produce no commit.
 ## Execution
 
 ```bash
-python3 ~/.codex/skills/a-project-log-archive/scripts/archive.py \
+python3 "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/skills/a-project-log-archive/scripts/archive.py" \
   --project-root <project-root-path>
 ```
 

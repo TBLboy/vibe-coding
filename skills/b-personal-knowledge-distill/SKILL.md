@@ -2,7 +2,7 @@
 name: b-personal-knowledge-distill
 description: Curate approved, evidence-backed project lessons into a separate personal knowledge base with staged drafts, duplicate checks, provenance, review, and controlled synchronization.
 license: MIT
-compatibility: codex
+compatibility: opencode
 metadata:
   type: personal-knowledge-skill-pack
   output: knowledge-base-update-proposal

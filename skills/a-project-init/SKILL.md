@@ -2,7 +2,7 @@
 name: a-project-init
 description: Initialize a new or existing project by creating .project-log through the existing chain and establishing or safely updating the root AGENTS.md with the managed general development rules and project-specific rules.
 license: MIT
-compatibility: codex
+compatibility: opencode
 metadata:
   stage: project-init
   output: initialized-project
@@ -19,7 +19,7 @@ metadata:
 
 ## Trigger
 
-用户要求“初始化项目 / 初始化该项目 / 项目初始化”时使用。子文件夹的 `AGENTS.md` 由 Codex 原生机制读取且优先级更高，本 skill 只维护项目根目录文件，不处理子文件夹。
+用户要求“初始化项目 / 初始化该项目 / 项目初始化”时使用。子文件夹的 `AGENTS.md` 由 OpenCode 原生机制读取且优先级更高，本 skill 只维护项目根目录文件，不处理子文件夹。
 
 ## Workflow
 
@@ -30,8 +30,10 @@ metadata:
    - 已在 Git 仓库中（含刚初始化的仓库）：询问用户该仓库属于“个人仓库”还是“团队协作仓库”，得到明确答复后再继续。
 3. 运行确定性脚本（脚本内部会调用默认 format 2 的 `.project-log` 创建链路）：
    ```bash
-   VIBE_RUNTIME="${CODEX_HOME:-$HOME/.codex}/vibe-workflow"
-   python3 "$VIBE_RUNTIME/scripts/init_project_agents.py" \
+   VIBE_CONFIG="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}"
+   VIBE_RUNTIME="${VIBE_RUNTIME:-$VIBE_CONFIG/vibe-workflow}"
+   VIBE_PYTHON="${VIBE_PYTHON:-$(cat "$VIBE_CONFIG/vibe-python")}"
+   "$VIBE_PYTHON" "$VIBE_RUNTIME/scripts/init_project_agents.py" \
      --target <project-root> [--project-rules "<项目级规则>"]
    ```
    - 若脚本不在运行时中，可在仓库内运行 `skills/a-project-init/scripts/init_project_agents.py`。

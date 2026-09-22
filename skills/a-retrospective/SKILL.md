@@ -2,7 +2,7 @@
 name: a-retrospective
 description: Review a completed increment's decisions, actions, results, failures, rework, validation quality, and workflow friction, then create concrete improvement actions and evidence-backed knowledge candidates.
 license: MIT
-compatibility: codex
+compatibility: opencode
 metadata:
   stage: retrospective
   output: retrospective-record

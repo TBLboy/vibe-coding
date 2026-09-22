@@ -18,7 +18,11 @@ def find_init_project_py() -> Path:
     env_runtime = os.environ.get("VIBE_RUNTIME")
     if env_runtime:
         candidates.append(Path(env_runtime) / "scripts" / "init_project.py")
-    candidates.append(Path.home() / ".codex" / "vibe-workflow" / "scripts" / "init_project.py")
+    opencode_config = Path(
+        os.environ.get("OPENCODE_CONFIG_DIR")
+        or (Path.home() / ".config" / "opencode")
+    )
+    candidates.append(opencode_config / "vibe-workflow" / "scripts" / "init_project.py")
     candidates.append(Path(__file__).resolve().parents[3] / "runtime" / "scripts" / "init_project.py")
     for candidate in candidates:
         if candidate.is_file():

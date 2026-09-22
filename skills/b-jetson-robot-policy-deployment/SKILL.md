@@ -2,7 +2,7 @@
 name: b-jetson-robot-policy-deployment
 description: Plan, implement, audit, or explain safe edge deployment of robot policy models on NVIDIA Jetson Orin, including PyTorch, ONNX, TensorRT, sensor/action adapters, controller integration, and staged validation. Use only when the user explicitly requests Jetson robot-policy deployment work or a related expert review.
 license: MIT
-compatibility: codex
+compatibility: opencode
 metadata:
   type: robotics-edge-deployment-skill-pack
   classification: b-domain-specialized-operation

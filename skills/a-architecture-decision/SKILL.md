@@ -2,7 +2,7 @@
 name: a-architecture-decision
 description: Convert an approved requirement baseline and technical recommendation into explicit module boundaries, interfaces, data flows, failure handling, operational constraints, and recorded architecture decisions.
 license: MIT
-compatibility: codex
+compatibility: opencode
 metadata:
   stage: architecture-decision
   output: architecture-baseline

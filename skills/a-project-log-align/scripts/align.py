@@ -178,7 +178,11 @@ def _python_executable() -> str:
     override = os.environ.get("VIBE_PYTHON")
     if override:
         return override
-    configured = Path.home() / ".codex" / "vibe-python"
+    config_root = Path(
+        os.environ.get("OPENCODE_CONFIG_DIR")
+        or (Path.home() / ".config" / "opencode")
+    )
+    configured = config_root / "vibe-python"
     if configured.is_file():
         value = configured.read_text(encoding="utf-8").strip()
         if value:
@@ -190,8 +194,11 @@ def _vibe_runtime() -> Path:
     configured = os.environ.get("VIBE_RUNTIME")
     if configured:
         return Path(configured).expanduser()
-    codex_home = Path(os.environ.get("CODEX_HOME") or (Path.home() / ".codex"))
-    return codex_home / "vibe-workflow"
+    config_root = Path(
+        os.environ.get("OPENCODE_CONFIG_DIR")
+        or (Path.home() / ".config" / "opencode")
+    )
+    return config_root / "vibe-workflow"
 
 
 def run_vibe(root: Path, *arguments: str) -> dict:

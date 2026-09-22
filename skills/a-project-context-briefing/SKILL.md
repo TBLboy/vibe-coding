@@ -2,7 +2,7 @@
 name: a-project-context-briefing
 description: Package a self-contained, evidence-based project or problem brief for another AI, teammate, vendor, forum, or issue tracker without inventing missing context.
 license: MIT
-compatibility: codex
+compatibility: opencode
 metadata:
   stage: session-management
   output: external-problem-brief

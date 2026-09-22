@@ -2,7 +2,7 @@
 name: a-skill-evolution
 description: Convert an approved, repeated, evidence-backed operator lesson into a minimal constitution, Agent, Skill, template, plugin, or evaluation change and test it before promotion.
 license: MIT
-compatibility: codex
+compatibility: opencode
 metadata:
   stage: distillation
   output: encoded-asset

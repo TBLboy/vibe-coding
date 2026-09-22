@@ -2,7 +2,7 @@
 name: b-multi-role-ux-audit
 description: Audit a running web application through real browser workflows for multiple user roles, separately reporting correctness defects and user-experience friction.
 license: MIT
-compatibility: codex
+compatibility: opencode
 metadata:
   type: web-application-audit-skill-pack
   output: prioritized-role-audit-report

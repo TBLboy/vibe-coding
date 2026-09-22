@@ -2,7 +2,7 @@
 name: b-background-task-runner
 description: Execute long-running shell commands in background without blocking the agent, with persistent logging and progress checking.
 license: MIT
-compatibility: codex
+compatibility: opencode
 metadata:
   stage: operational
   output: background-process

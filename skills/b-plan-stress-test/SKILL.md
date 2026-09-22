@@ -2,7 +2,7 @@
 name: b-plan-stress-test
 description: Stress-test a proposed plan or design through one focused question at a time, resolving decision dependencies with evidence and a recommended answer.
 license: MIT
-compatibility: codex
+compatibility: opencode
 metadata:
   type: decision-skill-pack
   output: resolved-design-questions

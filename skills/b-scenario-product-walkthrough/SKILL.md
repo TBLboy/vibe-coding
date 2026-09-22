@@ -2,7 +2,7 @@
 name: b-scenario-product-walkthrough
 description: Explain a complex product, platform, framework, workflow, or Skill Pack through a realistic end-to-end work scenario instead of a feature list. Use when the user asks how a product works, how to use it, what a workflow does, or requests a concrete simulated walkthrough.
 license: MIT
-compatibility: codex
+compatibility: opencode
 metadata:
   type: communication-skill-pack
   output: scenario-driven-product-walkthrough

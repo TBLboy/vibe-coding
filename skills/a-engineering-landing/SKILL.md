@@ -2,7 +2,7 @@
 name: a-engineering-landing
 description: Implement an approved engineering task with controlled scope, traceability to business logic, incremental validation, project-log updates, and explicit handling of deviations or newly discovered ambiguity.
 license: MIT
-compatibility: codex
+compatibility: opencode
 metadata:
   stage: implementation
   output: implemented-change

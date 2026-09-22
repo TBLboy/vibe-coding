@@ -2,7 +2,7 @@
 name: a-business-clarify
 description: Clarify vague business intent into atomic, testable business logic through active evidence gathering, one-question-at-a-time interviewing, controlled inference, and structured project-log updates.
 license: MIT
-compatibility: codex
+compatibility: opencode
 metadata:
   stage: business-clarification
   output: atomic-business-logic

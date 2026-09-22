@@ -2,7 +2,7 @@
 name: a-session-handoff
 description: Persist a compact, auditable handoff before ending, compacting, or switching sessions so work can resume in under a minute without copying the whole conversation.
 license: MIT
-compatibility: codex
+compatibility: opencode
 metadata:
   stage: session-management
   output: current-session
@@ -28,4 +28,4 @@ metadata:
 - **超限归档**：文件超过约 50-100 KB 或会话区块达到约 10 条时，把旧区块移到 `.project-log/docs/archive/`，不删除任何记录。
 - **单一事实源**：精确下一步以 `loop/active-run.yaml`、`loop/handoff.md` 为准；不手工重排机器维护的结构化状态文件。
 
-同时运行 `loopctl handoff` 生成 `.project-log/loop/handoff.md`。原生 Goal 进入 paused、blocked、budget/usage limited、cleared 或 replaced 时，Project Goal 保持不变。
+同时运行 `loopctl handoff` 生成 `.project-log/loop/handoff.md`。Handoff 只记录 Project Goal、Task 与 Run 状态；Project Goal 不因会话状态变化而改变。OpenCode 1.18.31 无内建会话 Goal。

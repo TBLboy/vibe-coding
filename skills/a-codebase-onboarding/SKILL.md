@@ -2,7 +2,7 @@
 name: a-codebase-onboarding
 description: Onboard an existing codebase by mapping architecture, current observable behavior, tests, data, integrations, and risks without treating code behavior as automatically authoritative business logic.
 license: MIT
-compatibility: codex
+compatibility: opencode
 metadata:
   stage: onboarding
   output: evidence-map

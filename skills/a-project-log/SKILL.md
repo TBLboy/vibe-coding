@@ -1,7 +1,7 @@
 ---
 name: a-project-log
 description: 维护以原子业务逻辑为事实源的项目记忆、需求基线、架构、生命周期任务、决策行动结果、验证证据、三方对齐、工作留痕和会话恢复状态。
-compatibility: codex
+compatibility: opencode
 metadata:
   version: "2.0-draft"
   workflow: "vibe-goal"
@@ -19,7 +19,10 @@ metadata:
 2. 使用全局运行时的正式入口创建 format 2 项目，且不覆盖已有项目文件：
 
 ```bash
-python3 "${CODEX_HOME:-$HOME/.codex}/vibe-workflow/scripts/vibe.py" --root . init
+VIBE_CONFIG="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}"
+VIBE_RUNTIME="${VIBE_RUNTIME:-$VIBE_CONFIG/vibe-workflow}"
+VIBE_PYTHON="${VIBE_PYTHON:-$(cat "$VIBE_CONFIG/vibe-python")}"
+"$VIBE_PYTHON" "$VIBE_RUNTIME/scripts/vibe.py" --root . init
 ```
 
 3. 运行校验依赖安装和项目校验；若全局运行时安装在其他目录，使用实际路径替换上述脚本路径。
@@ -33,7 +36,7 @@ python3 "${CODEX_HOME:-$HOME/.codex}/vibe-workflow/scripts/vibe.py" --root . ini
 
 ## 记录分层
 
-- format 2：`records` 保存业务原子、需求基线、决策、架构、研究、对齐、复盘与蒸馏；`evidence` 保存证据状态、覆盖范围与哈希绑定；`reviews` 保存独立复核；状态库按 Git 分支上下文隔离。
+- format 2：`records` 保存业务原子、需求基线、决策、架构、研究、对齐、复盘与蒸馏；`evidence` 保存证据状态、覆盖范围与哈希绑定；`reviews` 保存独立复核；状态 identity 属于项目根，不随 Git 分支切换而丢失。
 - 旧格式：`business-logic/`、`requirements/`、`research/`、`architecture/`、`tasks/`、`decisions/`、`verification/`、`alignment/`、`work-trace/`、`retrospective/`、`distillation/` 仍按 YAML 分层读取。
 - `progress.md`、`current-session.md`、生成的 `handoff.md` 是面向人的摘要；format 2 的精确状态以状态库为单一事实源。
 - `docs/archive/`：长 Markdown 摘要的旧段落归档位置。
@@ -47,7 +50,7 @@ python3 "${CODEX_HOME:-$HOME/.codex}/vibe-workflow/scripts/vibe.py" --root . ini
 - 代码差异不能自动改写业务逻辑；
 - 只记录可复核的决策摘要，不记录冗长隐性推理；
 - 会话结束或压缩前更新 current-session、任务、验证和下一步。
-- 原生 `/goal` 管线程执行；Project Goal 与 Loop 状态不得被原生 Goal 临时措辞反向覆盖。
+- OpenCode 1.18.31 无内建会话 Goal；Project Goal 与 Loop 状态是唯一权威完成事实，当前版本不得调用不存在的会话 Goal 入口。
 
 ## 长文档维护约定
 

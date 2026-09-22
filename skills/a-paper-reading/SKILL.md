@@ -2,7 +2,7 @@
 name: a-paper-reading
 description: Read academic papers at selectable depth from relevance screening through structured understanding, methodological reconstruction, critical evaluation, and project transfer, producing traceable notes rather than generic summaries.
 license: MIT
-compatibility: codex
+compatibility: opencode
 metadata:
   domain: research
   levels: L0-L4

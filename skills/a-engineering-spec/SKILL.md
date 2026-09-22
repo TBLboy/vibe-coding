@@ -2,7 +2,7 @@
 name: a-engineering-spec
 description: Produce a task-specific engineering specification that maps business logic and architecture to concrete modules, interfaces, data changes, failure behavior, tests, migration, rollout, and rollback.
 license: MIT
-compatibility: codex
+compatibility: opencode
 metadata:
   stage: engineering-spec
   output: task-specification

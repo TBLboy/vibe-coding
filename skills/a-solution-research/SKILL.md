@@ -2,7 +2,7 @@
 name: a-solution-research
 description: Research and compare mature technical solutions for a precise engineering problem, then recommend direct use, adaptation, reference implementation, or custom development with traceable evidence.
 license: MIT
-compatibility: codex
+compatibility: opencode
 metadata:
   stage: solution-research
   output: technical-recommendation

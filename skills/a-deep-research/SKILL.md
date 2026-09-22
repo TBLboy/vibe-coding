@@ -2,7 +2,7 @@
 name: a-deep-research
 description: Conduct decision-oriented technical, product, market, or strategy research with scoped questions, traceable evidence, contrary evidence, trade-offs, and an actionable recommendation.
 license: MIT
-compatibility: codex
+compatibility: opencode
 metadata:
   stage: research
   output: decision-research-report

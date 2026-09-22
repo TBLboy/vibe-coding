@@ -2,7 +2,7 @@
 name: a-project-log-align
 description: Align a work folder's .project-log with the archived copy in the knowledge base, merging the Git ledger and rebuilding the local SQLite projection. Use when moving to a new machine, resuming a project whose logs live in the knowledge base, or syncing a pulled archive into the current work folder.
 license: MIT
-compatibility: codex
+compatibility: opencode
 metadata:
   type: tool-skill-pack
   output: aligned-project-log-and-rebuilt-sqlite
@@ -51,7 +51,7 @@ If none is set, the script reports the missing config and stops.
 ## Execution
 
 ```bash
-python3 ~/.codex/skills/a-project-log-align/scripts/align.py \
+python3 "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/skills/a-project-log-align/scripts/align.py" \
   --project-root <work-folder-path>
 ```
 

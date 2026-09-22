@@ -2,7 +2,7 @@
 name: b-web-research-tooling
 description: Retrieve current web evidence safely for research, troubleshooting, and fact verification using available search and fetch tools with source-quality and secret-handling discipline.
 license: MIT
-compatibility: codex
+compatibility: opencode
 metadata:
   type: tooling-skill-pack
   output: sourced-web-evidence

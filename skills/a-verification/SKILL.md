@@ -2,7 +2,7 @@
 name: a-verification
 description: Verify implementation against atomic acceptance criteria using traceable tests and evidence, distinguish partial or environment-limited validation, and prevent unverified work from being marked complete.
 license: MIT
-compatibility: codex
+compatibility: opencode
 metadata:
   stage: verification
   output: acceptance-evidence

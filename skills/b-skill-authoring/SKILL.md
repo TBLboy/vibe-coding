@@ -1,8 +1,8 @@
 ---
 name: b-skill-authoring
-description: Design and write a focused Codex Skill with clear triggers, progressive disclosure, optional deterministic helpers, and reviewable resource boundaries.
+description: Design and write a focused OpenCode Skill with clear triggers, progressive disclosure, optional deterministic helpers, and reviewable resource boundaries.
 license: MIT
-compatibility: codex
+compatibility: opencode
 metadata:
   type: authoring-skill-pack
   output: draft-skill-package
@@ -24,7 +24,7 @@ Before creating files, make and record all five decisions below.
 
 1. **Classify the capability.** Use `a-<kebab-case-name>` only when it is a stable, cross-project, cross-lifecycle framework method that governs how work is performed or recorded. Use `b-<kebab-case-name>` for a concrete domain, tool, interaction mode, audit, communication pattern, or specialized operation.
 2. **Check for overlap and collisions.** Inspect existing `skills/` and Vibe Coding main-agent routing. Extend an existing Skill when the new behavior shares its boundary; do not create a synonym or duplicate capability. The folder name and frontmatter `name` must be identical, lowercase kebab-case, and start with the chosen `a-` or `b-` prefix.
-3. **Use the Skill as the entry point.** Codex discovers `SKILL.md` directly. Do not require an OpenCode-style same-named command file.
+3. **Use the Skill as the entry point.** OpenCode discovers `SKILL.md` directly. A same-named command is optional glue, not a substitute for the Skill contract.
 4. **Decide automatic versus explicit routing.** Add a Vibe Coding main-agent routing rule only when user language can identify the capability reliably, activation is low-risk and low-cost, and loading it does not write external systems, mutate a knowledge base, run destructive operations, create broad audits, or create a snapshot/package. Otherwise keep it explicit-only and state the reason in the Skill.
 5. **Implement and verify the decision.** For an automatic route, add precise intent/trigger wording and the exact Skill name under `## Skill 路由` in the global main-agent prompt. Verify the route refers to an existing Skill. Update the resource snapshot after installation so the new capability migrates with the current Vibe Coding resource set.
 
@@ -35,7 +35,7 @@ Default safety rule: a vague request never justifies automatically starting a hi
 Create under the current Vibe Coding resource tree:
 
 ```text
-~/.config/codex/skills/<a-or-b-kebab-case-name>/
+~/.config/opencode/skills/<a-or-b-kebab-case-name>/
 ├── SKILL.md
 ├── REFERENCE.md      # only for rarely needed detail
 ├── EXAMPLES.md       # only when examples clarify behavior

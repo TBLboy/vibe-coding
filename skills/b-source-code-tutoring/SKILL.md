@@ -2,6 +2,7 @@
 name: b-source-code-tutoring
 description: Teach an unfamiliar codebase through concrete source-level runtime traces rather than high-level module summaries. Use when the user asks to understand code deeply, read source together, explain a function line by line, trace a request/task/event through code, understand state variables, or build an internal model of an architecture before changing it.
 license: MIT
+compatibility: opencode
 metadata:
   type: interactive-code-learning
   routing: explicit-only

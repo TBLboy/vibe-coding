@@ -2,7 +2,7 @@
 name: a-business-code-align
 description: Audit and reconcile business logic, code implementation, configuration, and tests by building traceability, classifying mismatches, fixing safe defects, and escalating semantic conflicts without letting code silently redefine requirements.
 license: MIT
-compatibility: codex
+compatibility: opencode
 metadata:
   stage: alignment
   output: alignment-findings

@@ -2,7 +2,7 @@
 name: b-concise-communication
 description: Switch to a persistent ultra-concise communication mode while preserving technical accuracy. Use when the user asks for caveman mode, fewer tokens, terse answers, or brief communication.
 license: MIT
-compatibility: codex
+compatibility: opencode
 metadata:
   type: communication-skill-pack
   output: terse-technical-response

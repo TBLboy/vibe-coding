@@ -2,7 +2,7 @@
 name: a-work-trace
 description: Record a compact, auditable Context-Hypothesis-Decision-Action-Observation-Result-Lesson chain for meaningful work, so the user's working method can be reviewed and improved without storing verbose hidden reasoning.
 license: MIT
-compatibility: codex
+compatibility: opencode
 metadata:
   workflow: trace
   output: work-trace

@@ -57,6 +57,26 @@ REQUIRED_RUNTIME = {
     "project-log-template/loop/active-run.yaml",
     "project-log-template/loop/evidence-index.yaml",
 }
+REQUIRED_OPENCODE = {
+    "AGENTS.md",
+    "opencode.json",
+    "agents/vibe-main.md",
+    "agents/business-analyst.md",
+    "agents/codebase-onboarder.md",
+    "agents/solution-researcher.md",
+    "agents/implementation-builder.md",
+    "agents/verification-reviewer.md",
+    "agents/alignment-reviewer.md",
+    "agents/paper-reader.md",
+    "agents/workflow-distiller.md",
+    "commands/vibe-start.md",
+    "commands/vibe-resume.md",
+    "commands/vibe-plan.md",
+    "commands/vibe-implement.md",
+    "commands/vibe-verify.md",
+    "commands/vibe-status.md",
+    "commands/vibe-retro.md",
+}
 REQUIRED_PACKAGE_FILES = {
     "AI_INSTALL.md",
     "AI_UPGRADE.md",
@@ -117,6 +137,9 @@ def validate(root: Path) -> list[str]:
     for relative in sorted(REQUIRED_RUNTIME):
         if not (root / "runtime" / relative).is_file():
             errors.append(f"missing runtime asset: runtime/{relative}")
+    for relative in sorted(REQUIRED_OPENCODE):
+        if not (root / "runtime" / "opencode" / relative).is_file():
+            errors.append(f"missing OpenCode asset: runtime/opencode/{relative}")
 
     roles_path = root / "runtime/agents/roles.json"
     if roles_path.is_file():

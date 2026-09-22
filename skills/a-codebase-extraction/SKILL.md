@@ -2,7 +2,7 @@
 name: a-codebase-extraction
 description: Extract reusable architecture patterns, debugging lessons, engineering knowledge, and future improvements from a mature codebase or completed milestone with evidence and applicability boundaries.
 license: MIT
-compatibility: codex
+compatibility: opencode
 metadata:
   stage: retrospective
   output: reusable-project-lessons

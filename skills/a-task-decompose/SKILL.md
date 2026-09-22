@@ -2,7 +2,7 @@
 name: a-task-decompose
 description: Decompose an approved goal into dependency-aware, vertically sliced, independently verifiable tasks mapped to lifecycle phases, business logic, decisions, outputs, and completion evidence.
 license: MIT
-compatibility: codex
+compatibility: opencode
 metadata:
   stage: task-decomposition
   output: task-list
