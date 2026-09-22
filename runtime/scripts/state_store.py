@@ -1917,6 +1917,135 @@ class Store:
             return {"status": "imported", "snapshot_id": snapshot_id,
                     "local_revision": sequence, "imported_commands": len(appended)}
 
+    def _write_projection(self, connection, state: dict, revision: int) -> None:
+        """Replace the derived entity tables with a replayed projection.
+
+        Entity rows are a cache: only the ledger is authoritative, so rebuilding
+        them from replay is always safe. Command and event rows are never touched
+        here, which keeps the ledger append-only.
+        """
+        connection.execute("DELETE FROM reviews")
+        connection.execute("DELETE FROM evidence")
+        connection.execute("DELETE FROM record_links")
+        connection.execute("DELETE FROM records")
+        connection.execute("DELETE FROM blockers")
+        connection.execute("UPDATE tasks SET run_id = NULL")
+        connection.execute("DELETE FROM runs")
+        connection.execute("DELETE FROM tasks")
+        connection.execute("DELETE FROM goals")
+        for row in state["goals"]:
+            connection.execute(
+                "INSERT INTO goals VALUES (?, ?, ?, ?, ?, ?)",
+                tuple(row[column] for column in _BUNDLE_COLUMNS["goals"]))
+        for row in state["tasks"]:
+            detached = dict(row, run_id=None)
+            connection.execute(
+                "INSERT INTO tasks VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                tuple(detached[column] for column in _BUNDLE_COLUMNS["tasks"]))
+        for row in state["runs"]:
+            connection.execute(
+                "INSERT INTO runs VALUES (?, ?, ?, ?, ?)",
+                tuple(row[column] for column in _BUNDLE_COLUMNS["runs"]))
+        for row in state["tasks"]:
+            if row["run_id"] is not None:
+                connection.execute(
+                    "UPDATE tasks SET run_id = ? WHERE id = ?", (row["run_id"], row["id"]))
+        for row in state["blockers"]:
+            connection.execute(
+                "INSERT INTO blockers VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                tuple(row[column] for column in _BUNDLE_COLUMNS["blockers"]))
+        for row in state["records"]:
+            connection.execute(
+                "INSERT INTO records VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                tuple(row[column] for column in _BUNDLE_COLUMNS["records"]))
+        for row in state["record_links"]:
+            connection.execute(
+                "INSERT INTO record_links VALUES (?, ?, ?, ?, ?, ?)",
+                tuple(row[column] for column in _BUNDLE_COLUMNS["record_links"]))
+        for row in state["evidence"]:
+            connection.execute(
+                "INSERT INTO evidence VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                tuple(row[column] for column in _BUNDLE_COLUMNS["evidence"]))
+        for row in state["reviews"]:
+            connection.execute(
+                "INSERT INTO reviews VALUES (?, ?, ?, ?, ?, ?, ?)",
+                tuple(row[column] for column in _BUNDLE_COLUMNS["reviews"]))
+        connection.execute(
+            "UPDATE metadata SET local_revision = ? WHERE singleton = 1", (revision,))
+        connection.execute(
+            """INSERT INTO projection_jobs VALUES (1, ?)
+               ON CONFLICT(singleton) DO UPDATE SET local_revision = excluded.local_revision""",
+            (revision,))
+
+    def sync_from_ledger(self, entries) -> dict:
+        """Reconcile this store with the Git ledger, appending or rebuilding.
+
+        The ledger is authoritative. Shared commands must match byte-for-byte;
+        missing commands are appended at their ledger position; a projection that
+        disagrees with replay is rebuilt whole rather than patched.
+        """
+        from state_replay import reduce_ledger
+
+        entries = list(entries)
+        state = reduce_ledger(entries)
+        ledger_ids = {row["command_id"] for row in entries}
+        with self._connection(write=True) as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            metadata = self._metadata(connection)
+            local = {
+                row["command_id"]: dict(row)
+                for row in connection.execute("SELECT * FROM commands")
+            }
+            for row in entries:
+                known = local.get(row["command_id"])
+                if known is None:
+                    continue
+                if any(known[key] != row[key] for key in (
+                        "origin_kind", "origin_context_id", "origin_revision", "action",
+                        "request_json", "request_hash", "receipt_json", "created_at")):
+                    raise StateError(
+                        "history_rewritten", f"Ledger rewrites shared command {row['command_id']}"
+                    )
+            if set(local) - ledger_ids:
+                raise StateError(
+                    "ledger_behind",
+                    "Local state has commands the ledger is missing; export before attaching",
+                )
+            appended = [row for row in entries if row["command_id"] not in local]
+            if not appended:
+                if self._entity_rows(connection) == state:
+                    return {"status": "identical", "revision": len(entries), "appended": 0}
+                self._write_projection(connection, state, len(entries))
+                problems = self._verify_ledger(connection)
+                if problems:
+                    raise StateError("invalid_ledger", problems[0])
+                connection.commit()
+                return {"status": "rebuilt", "revision": len(entries), "appended": 0}
+            for index, row in enumerate(entries, start=1):
+                if row["local_sequence"] != index:
+                    raise StateError("invalid_ledger", "Ledger sequences are not contiguous")
+                if row["command_id"] in local:
+                    continue
+                connection.execute(
+                    """INSERT INTO commands (command_id, local_sequence, origin_kind, origin_context_id,
+                           origin_revision, action, request_json, request_hash, receipt_json, created_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (row["command_id"], index, row["origin_kind"], row["origin_context_id"],
+                     row["origin_revision"], row["action"], row["request_json"], row["request_hash"],
+                     row["receipt_json"], row["created_at"]))
+                connection.execute(
+                    """INSERT INTO events (local_sequence, command_id, origin_kind, origin_context_id,
+                           origin_revision, action, request_hash, created_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (index, row["command_id"], row["origin_kind"], row["origin_context_id"],
+                     row["origin_revision"], row["action"], row["request_hash"], row["created_at"]))
+            self._write_projection(connection, state, len(entries))
+            problems = self._verify_ledger(connection)
+            if problems:
+                raise StateError("invalid_ledger", problems[0])
+            connection.commit()
+            return {"status": "appended", "revision": len(entries), "appended": len(appended)}
+
     def validate(self) -> list[str]:
         """Return diagnostics, or an empty list; audit never repairs authority."""
         try:

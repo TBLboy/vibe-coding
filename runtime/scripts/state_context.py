@@ -134,16 +134,33 @@ def initialize(root: Path) -> Store:
 
 
 def attach(root: Path) -> Store:
-    """Create this worktree's local state database for an existing format marker."""
+    """Create or reconcile this worktree's local state database from the Git ledger.
+
+    A clean clone has no local SQLite, so attach builds one and replays the whole
+    ledger into it. If a local store already exists, it is reconciled instead:
+    an identical projection is left alone, a stale projection is rebuilt, and
+    ledger events the store has not seen are appended.
+    """
+    return attach_with_report(root)[0]
+
+
+def attach_with_report(root: Path) -> tuple[Store, dict]:
+    """Attach the worktree store and report how the ledger reconciliation went."""
     root = root.resolve()
     marker = read_marker(root)
     context_id, directory = git_context(root)
     path = directory / marker["project_id"] / context_id / "state.sqlite3"
-    if path.exists() or path.is_symlink():
-        raise StateError("store_exists", "This worktree context already has local state")
+    from state_ledger import ledger_path, read_ledger
+
+    entries = read_ledger(ledger_path(root))
     store = Store(path, marker["project_id"], context_id, root)
-    store.initialize()
-    return store
+    if not (path.exists() or path.is_symlink()):
+        store.initialize()
+    if entries:
+        report = store.sync_from_ledger(entries)
+    else:
+        report = {"status": "empty", "revision": store.status()["revision"], "appended": 0}
+    return store, report
 
 
 def apply_command(root: Path, envelope: dict) -> dict:

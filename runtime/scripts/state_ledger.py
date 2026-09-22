@@ -24,10 +24,11 @@ from state_store import StateError, _json
 
 LEDGER_SCHEMA_VERSION = 1
 LEDGER_RELATIVE = Path(".project-log") / "ledger" / "v1" / "ledger.jsonl"
+GENESIS_HASH = ""
 EVENT_FIELDS = (
     "schema_version", "command_id", "origin_kind", "origin_context_id",
     "origin_revision", "action", "request", "request_hash", "receipt",
-    "created_at",
+    "created_at", "previous_hash", "event_hash",
 )
 
 
@@ -35,8 +36,8 @@ def ledger_path(root: Path) -> Path:
     return Path(root).resolve() / LEDGER_RELATIVE
 
 
-def _event(row: dict) -> dict:
-    """Build one ledger event, proving the structured form is byte-lossless."""
+def _event_body(row: dict, previous_hash: str) -> dict:
+    """Build one ledger event body, proving the structured form is byte-lossless."""
     try:
         request = json.loads(row["request_json"])
         receipt = json.loads(row["receipt_json"])
@@ -59,19 +60,44 @@ def _event(row: dict) -> dict:
         "request_hash": row["request_hash"],
         "receipt": receipt,
         "created_at": row["created_at"],
+        "previous_hash": previous_hash,
     }
+
+
+def _seal(body: dict) -> dict:
+    """Append the hash that chains this event to the one before it."""
+    digest = hashlib.sha256(
+        (body["previous_hash"] + "\n" + _json(body)).encode("utf-8")
+    ).hexdigest()
+    sealed = dict(body)
+    sealed["event_hash"] = digest
+    return sealed
+
+
+def _verify_seal(event: dict) -> None:
+    body = {key: event[key] for key in event if key != "event_hash"}
+    digest = hashlib.sha256(
+        (body["previous_hash"] + "\n" + _json(body)).encode("utf-8")
+    ).hexdigest()
+    if digest != event.get("event_hash"):
+        raise StateError(
+            "invalid_ledger", f"Ledger event {event.get('command_id')} failed its hash chain check"
+        )
 
 
 def render_ledger(rows) -> str:
     """Serialize ordered command rows into canonical JSONL ledger text."""
     lines = []
+    previous_hash = GENESIS_HASH
     for index, row in enumerate(rows, start=1):
         if row["local_sequence"] != index:
             raise StateError(
                 "invalid_ledger",
                 "Command sequences are not contiguous; refusing to export a lossy ledger",
             )
-        lines.append(_json(_event(row)))
+        event = _seal(_event_body(row, previous_hash))
+        previous_hash = event["event_hash"]
+        lines.append(_json(event))
     return "".join(line + "\n" for line in lines)
 
 
@@ -85,6 +111,7 @@ def read_ledger(path: Path) -> list[dict]:
     except (OSError, UnicodeError) as error:
         raise StateError("invalid_ledger", f"Cannot read ledger: {error}") from error
     entries: list[dict] = []
+    previous_hash = GENESIS_HASH
     for number, line in enumerate(text.splitlines(), start=1):
         if not line.strip():
             continue
@@ -98,6 +125,10 @@ def read_ledger(path: Path) -> list[dict]:
             raise StateError("invalid_ledger", f"Ledger line {number} has unsupported fields")
         if event["schema_version"] != LEDGER_SCHEMA_VERSION:
             raise StateError("invalid_ledger", f"Ledger line {number} has an unsupported schema")
+        if event["previous_hash"] != previous_hash:
+            raise StateError("invalid_ledger", f"Ledger line {number} breaks the hash chain")
+        _verify_seal(event)
+        previous_hash = event["event_hash"]
         entries.append({
             "local_sequence": len(entries) + 1,
             "command_id": event["command_id"],

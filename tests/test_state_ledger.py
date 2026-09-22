@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import shutil
+import sqlite3
 import sys
 import tempfile
 import unittest
@@ -14,7 +16,7 @@ SCRIPTS = ROOT / "runtime" / "scripts"
 if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
-from state_context import initialize  # noqa: E402
+from state_context import attach, initialize  # noqa: E402
 from state_ledger import (  # noqa: E402
     LEDGER_RELATIVE, export_ledger, ledger_path, read_ledger, render_ledger,
     verify_ledger,
@@ -143,11 +145,118 @@ class LedgerExportTests(unittest.TestCase):
         self.assertFalse(drifted["matches"])
         self.assertIn("tasks", drifted["mismatches"])
 
+    def test_ledger_hash_chain_rejects_tampering(self) -> None:
+        self.build()
+        export_ledger(self.store)
+        path = self.root / LEDGER_RELATIVE
+        lines = [line for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+
+        tampered = json.loads(lines[1])
+        tampered["action"] = "task.cancel"
+        lines[1] = json.dumps(tampered, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+        with self.assertRaises(StateError):
+            read_ledger(path)
+
+        # Dropping an event must also break the chain rather than silently renumbering.
+        path.write_text("\n".join(lines[:1] + lines[2:]) + "\n", encoding="utf-8")
+        with self.assertRaises(StateError):
+            read_ledger(path)
+
     def test_ledger_path_is_project_local(self) -> None:
         self.assertEqual(
             ledger_path(self.root),
             (self.root / ".project-log" / "ledger" / "v1" / "ledger.jsonl").resolve(),
         )
+
+    def clone(self, name: str) -> Path:
+        """A clean clone: same marker and ledger, no local .state/ SQLite."""
+        destination = self.root / name
+        log = destination / ".project-log"
+        log.mkdir(parents=True)
+        shutil.copy(
+            self.root / ".project-log" / "state-format.json",
+            log / "state-format.json",
+        )
+        shutil.copytree(self.root / ".project-log" / "ledger", log / "ledger")
+        return destination
+
+    def entities(self, store) -> dict:
+        with store._connection() as connection:
+            return store._entity_rows(connection)
+
+    def test_attach_rebuilds_a_clean_clone_from_the_ledger(self) -> None:
+        self.build()
+        export_ledger(self.store)
+
+        clone = self.clone("clone-a")
+        attached = attach(clone)
+
+        self.assertEqual(self.entities(attached), self.live())
+        self.assertEqual(attached.status()["revision"], self.store.status()["revision"])
+
+    def test_reconcile_is_identical_when_the_store_already_matches(self) -> None:
+        self.build()
+        export_ledger(self.store)
+        attached = attach(self.clone("clone-b"))
+
+        entries = read_ledger(ledger_path(attached.root))
+        report = attached.sync_from_ledger(entries)
+
+        self.assertEqual(report["status"], "identical")
+        self.assertEqual(report["appended"], 0)
+
+    def test_reconcile_appends_events_the_clone_has_not_seen(self) -> None:
+        self.build()
+        export_ledger(self.store)
+        clone = self.clone("clone-c")
+        attached = attach(clone)
+
+        self.apply("record.create", {
+            "kind": "research", "id": "RES-001", "title": "Later work",
+            "status": "draft", "payload": {"summary": "added after clone"},
+        })
+        export_ledger(self.store)
+        # A clone learns about new history by pulling the updated ledger file.
+        shutil.copy(self.root / LEDGER_RELATIVE, clone / LEDGER_RELATIVE)
+
+        entries = read_ledger(ledger_path(clone))
+        report = attached.sync_from_ledger(entries)
+
+        self.assertEqual(report["status"], "appended")
+        self.assertEqual(report["appended"], 1)
+        self.assertEqual(self.entities(attached), self.live())
+
+    def test_reconcile_rebuilds_a_diverged_projection(self) -> None:
+        self.build()
+        export_ledger(self.store)
+        clone = self.clone("clone-d")
+        attached = attach(clone)
+
+        connection = sqlite3.connect(attached.path)
+        connection.execute("UPDATE tasks SET title = 'forged' WHERE id = 'TASK-001'")
+        connection.commit()
+        connection.close()
+
+        entries = read_ledger(ledger_path(clone))
+        report = attached.sync_from_ledger(entries)
+
+        self.assertEqual(report["status"], "rebuilt")
+        self.assertEqual(self.entities(attached), self.live())
+
+    def test_reconcile_refuses_when_the_ledger_is_behind(self) -> None:
+        self.build()
+        export_ledger(self.store)
+        stale = read_ledger(ledger_path(self.root))
+
+        self.apply("record.create", {
+            "kind": "research", "id": "RES-002", "title": "Local only",
+            "status": "draft", "payload": {"summary": "not yet exported"},
+        })
+
+        with self.assertRaises(StateError):
+            self.store.sync_from_ledger(stale)
 
 
 if __name__ == "__main__":

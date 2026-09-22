@@ -681,6 +681,14 @@ VIBE="$HOME/.codex/vibe-workflow/scripts/vibe.py"
 
 `ledger export` 把结构化历史逐条无损写入 `.project-log/ledger/v1/ledger.jsonl`（追加式、Git 跟踪），可以重复执行且幂等；`ledger verify` 从账本重放并与本机 SQLite 逐表比对，输出 `matches` 与 `mismatches`。账本是唯一持久事实源，`.project-log/.state/` 下的 SQLite 只是可重建缓存，归档时不要提交 `.state/`。
 
+### 换机后从账本重建状态
+
+```bash
+"$PY" "$VIBE" --root . state-attach
+```
+
+干净 clone 上执行 `state-attach` 会从账本重放构建本机 SQLite；已有 SQLite 时会自动对账，返回 `attach.status` 为 `appended`（SQLite 落后、已增量追加）、`rebuilt`（投影与账本不符、已整体重建）、`identical`（完全一致）或 `empty`（尚无账本）。如果本机 SQLite 里有账本尚未包含的命令，对账会以 `ledger_behind` 拒绝重建，必须先 `ledger export`，避免丢掉未归档的本地进度。
+
 ---
 
 ## 10. 常见问题排查

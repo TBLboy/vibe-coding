@@ -309,6 +309,7 @@ def main() -> int:
     from state_context import (
         apply_command,
         attach,
+        attach_with_report,
         exchange_status,
         acknowledge_export,
         abandon_export,
@@ -359,7 +360,8 @@ def main() -> int:
         elif args.command == "state-views":
             result = refresh_views(root)
         elif args.command == "state-attach":
-            result = attach(root).status()
+            store, report = attach_with_report(root)
+            result = {"attach": report, "status": store.status()}
         elif args.command == "state-export":
             result = publish_snapshot(root)
         elif args.command == "state-import":
