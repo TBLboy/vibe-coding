@@ -6,7 +6,7 @@ installer and the release builder cannot drift apart.
 """
 from __future__ import annotations
 
-VERSION = "0.5.0"
+VERSION = "0.6.0"
 DEFAULT_FORMAT = 2
 STORE_SCHEMA = 3
 SUPPORTED_FORMATS = (1, 2)

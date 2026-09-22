@@ -1,5 +1,43 @@
 # 发布说明
 
+## 0.6.0 —— Format 3：Git 账本为唯一事实源
+
+### 一句话
+
+结构化工程日志改为**账本优先**：每条命令先追加到 Git 跟踪的账本并 `fsync`，本机 SQLite
+降级为可重建投影；一份 Project Log 覆盖一个项目的所有分支，换机时用知识库搬运账本。
+
+### 写入路径
+
+- `Store.apply` 现在是 ledger-first：账本追加是唯一 commit point，SQLite 随后更新。
+  进程在两步之间崩溃，下次写入或 `state-attach` 会把 SQLite 从账本追平，不会出现半条命令。
+- 同一 `command_id` 重放是幂等的：崩溃后重试同一信封会返回账本里已持久化的 receipt，
+  不会重复记账。
+- 账本追平只追加、不重写历史；只有在本机 SQLite 领先账本、且账本是本机命令历史的
+  字节前缀时才重新导出。
+
+### 项目级日志
+
+- 状态 identity 改为项目级：`context_id` 只由 `{root, git_dir}` 计算，不再把分支名算进去。
+  同一 worktree 切换分支后日志仍然可见，不再需要 `state-attach`/`state-import` 找回。
+- 这是对 format 2“每个分支独立状态”契约的显式变更，记录为 DEC-013。
+
+### 归档与换机
+
+- `a-project-log-archive` 改为合并：按 `command_id` 校验知识库账本是本地账本的前缀，
+  只追加新增命令，显式排除 `.state/`、`.git`、`.migration/`、`legacy/new-writes/`，
+  并在 `project_id` 不一致时拒绝覆盖；重复归档幂等。
+- 新增 `a-project-log-align`：从知识库把归档账本与本地账本做并集（本地命令一条不丢），
+  重新封好哈希链，只补齐缺失的 `docs/`，然后自动执行 `state-attach` 与 `validate`。
+
+### 兼容性
+
+- 账本目录 `.project-log/ledger/v1/ledger.jsonl` 与 `state-format.json` 结构不变；
+  旧的分支级 SQLite 只需一次 `state-attach` 即可从账本重建为项目级。
+- 非 Git 的 work 目录行为不变，identity 仍为 `branch: "local"`。
+- format 1 的只读兼容与分步退役窗口（`stop-writing`、`stop-reading`、`stop-support`）
+  保持不变，仍然每一步都需要用户确认，未获授权时不会改写任何项目的 `.project-log/`。
+
 ## 0.5.0 —— format 2 转正为新项目默认
 
 ### 一句话

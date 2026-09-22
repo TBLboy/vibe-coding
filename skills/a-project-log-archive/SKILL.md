@@ -29,11 +29,15 @@ Only the `工程记录/` subdirectory within the knowledge base will be affected
 ## What It Does
 
 1. Load the KB path from config.
-2. Determine the project name from `--project-root`.
+2. Determine the project name from `--project-root` (the work folder name).
 3. Verify `.project-log/` exists in the project root.
-4. Find or create `<project-name>/` under `<kb>/工程记录/`.
-5. Delete old `.project-log/` if present, then copy the current one.
-6. Run `git add -A && git commit -m "archive: <project-name>" && git push` in the knowledge base.
+4. Verify the KB copy of `.project-log/state-format.json` has the same `project_id`.
+5. Verify the KB ledger is an exact prefix of the local ledger, so only new commands are added.
+6. Merge the local `.project-log/` into `<kb>/工程记录/<project-name>/.project-log/`,
+   excluding `.state/`, `.git`, `.migration/`, `legacy/new-writes/` and copying the ledger separately.
+7. Run `git add -A && git commit -m "archive: <project-name>" && git push` in the knowledge base.
+
+Re-running the archive is idempotent: unchanged logs produce no commit.
 
 ## Execution
 
@@ -45,5 +49,10 @@ python3 ~/.codex/skills/a-project-log-archive/scripts/archive.py \
 ## Safety
 
 - Only copies directories containing `.project-log/`.
-- Reports conflict if project name collides with an unrelated directory.
+- Refuses when the KB holds commands the local ledger is missing; run the
+  align-project-progress skill first so the two histories are merged.
+- Refuses when the KB `project_id` differs from the local one, so two unrelated
+  projects that share a folder name can never overwrite each other.
+- Never copies the local SQLite cache (`.state/`) or Git internals.
+- Merges instead of replacing, so an existing KB copy is never deleted wholesale.
 - Only affects `<kb>/工程记录/`, never other files.

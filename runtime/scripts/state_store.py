@@ -591,13 +591,29 @@ _DDL = (
 class Store:
     """One explicitly initialized database bound to one project and branch context."""
 
-    def __init__(self, path: Path, project_id: str, context_id: str, root: Path | None = None):
+    def __init__(
+        self, path: Path, project_id: str, context_id: str,
+        root: Path | None = None, ledger: Path | None = None,
+    ):
         self.path = native_path(path)
         self.project_id = _text(project_id, "project_id", 256)
         self.context_id = _text(context_id, "context_id", 256)
         # The worktree root is required to re-evaluate evidence applicability.
         # Stores built directly in tests may omit it; the CLI always supplies it.
         self.root: Path | None = Path(root).resolve() if root is not None else None
+        # Migration builds the ledger beside its staging database, so the live
+        # Project Log is only touched once the switch is ready to commit.
+        self.ledger: Path | None = Path(ledger).resolve() if ledger is not None else None
+
+    def ledger_path(self) -> Path | None:
+        """The Git ledger this store commits to, or None for a rootless store."""
+        if self.ledger is not None:
+            return self.ledger
+        if self.root is None:
+            return None
+        from state_ledger import ledger_path as project_ledger_path
+
+        return project_ledger_path(self.root)
 
     @contextmanager
     def _connection(self, write: bool = False):
@@ -1563,6 +1579,22 @@ class Store:
 
     def apply(self, envelope: dict) -> dict:
         request, canonical, request_hash = _request(envelope)
+        # Idempotent retry: a command that already committed returns its receipt
+        # without re-validating expected_revision.
+        known = self._known_receipt(request["command_id"])
+        if known is not None:
+            if known[0] != canonical:
+                raise StateError("command_conflict", "command_id already belongs to a different envelope")
+            return json.loads(known[1])
+        # expected_revision is compared against what the caller could observe before
+        # this call. A previous run may then have died between the ledger append and
+        # the SQLite commit, so the projection is healed and the command is applied
+        # on top of the healed state.
+        observed = self._local_revision()
+        if observed != request["expected_revision"]:
+            raise StateError("stale_revision", f"Expected revision {request['expected_revision']}; current is {observed}")
+        self.reconcile_with_ledger()
+        baseline = self._local_revision()
         timestamp = datetime.now(timezone.utc).isoformat()
         with self._connection(write=True) as connection:
             connection.execute("BEGIN IMMEDIATE")
@@ -1574,8 +1606,8 @@ class Store:
                 if previous["request_json"] != canonical:
                     raise StateError("command_conflict", "command_id already belongs to a different envelope")
                 return json.loads(previous["receipt_json"])
-            if metadata["local_revision"] != request["expected_revision"]:
-                raise StateError("stale_revision", f"Expected revision {request['expected_revision']}; current is {metadata['local_revision']}")
+            if metadata["local_revision"] != baseline:
+                raise StateError("stale_revision", f"Expected revision {baseline}; current is {metadata['local_revision']}")
             if metadata["local_revision"] >= MAX_REVISION:
                 raise StateError("state_conflict", "Revision limit reached")
             sequence = metadata["local_revision"] + 1
@@ -1587,6 +1619,11 @@ class Store:
                 "command_id": request["command_id"], "revision": origin_revision, "action": request["action"],
                 "request_hash": request_hash, "created_at": timestamp, "result": result,
             }
+            # Ledger-first: the durable ledger append is the commit point. A crash
+            # after this line but before connection.commit() leaves a ledger that is
+            # ahead of the projection, which reconcile_with_ledger repairs on the
+            # next open. A crash before this line rolls back the whole transition.
+            self._ledger_commit(sequence, request, canonical, request_hash, receipt, timestamp)
             connection.execute(
                 """INSERT INTO commands (command_id, local_sequence, origin_kind, origin_context_id,
                        origin_revision, action, request_json, request_hash, receipt_json, created_at)
@@ -1608,6 +1645,103 @@ class Store:
             )
             connection.commit()
             return receipt
+
+    def _ledger_commit(
+        self, sequence: int, request: dict, canonical: str, request_hash: str,
+        receipt: dict, timestamp: str,
+    ) -> dict | None:
+        """Durably append one command to the Git ledger before the SQLite commit."""
+        path = self.ledger_path()
+        if path is None:
+            return None
+        from state_ledger import append_event
+
+        return append_event(
+            path,
+            command_id=request["command_id"],
+            origin_kind="local",
+            origin_context_id=self.context_id,
+            origin_revision=sequence,
+            action=request["action"],
+            request=json.loads(canonical),
+            request_hash=request_hash,
+            receipt=receipt,
+            created_at=timestamp,
+        )
+
+    def _local_revision(self) -> int:
+        with self._connection() as connection:
+            connection.execute("BEGIN")
+            return self._metadata(connection)["local_revision"]
+
+    def _known_receipt(self, command_id: str) -> tuple[str, str] | None:
+        """The stored request/receipt for a command id, or None when it is new."""
+        with self._connection() as connection:
+            connection.execute("BEGIN")
+            self._metadata(connection)
+            row = connection.execute(
+                "SELECT request_json, receipt_json FROM commands WHERE command_id = ?", (command_id,)
+            ).fetchone()
+            return (row["request_json"], row["receipt_json"]) if row else None
+
+    def reconcile_with_ledger(self) -> dict:
+        """Heal drift between the durable ledger and the local SQLite projection.
+
+        Under the ledger-first write path a crash can only leave the ledger ahead
+        of SQLite, which is repaired by replaying the missing tail. A store that is
+        ahead of the ledger (for example after upgrading from the export-on-finish
+        path) is re-exported, but only when the existing ledger is a byte-identical
+        prefix of the store's command history; anything else is a real conflict and
+        is reported rather than silently overwritten.
+        """
+        path = self.ledger_path()
+        if path is None:
+            return {"status": "unavailable", "reason": "store has no project root"}
+        from state_ledger import export_ledger, ledger_tip, read_ledger
+
+        revision = self._local_revision()
+        tip = ledger_tip(path) if path.is_file() else None
+        ledger_revision = tip["origin_revision"] if tip else 0
+        if ledger_revision == revision:
+            return {"status": "in_sync", "revision": revision}
+        if ledger_revision > revision:
+            report = self.sync_from_ledger(read_ledger(path))
+            return {
+                "status": report["status"], "direction": "ledger-ahead",
+                "revision": report["revision"], "appended": report["appended"],
+            }
+        entries = read_ledger(path) if path.is_file() else []
+        if not self._ledger_is_prefix(entries):
+            raise StateError(
+                "ledger_behind",
+                "Ledger history diverges from the local store; refusing to overwrite it",
+            )
+        result = export_ledger(self)
+        return {
+            "status": "exported", "direction": "store-ahead",
+            "revision": revision, "events": result["events"],
+        }
+
+    def _ledger_is_prefix(self, entries) -> bool:
+        """Whether the ledger's events are an exact prefix of the store's commands."""
+        keys = (
+            "command_id", "origin_kind", "origin_context_id", "origin_revision",
+            "action", "request_json", "request_hash", "receipt_json", "created_at",
+        )
+        with self._connection() as connection:
+            connection.execute("BEGIN")
+            self._metadata(connection)
+            local = [
+                dict(row) for row in connection.execute(
+                    "SELECT * FROM commands ORDER BY local_sequence LIMIT ?", (len(entries),)
+                )
+            ]
+        if len(local) != len(entries):
+            return False
+        return all(
+            all(row[key] == entry[key] for key in keys)
+            for row, entry in zip(local, entries)
+        )
 
     def ledger(self, after_sequence: int = 0, limit: int = 100) -> list[dict]:
         """Bounded read of immutable command records ordered by local commit sequence."""
@@ -2021,10 +2155,25 @@ class Store:
                     raise StateError("invalid_ledger", problems[0])
                 connection.commit()
                 return {"status": "rebuilt", "revision": len(entries), "appended": 0}
+            # A merge can place archived commands before commands this store already
+            # had, so the ledger order may differ from the stored order. When it does,
+            # rewrite the immutable command/event tables in ledger order; they are
+            # derived data, and every shared command was proven identical above.
+            local_order = [
+                row["command_id"] for row in connection.execute(
+                    "SELECT command_id FROM commands ORDER BY local_sequence"
+                )
+            ]
+            reordered = local_order != [
+                row["command_id"] for row in entries[: len(local_order)]
+            ]
+            if reordered:
+                connection.execute("DELETE FROM events")
+                connection.execute("DELETE FROM commands")
             for index, row in enumerate(entries, start=1):
                 if row["local_sequence"] != index:
                     raise StateError("invalid_ledger", "Ledger sequences are not contiguous")
-                if row["command_id"] in local:
+                if not reordered and row["command_id"] in local:
                     continue
                 connection.execute(
                     """INSERT INTO commands (command_id, local_sequence, origin_kind, origin_context_id,
@@ -2044,7 +2193,10 @@ class Store:
             if problems:
                 raise StateError("invalid_ledger", problems[0])
             connection.commit()
-            return {"status": "appended", "revision": len(entries), "appended": len(appended)}
+            return {
+                "status": "merged" if reordered else "appended",
+                "revision": len(entries), "appended": len(appended), "reordered": reordered,
+            }
 
     def validate(self) -> list[str]:
         """Return diagnostics, or an empty list; audit never repairs authority."""
@@ -2108,9 +2260,11 @@ class Store:
                     row["origin_kind"] == "local"
                     and row["origin_context_id"] == self.context_id
                 )
+                # ``origin_revision`` is provenance, not position: a merge can place
+                # commands this store created at a different ``local_sequence``. What
+                # must still hold is the command's own chain link and its receipt.
                 if (row["local_sequence"] != position
-                        or (local_chain and (row["origin_revision"] != row["local_sequence"]
-                                             or request["expected_revision"] != row["origin_revision"] - 1))
+                        or (local_chain and request["expected_revision"] != row["origin_revision"] - 1)
                         or canonical != row["request_json"] or digest != row["request_hash"]
                         or request["command_id"] != row["command_id"] or request["action"] != row["action"]
                         or row["event_command"] != row["command_id"] or row["event_action"] != row["action"]

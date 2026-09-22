@@ -668,18 +668,35 @@ vibe 恢复当前项目，先读取 current-session、任务、证据和 Loop �
 帮我归档这个工程。
 ```
 
-归档前应先完成当前阶段验证。归档 Skill 会把项目日志同步到用户指定的个人知识库；归档本身不应删除项目工作区中的 `.project-log/`。
+归档前应先完成当前阶段验证。归档 Skill 会把项目日志合并进用户指定的个人知识库：
+按 `command_id` 校验知识库账本是本地账本的前缀，只追加新增命令，显式排除 `.state/`、
+`.git`、`.migration/`、`legacy/new-writes/`，并在 `project_id` 不一致时拒绝覆盖。
+重复归档是幂等的；归档本身不会删除项目工作区中的 `.project-log/`。
+
+### 换机后从知识库对齐项目进度
+
+```text
+对齐项目进度。
+```
+
+`a-project-log-align` 从知识库定位 `<work 文件夹名>/.project-log/`，按 `command_id`
+把归档账本与本地账本做并集（本地已有命令一条不丢，归档命令按原顺序前置），重新封好哈希链，
+只补齐本地缺失的 `docs/` 文件（不覆盖本地文档），最后自动执行 `state-attach` 与 `validate`
+重建并校验本机 SQLite。知识库里没有本项目副本、或两边 `project_id` 不一致时会明确报错。
 
 ### 导出与校验 Format 3 账本
 
 ```bash
 PY="$(cat "${CODEX_HOME:-$HOME/.codex}/vibe-python")"
 VIBE="$HOME/.codex/vibe-workflow/scripts/vibe.py"
-"$PY" "$VIBE" --root . ledger export
 "$PY" "$VIBE" --root . ledger verify
 ```
 
-`ledger export` 把结构化历史逐条无损写入 `.project-log/ledger/v1/ledger.jsonl`（追加式、Git 跟踪），可以重复执行且幂等；`ledger verify` 从账本重放并与本机 SQLite 逐表比对，输出 `matches` 与 `mismatches`。账本是唯一持久事实源，`.project-log/.state/` 下的 SQLite 只是可重建缓存，归档时不要提交 `.state/`。
+写入是账本优先（ledger-first）：每条命令先追加并 `fsync` 到 Git 跟踪的
+`.project-log/ledger/v1/ledger.jsonl`，这一步是唯一的 commit point，随后才更新本机 SQLite。
+进程在两步之间崩溃时，下次写入或 `state-attach` 会从账本把 SQLite 追平，不会出现半条命令。
+`ledger verify` 从账本重放并与本机 SQLite 逐表比对，输出 `matches` 与 `mismatches`。
+账本是唯一持久事实源，SQLite 只是可重建缓存，归档时不要提交 `.state/`。
 
 ### 换机后从账本重建状态
 
@@ -687,7 +704,11 @@ VIBE="$HOME/.codex/vibe-workflow/scripts/vibe.py"
 "$PY" "$VIBE" --root . state-attach
 ```
 
-干净 clone 上执行 `state-attach` 会从账本重放构建本机 SQLite；已有 SQLite 时会自动对账，返回 `attach.status` 为 `appended`（SQLite 落后、已增量追加）、`rebuilt`（投影与账本不符、已整体重建）、`identical`（完全一致）或 `empty`（尚无账本）。如果本机 SQLite 里有账本尚未包含的命令，对账会以 `ledger_behind` 拒绝重建，必须先 `ledger export`，避免丢掉未归档的本地进度。
+干净 clone 上执行 `state-attach` 会从账本重放构建本机 SQLite；已有 SQLite 时会自动对账，
+返回 `attach.status` 为 `appended`（SQLite 落后、已增量追加）、`merged`（账本顺序与本地不同、
+已按账本顺序重建命令表）、`rebuilt`（投影与账本不符、已整体重建）、`identical`（完全一致）
+或 `empty`（尚无账本）。如果本机 SQLite 里有账本尚未包含的命令，对账会以 `ledger_behind`
+拒绝重建，避免丢掉未归档的本地进度。
 
 ### 检查日志是否可移植
 
@@ -695,7 +716,11 @@ VIBE="$HOME/.codex/vibe-workflow/scripts/vibe.py"
 "$PY" "$VIBE" --root . portability-status
 ```
 
-`portable=false` 表示本机历史还没有安全落到 Git 账本里。输出区分几种情况：`unexported_commands>0` 表示 SQLite 里有命令尚未导出到账本（先跑 `ledger export`）；`git.ledger_tracked=false` 表示账本还没被 Git 跟踪；`git.uncommitted_ledger_changes=true` 表示账本改动尚未提交；`git.unpushed_commits>0` 表示已提交但未推送。handoff 视图也会在账本落后时显示 `NOT PORTABLE` 提示。
+`portable=false` 表示本机历史还没有安全落到 Git 账本里。输出区分几种情况：
+`unexported_commands>0` 表示账本落后于 SQLite（正常情况下不会出现，写入是账本优先）；
+`git.ledger_tracked=false` 表示账本还没被 Git 跟踪；`git.uncommitted_ledger_changes=true`
+表示账本改动尚未提交；`git.unpushed_commits>0` 表示已提交但未推送。handoff 视图也会在
+账本落后时显示 `NOT PORTABLE` 提示。
 
 ---
 

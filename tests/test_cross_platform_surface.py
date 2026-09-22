@@ -1,4 +1,4 @@
-"""TASK-043: launcher and branch-context checks available on this host."""
+"""TASK-043/TASK-060: launcher and project-scoped context checks available on this host."""
 from __future__ import annotations
 
 import os
@@ -76,7 +76,8 @@ class CrossPlatformSurfaceTests(unittest.TestCase):
         self.assertTrue((RUNTIME / "scripts/vibe_python.ps1").is_file())
 
     @unittest.skipUnless(shutil.which("git"), "git is required")
-    def test_git_branch_switch_gets_an_isolated_context(self) -> None:
+    def test_git_branch_switch_keeps_the_project_log_visible(self) -> None:
+        """TASK-060: one Project Log covers every branch, so switching never hides it."""
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary)
             subprocess.run(["git", "init", "-q", str(repo)], check=True)
@@ -91,6 +92,7 @@ class CrossPlatformSurfaceTests(unittest.TestCase):
             )
             self.assertEqual(initialized.returncode, 0, initialized.stdout)
             store = open_store(repo)
+            context_id = store.context_id
             store.apply({
                 "schema_version": 1, "command_id": uuid.uuid4().hex,
                 "expected_revision": 0, "action": "goal.create",
@@ -99,12 +101,14 @@ class CrossPlatformSurfaceTests(unittest.TestCase):
             self.assertEqual(open_store(repo).active_goal_id(), "GOAL-001")
 
             subprocess.run(["git", "-C", str(repo), "checkout", "-qb", "other"], check=True)
+            # The identity no longer depends on the branch, so the same store is found.
+            self.assertEqual(open_store(repo).context_id, context_id)
             switched = subprocess.run(
                 [sys.executable, str(RUNTIME / "scripts/vibe.py"), "--root", str(repo), "status"],
                 text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False,
             )
-            self.assertNotEqual(switched.returncode, 0)
-            self.assertIn("missing_store", switched.stdout)
+            self.assertEqual(switched.returncode, 0, switched.stdout)
+            self.assertEqual(open_store(repo).active_goal_id(), "GOAL-001")
 
             subprocess.run(["git", "-C", str(repo), "checkout", "-q", "-"], check=True)
             restored = subprocess.run(

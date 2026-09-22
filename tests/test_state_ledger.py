@@ -82,16 +82,29 @@ class LedgerExportTests(unittest.TestCase):
 
     def test_export_is_idempotent_and_byte_stable(self) -> None:
         self.build()
+        # Ledger-first writes already produced the ledger, so exporting is a no-op
+        # and re-exporting never rewrites the bytes.
+        path = self.root / LEDGER_RELATIVE
         first = export_ledger(self.store)
-        path = Path(first["path"])
         original = path.read_bytes()
 
         second = export_ledger(self.store)
 
-        self.assertFalse(first["unchanged"])
+        self.assertTrue(first["unchanged"])
         self.assertTrue(second["unchanged"])
         self.assertEqual(first["sha256"], second["sha256"])
         self.assertEqual(path.read_bytes(), original)
+
+    def test_export_rebuilds_a_deleted_ledger(self) -> None:
+        self.build()
+        path = self.root / LEDGER_RELATIVE
+        expected = path.read_bytes()
+        path.unlink()
+
+        result = export_ledger(self.store)
+
+        self.assertFalse(result["unchanged"])
+        self.assertEqual(path.read_bytes(), expected)
 
     def test_export_preserves_every_command_verbatim(self) -> None:
         self.build()
@@ -270,13 +283,13 @@ class LedgerExportTests(unittest.TestCase):
         self.assertEqual(report["unexported_commands"], 0)
         self.assertIsNone(report["git"])
 
-    def test_portability_status_is_false_when_commands_are_unexported(self) -> None:
+    def test_portability_status_reports_a_ledger_that_lags_the_store(self) -> None:
         self.build()
-        export_ledger(self.store)
-        self.apply("record.create", {
-            "kind": "research", "id": "RES-009", "title": "Not exported",
-            "status": "draft", "payload": {"summary": "still local"},
-        })
+        # Simulate a ledger that has not yet captured the newest command: dropping
+        # the trailing event leaves a valid prefix that is one revision behind.
+        path = self.root / LEDGER_RELATIVE
+        lines = path.read_text(encoding="utf-8").splitlines()
+        path.write_text("\n".join(lines[:-1]) + "\n", encoding="utf-8")
 
         report = portability_status(self.root)
 

@@ -1,4 +1,4 @@
-"""Transactional project format (format 2) and branch-local state selection."""
+"""Transactional project format (format 2) and project-scoped state selection."""
 from __future__ import annotations
 
 import hashlib
@@ -59,6 +59,14 @@ def read_marker(root: Path) -> dict:
 
 
 def git_context(root: Path) -> tuple[str, Path]:
+    """Return the project-scoped state identity and the local state directory.
+
+    The identity is deliberately branch-independent: one Project Log covers every
+    branch of a worktree, so switching branches never hides or forks the log. In a
+    Git worktree the SQLite cache lives under the repository's Git directory, so it
+    is never tracked or archived; a plain work directory keeps it in
+    ``.project-log/.state``.
+    """
     root = root.resolve()
     repository_present = any((parent / ".git").exists() for parent in (root, *root.parents))
     if not repository_present:
@@ -84,11 +92,7 @@ def git_context(root: Path) -> tuple[str, Path]:
             if top != root:
                 raise StateError("git_context_error", "format 2 state requires the Git worktree root")
             directory = Path(os.fsdecode(git("rev-parse", "--absolute-git-dir"))).resolve() / "vibe-state"
-            branch = git("symbolic-ref", "--quiet", "HEAD", optional=True)
-            if not branch:
-                head = git("rev-parse", "--verify", "HEAD", optional=True)
-                branch = b"detached:" + head if head else b"unborn"
-            identity = {"root": str(root), "git_dir": str(directory), "branch_hex": branch.hex()}
+            identity = {"root": str(root), "git_dir": str(directory)}
         except UnicodeError as exc:
             raise StateError("git_context_error", "Git path encoding cannot be represented") from exc
     context_id = hashlib.sha256(json.dumps(identity, sort_keys=True).encode("utf-8")).hexdigest()

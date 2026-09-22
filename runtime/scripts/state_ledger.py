@@ -102,6 +102,133 @@ def render_ledger(rows) -> str:
     return "".join(line + "\n" for line in lines)
 
 
+def _tail_lines(path: Path, count: int) -> list[str]:
+    """Return up to ``count`` trailing non-empty lines without reading the whole file."""
+    with path.open("rb") as stream:
+        stream.seek(0, os.SEEK_END)
+        position = stream.tell()
+        buffer = b""
+        while position > 0:
+            step = min(65536, position)
+            position -= step
+            stream.seek(position)
+            buffer = stream.read(step) + buffer
+            if buffer.count(b"\n") > count:
+                break
+    parts = buffer.split(b"\n")
+    if parts and parts[-1] == b"":
+        parts = parts[:-1]
+    try:
+        return [part.decode("utf-8") for part in parts[-count:] if part]
+    except UnicodeError as error:
+        raise StateError("invalid_ledger", f"Cannot decode the ledger tail: {error}") from error
+
+
+def _ensure_append_ready(path: Path) -> None:
+    """Drop an incomplete trailing write so the next append starts on a clean line.
+
+    A process killed mid-``write`` can leave a partial final line. Because the
+    ledger append is the commit point and it always precedes the SQLite commit, an
+    incomplete tail can only belong to a command that was never committed, so it is
+    safe to truncate. A tail that is already a complete event but merely lacks the
+    trailing newline is completed instead of dropped.
+    """
+    if not path.is_file():
+        return
+    with path.open("rb") as stream:
+        stream.seek(0, os.SEEK_END)
+        size = stream.tell()
+        if size == 0:
+            return
+        stream.seek(size - 1)
+        if stream.read(1) == b"\n":
+            # The ledger already ends on a line boundary; nothing to repair.
+            return
+    lines = _tail_lines(path, 1)
+    if not lines:
+        return
+    tail = lines[-1].encode("utf-8")
+    try:
+        event = json.loads(tail.decode("utf-8"))
+        complete = type(event) is dict and set(event) == set(EVENT_FIELDS)
+    except (ValueError, UnicodeError):
+        complete = False
+    with path.open("r+b") as stream:
+        if complete:
+            stream.seek(0, os.SEEK_END)
+            stream.write(b"\n")
+        else:
+            stream.seek(0, os.SEEK_END)
+            position = stream.tell()
+            buffer = b""
+            while position > 0 and b"\n" not in buffer:
+                step = min(65536, position)
+                position -= step
+                stream.seek(position)
+                buffer = stream.read(step) + buffer
+            if b"\n" not in buffer:
+                stream.truncate(0)
+            else:
+                stream.truncate(position + buffer.rfind(b"\n") + 1)
+        stream.flush()
+        os.fsync(stream.fileno())
+
+
+def append_event(
+    path: Path,
+    *,
+    command_id: str,
+    origin_kind: str,
+    origin_context_id: str,
+    origin_revision: int,
+    action: str,
+    request: dict,
+    request_hash: str,
+    receipt: dict,
+    created_at: str,
+) -> dict:
+    """Append one sealed event to the ledger and fsync it: the durable commit point.
+
+    This is the write path the store uses before it updates SQLite, so a crash
+    between the two leaves a ledger that is ahead of the projection. Replaying the
+    ledger (``state-attach``) then restores the missing command.
+    """
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    _ensure_append_ready(path)
+    previous_hash = GENESIS_HASH
+    if path.is_file():
+        tip = ledger_tip(path)
+        if tip is not None:
+            _verify_seal(tip)
+            previous_hash = tip["event_hash"]
+    body = {
+        "schema_version": LEDGER_SCHEMA_VERSION,
+        "command_id": command_id,
+        "origin_kind": origin_kind,
+        "origin_context_id": origin_context_id,
+        "origin_revision": origin_revision,
+        "action": action,
+        "request": request,
+        "request_hash": request_hash,
+        "receipt": receipt,
+        "created_at": created_at,
+        "previous_hash": previous_hash,
+    }
+    sealed = _seal(body)
+    line = (_json(sealed) + "\n").encode("utf-8")
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o644)
+    try:
+        written = os.write(descriptor, line)
+        if written != len(line):
+            os.ftruncate(descriptor, path.stat().st_size - written)
+            raise StateError("ledger_io", "Short write to the ledger; retry the command")
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+    return sealed
+
+
 def read_ledger(path: Path) -> list[dict]:
     """Parse a ledger file into ``commands``-shaped rows for replay."""
     path = Path(path)
@@ -205,37 +332,28 @@ def verify_ledger(root: Path, store=None) -> dict:
     }
 
 
-def _last_line(path: Path) -> str | None:
-    with path.open("rb") as stream:
-        stream.seek(0, os.SEEK_END)
-        position = stream.tell()
-        buffer = b""
-        while position > 0:
-            step = min(4096, position)
-            position -= step
-            stream.seek(position)
-            buffer = stream.read(step) + buffer
-            stripped = buffer.rstrip(b"\r\n")
-            if b"\n" in stripped:
-                return stripped.rsplit(b"\n", 1)[-1].decode("utf-8")
-        return buffer.strip().decode("utf-8") or None
-
-
 def ledger_tip(path: Path) -> dict | None:
-    """Read only the final ledger event, so freshness checks stay O(1)."""
+    """Read only the final complete ledger event, so freshness checks stay O(1).
+
+    A process killed mid-append can leave a partial trailing line. That line never
+    became a committed command, so it is skipped and the tip is the last line that
+    parses as a complete event. ``read_ledger`` stays strict and reports it.
+    """
     path = Path(path)
     if not path.is_file():
         return None
     try:
-        line = _last_line(path)
-    except (OSError, UnicodeError) as error:
+        lines = _tail_lines(path, 2)
+    except OSError as error:
         raise StateError("invalid_ledger", f"Cannot read the ledger tip: {error}") from error
-    if line is None:
-        return None
-    try:
-        return json.loads(line)
-    except ValueError as error:
-        raise StateError("invalid_ledger", f"The ledger tip is not valid JSON: {error}") from error
+    for line in reversed(lines):
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        if type(event) is dict and set(event) == set(EVENT_FIELDS):
+            return event
+    return None
 
 
 def ledger_freshness(root: Path, revision: int) -> dict:

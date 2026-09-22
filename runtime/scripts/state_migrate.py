@@ -640,12 +640,27 @@ def _switch_to_format_two(root: Path, staging: Path, journal_path: Path, metadat
             raise StateError("migration_conflict", f"Legacy backup target already exists: {target}")
         os.replace(entry, target)
     _ensure_format_two_layout(log)
+    _install_staged_ledger(log, staging)
     marker = {"format": 2, "project_id": metadata["project_id"]}
     marker_path = log / "state-format.json"
     if not marker_path.is_file():
         marker_path.write_text(json.dumps(marker, sort_keys=True) + "\n", encoding="utf-8")
     _write_journal(journal_path, {**metadata, "status": "switched"})
     return {"state_path": str(final_database), "marker": marker}
+
+
+def _install_staged_ledger(log: Path, staging: Path) -> Path | None:
+    """Move the ledger built during staging into the live Project Log."""
+    staged = staging / "ledger.jsonl"
+    if not staged.is_file():
+        return None
+    from state_ledger import LEDGER_RELATIVE
+
+    destination = log / LEDGER_RELATIVE.relative_to(".project-log")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if not destination.is_file():
+        os.replace(staged, destination)
+    return destination
 
 
 def _final_state_path(root: Path, project_id: str) -> Path:
@@ -687,7 +702,12 @@ def apply(root, confirm: str) -> dict:
 
     project_id = uuid.uuid4().hex
     context_id, _directory = git_context(base)
-    store = Store(staging / "state.sqlite3", project_id, context_id, base)
+    # Build the ledger beside the staging database; the live Project Log is only
+    # touched when the switch installs it, so a failed migration leaves no ledger.
+    store = Store(
+        staging / "state.sqlite3", project_id, context_id, base,
+        ledger=staging / "ledger.jsonl",
+    )
     store.initialize()
     unmapped: list[dict] = list(report.get("unsupported", []))
     relocated: list[dict] = []
@@ -812,6 +832,12 @@ def rollback(root, destination=None) -> dict:
         path = base / ".project-log" / relative
         if path.is_file() and path.read_text(encoding="utf-8") == content:
             path.unlink()
+    # The Git ledger is a format 3 layout entry created by the migration; a legacy
+    # project never owned it, so restore means removing it (the new-writes bundle
+    # written above already preserves every migrated command).
+    ledger_directory = base / ".project-log/ledger"
+    if ledger_directory.is_dir() and "ledger" not in legacy_names:
+        shutil.rmtree(ledger_directory)
     exchange_directory = base / ".project-log/exchange"
     if exchange_directory.is_dir() and not any(exchange_directory.iterdir()):
         exchange_directory.rmdir()
