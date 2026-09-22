@@ -224,6 +224,9 @@ class ArchiveSkillTests(unittest.TestCase):
     def test_archive_accepts_an_ignored_but_already_tracked_ledger(self) -> None:
         self.assertEqual(self.archive().returncode, 0)
         self.ignore_project_logs()
+        # Publish the new ignore rule so the branch and its remote agree; this test is
+        # about the ignore rule, not about an archive that owes the remote a push.
+        subprocess.run(["git", "-C", str(self.kb), "push", "-q"], check=True)
 
         result = self.archive()
 
@@ -368,6 +371,32 @@ class ArchiveSkillTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn("did not reach", result.stderr)
         self.assertFalse(self.remote_has_ledger())
+
+    def test_archive_pushes_a_commit_left_behind_by_a_failed_push(self) -> None:
+        origin = subprocess.run(
+            ["git", "-C", str(self.kb), "remote", "get-url", "origin"],
+            text=True, stdout=subprocess.PIPE, check=True,
+        ).stdout.strip()
+        subprocess.run(
+            ["git", "-C", str(self.kb), "remote", "set-url", "origin",
+             str(self.kb.parent / "missing-remote.git")],
+            check=True,
+        )
+
+        failed = self.archive()
+
+        self.assertEqual(failed.returncode, 1)
+        self.assertGreater(self.commits(), 1)  # the commit is already local
+        self.assertFalse(self.remote_has_ledger())
+
+        subprocess.run(
+            ["git", "-C", str(self.kb), "remote", "set-url", "origin", origin], check=True
+        )
+        recovered = self.archive()
+
+        self.assertEqual(recovered.returncode, 0, recovered.stderr)
+        self.assertIn("pushed", recovered.stdout)
+        self.assertEqual(self.remote_ledger(), self.events)
 
     def test_archive_refuses_a_branch_without_upstream(self) -> None:
         subprocess.run(["git", "-C", str(self.kb), "checkout", "-q", "-b", "local-only"], check=True)
