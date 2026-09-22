@@ -58,6 +58,7 @@ REQUIRED_RUNTIME = {
     "project-log-template/loop/evidence-index.yaml",
 }
 REQUIRED_OPENCODE = {
+    "install.sh",
     "AGENTS.md",
     "opencode.json",
     "agents/vibe-main.md",
@@ -83,6 +84,7 @@ REQUIRED_PACKAGE_FILES = {
     "AI_UPGRADE.md",
     "README.md",
     "docs/RELEASE-NOTES.md",
+    "scripts/opencode_installer.py",
     "install.ps1",
     "install.sh",
     "update.ps1",

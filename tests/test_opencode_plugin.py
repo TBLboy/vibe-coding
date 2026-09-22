@@ -126,7 +126,7 @@ class OpenCodePluginTests(unittest.TestCase):
             })
             result = subprocess.run(
                 [str(NODE), "--no-warnings", str(probe)],
-                env=environment, cwd=root, text=True, stdout=subprocess.PIPE,
+                env=environment, cwd=root, text=True, errors="replace", stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT, check=False, timeout=90,
             )
             self.assertEqual(result.returncode, 0, result.stdout)
@@ -184,7 +184,7 @@ class OpenCodePluginTests(unittest.TestCase):
             })
             result = subprocess.run(
                 [str(NODE), "--no-warnings", str(probe)],
-                env=environment, cwd=root, text=True, stdout=subprocess.PIPE,
+                env=environment, cwd=root, text=True, errors="replace", stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT, check=False, timeout=90,
             )
             self.assertEqual(result.returncode, 0, result.stdout)

@@ -15,7 +15,7 @@ into `${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}` by the OpenCode installer.
 | Default agent and task permissions | `opencode.json` | supported |
 | Session/compaction/tool hooks | `plugins/vibe-workflow.ts` | supported |
 | Goal and automatic continuation | `TASK-072` plugin integration | deferred to Goal task |
-| Install/update/uninstall | `TASK-073` installer | deferred to installer task |
+| Install/update/uninstall | `runtime/opencode/install.sh` + `scripts/opencode_installer.py` | supported |
 
 The Codex marketplace, Codex plugin manifest and `cc-switch` TOML generation are intentionally
 not carried into this client surface. OpenCode uses its own plugin and MCP configuration.
@@ -23,6 +23,110 @@ not carried into this client surface. OpenCode uses its own plugin and MCP confi
 This surface has no session Goal and no `/goal` command. Project Goal lives in `.project-log` and
 is the only completion contract; session continuation is explicit until TASK-072 ships a verified
 runner interface.
+
+## Installation
+
+The OpenCode client surface is installed by `scripts/opencode_installer.py`, invoked through the
+repo-local wrapper:
+
+```bash
+./runtime/opencode/install.sh install     # default when no action is given
+./runtime/opencode/install.sh verify
+./runtime/opencode/install.sh update
+./runtime/opencode/install.sh uninstall
+```
+
+Common options:
+
+| Option | Effect |
+|---|---|
+| `--opencode-home <dir>` | Target config directory instead of `${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}` |
+| `--skip-plugin-install` | Do not run the package manager for `@opencode-ai/plugin` |
+| `--skip-preflight` | Skip tool detection; intended only for isolated package tests |
+
+What the installer does:
+
+- Resolves a Python 3.11+ interpreter and writes a `vibe-python` pointer next to the OpenCode config.
+- Merges `AGENTS.md` as a `<!-- VIBE-OPENCODE-GLOBAL:BEGIN -->` block, so any rules the user already
+  had in that file are preserved instead of overwritten.
+- Copies `agents/`, `commands/`, `plugins/`, the top-level `skills/`, and the `runtime/` tree into
+  the OpenCode config directory.
+- Merges — never overwrites — `opencode.json`: it sets `default_agent` and registers the plugin and
+  permission rules while preserving user `plugin`, `mcp`, `model`, `permission` and other keys.
+- Installs the `@opencode-ai/plugin` dependency with `npm` or `bun` unless `--skip-plugin-install`.
+  `--no-audit`/`--no-fund` are npm-only and are not passed to `bun`.
+- Writes install state to `<home>/.vibe-opencode-installation-state.json` and backs up any replaced
+  files to `<home>/backups/<action>-<stamp>/`.
+
+Safety properties, all covered by `tests/test_opencode_installer.py`:
+
+- Conflicts are detected before anything is written. A file that already exists but does not match
+  the package (or that both the user and the package changed) aborts the install with a
+  `pre-existing file differs from package` / `local and package versions both changed` message and
+  leaves the tree untouched. There is no silent overwrite and no `--force`.
+- Repeated `install`/`update` runs are idempotent: the managed plugin appears once and
+  `installed_at` is stable.
+- Files the user edited after install — including `skills/**` and `vibe-workflow/**` — are reported
+  as `PRESERVED local modification` and never overwritten; `uninstall` keeps them too.
+- Permission rules the installer added but the user then edited are handed back to the user: `update`
+  leaves the edited value alone instead of resetting it, and `uninstall` keeps it.
+- Permission rules the user deletes are not silently restored; `update` reports
+  `managed rule removed by the user` and leaves the deletion in place.
+- `uninstall` only removes managed files whose hash still matches the installed version, then
+  removes only what the installer added: the plugin registration, `default_agent`, managed
+  permission rules and the `package.json` dependency. Values that already existed before install
+  are restored to their previous content rather than deleted.
+- If the installer created `opencode.json` and every key in it was installer-owned, `uninstall`
+  removes the file instead of leaving a `$schema`-only stub.
+- `$schema` follows the same ownership rule as permissions: a value the user edited or deleted
+  after install is handed back to the user and is not overwritten or removed.
+- Install, update and uninstall are transactional over the files they touch. If any step fails —
+  including the package manager — the previous bytes of `opencode.json`, `AGENTS.md`, the assets,
+  the runtime, `package.json`, `vibe-python` and the state file are restored, and any `node_modules/`,
+  `package-lock.json` or directory that the failed run created is removed, so it never leaves a
+  half-installed tree.
+- Lockfiles (`package-lock.json`, `bun.lock`, `bun.lockb`, `yarn.lock`, `pnpm-lock.yaml`) are
+  snapshotted before a run and restored on rollback, including when they already existed. A
+  pre-existing `node_modules/` is never deleted, but the package manager may still have rewritten it
+  before a failure; the lockfile is restored so the next install can reconcile it.
+- `uninstall` validates `opencode.json`, `package.json` and the `AGENTS.md` block before deleting
+  anything. A damaged or unparsable file aborts the run with nothing removed.
+- `AGENTS.md` block removal is conservative: if the BEGIN/END markers are missing, duplicated or out
+  of order, the installer refuses to edit the file rather than truncating user content.
+- Uninstall prunes only the exact directories the installer created (recorded at install time,
+  deepest first) and only when they are empty; a directory the user filled is left in place.
+- Every path taken from installation state (`managed_files`, `created_dirs`) is validated as a
+  relative path that stays inside the OpenCode home. Absolute paths and `..` segments are rejected
+  with `unsafe installation path in installation state`, so a corrupted state file cannot delete
+  files outside the config directory.
+- Every installer-touched path is resolved before use — managed assets, `AGENTS.md`,
+  `opencode.json`, `package.json`, `vibe-python`, the state file, lockfiles, the backup directory and
+  rollback targets. If a symlink planted inside the config directory points outside it, the installer
+  refuses with `refusing to touch a path outside the OpenCode home` instead of writing or deleting
+  through the link. Symlinking these files elsewhere is therefore unsupported.
+- `node_modules/` is boundary-checked before the package manager runs, so a `node_modules` symlink
+  pointing outside the home aborts the install before anything is written. Symlinks *inside*
+  `node_modules` that npm or bun creates are owned by the package manager and are not audited.
+- The boundary check is not a sandbox. It closes the static symlink-escape paths; a concurrent
+  attacker who swaps a parent directory between the check and the write (TOCTOU) is out of scope for
+  this single-user installer.
+- `node_modules/` and `package-lock.json` are left to the package manager on uninstall; the
+  installer restores `package.json` but does not delete shared dependency trees.
+- No action ever touches a `.project-log/` directory, including one located inside the OpenCode home.
+
+`opencode debug config --pure` only resolves config and does not import external plugins; it is not a
+substitute for `verify` or for a real OpenCode run. A clean-room dependency install and a real
+model-driven run are validated by TASK-073 / TASK-075.
+
+Known limitations of the installer:
+
+- `preflight` records whether the `opencode` CLI is on `PATH` but does not require it. Installing the
+  config surface and runtime without the CLI is intentional, so the assets can be staged first.
+- It reads and writes `opencode.json` as strict JSON. A config that only exists as `opencode.jsonc`,
+  or that contains comments, is not merged; the installer creates a separate `opencode.json`. Move
+  user settings into `opencode.json` first if you rely on JSONC.
+- It refuses to guess. If `opencode.json` is not valid JSON, the install stops before writing and
+  reports the parse error instead of rewriting the file.
 
 ## Agent Roles
 

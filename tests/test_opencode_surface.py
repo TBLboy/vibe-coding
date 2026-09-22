@@ -225,7 +225,7 @@ class OpenCodeIsolatedLoadTests(unittest.TestCase):
 
             resolved = subprocess.run(
                 ["opencode", "debug", "config", "--pure"],
-                env=environment, text=True, stdout=subprocess.PIPE,
+                env=environment, text=True, errors="replace", stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT, check=False,
             )
             self.assertEqual(resolved.returncode, 0, resolved.stdout)
@@ -247,7 +247,7 @@ class OpenCodeIsolatedLoadTests(unittest.TestCase):
 
             listed = subprocess.run(
                 ["opencode", "debug", "skill", "--pure"],
-                env=environment, text=True, stdout=subprocess.PIPE,
+                env=environment, text=True, errors="replace", stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT, check=False,
             )
             self.assertEqual(listed.returncode, 0, listed.stdout)
@@ -277,7 +277,7 @@ class OpenCodeIsolatedLoadTests(unittest.TestCase):
                 round_environment["OPENCODE_CONFIG_DIR"] = str(round_config)
                 loaded = subprocess.run(
                     ["opencode", "debug", "skill", "--pure"],
-                    env=round_environment, text=True, stdout=subprocess.PIPE,
+                    env=round_environment, text=True, errors="replace", stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT, check=False,
                 )
                 self.assertEqual(loaded.returncode, 0, loaded.stdout)
@@ -291,7 +291,7 @@ class OpenCodeIsolatedLoadTests(unittest.TestCase):
             for agent in sorted(EXPECTED_AGENTS):
                 loaded = subprocess.run(
                     ["opencode", "debug", "agent", agent, "--pure"],
-                    env=environment, text=True, stdout=subprocess.PIPE,
+                    env=environment, text=True, errors="replace", stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT, check=False,
                 )
                 self.assertEqual(loaded.returncode, 0, loaded.stdout)
@@ -302,7 +302,7 @@ class OpenCodeIsolatedLoadTests(unittest.TestCase):
 
             reviewer = json.loads(subprocess.run(
                 ["opencode", "debug", "agent", "verification-reviewer", "--pure"],
-                env=environment, text=True, stdout=subprocess.PIPE,
+                env=environment, text=True, errors="replace", stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT, check=False,
             ).stdout)
             self.assertFalse(reviewer["tools"]["edit"])
