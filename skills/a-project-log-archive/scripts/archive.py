@@ -200,14 +200,29 @@ def ignored_rule(kb_root: Path, relative: str) -> str | None:
     return probe.stdout.strip() or "(matched an ignore rule)"
 
 
+def blob_bytes(kb_root: Path, revision: str) -> bytes | None:
+    """Raw bytes of a Git blob (``:path`` for the index, ``HEAD:path`` for the commit).
+
+    ``git cat-file blob`` returns what Git actually stores, after any clean filter or
+    end-of-line conversion, which is exactly what the remote would receive.
+    """
+    probe = subprocess.run(
+        ["git", "-C", str(kb_root), "cat-file", "blob", revision],
+        capture_output=True, check=False,
+    )
+    if probe.returncode:
+        return None
+    return probe.stdout
+
+
 def git_push(kb_root: Path, project_name: str, local_ledger: Path) -> str:
     """Stage, commit, and push only this project's archive directory.
 
-    Before committing, the ledger staged in the index must hash-match the local ledger.
-    Staging alone cannot prove that: ``skip-worktree``/``assume-unchanged`` entries and
-    paths excluded by ``.gitignore`` keep the index ledger stale while unrelated files
-    still stage, which used to make the archive report success while the log tail never
-    reached version control.
+    Staging alone cannot prove the log landed: ``skip-worktree``/``assume-unchanged``
+    entries and ``.gitignore`` keep the index ledger stale while unrelated files still
+    stage, and a clean filter can rewrite the ledger on the way into Git. Both the staged
+    blob and the committed blob are therefore compared byte-for-byte against the local
+    ledger, and the run refuses to push a commit whose ledger is not identical.
     """
     relative = str(Path("工程记录") / project_name)
     ledger_relative = str(Path("工程记录") / project_name / ".project-log" / LEDGER_RELATIVE)
@@ -228,17 +243,13 @@ def git_push(kb_root: Path, project_name: str, local_ledger: Path) -> str:
     if completed.returncode:
         raise ArchiveError(f"git add failed: {completed.stderr.strip()}")
 
-    local_hash = subprocess.run(
-        ["git", "-C", str(kb_root), "hash-object", "--", str(local_ledger)],
-        capture_output=True, text=True, check=False,
-    )
-    if local_hash.returncode:
-        raise ArchiveError(f"cannot hash the local ledger: {local_hash.stderr.strip()}")
-    staged_hash = subprocess.run(
-        ["git", "-C", str(kb_root), "rev-parse", f":{ledger_relative}"],
-        capture_output=True, text=True, check=False,
-    )
-    if staged_hash.returncode:
+    try:
+        local_bytes = local_ledger.read_bytes()
+    except OSError as error:
+        raise ArchiveError(f"cannot read the local ledger {local_ledger}: {error}") from error
+
+    staged_bytes = blob_bytes(kb_root, f":{ledger_relative}")
+    if staged_bytes is None:
         raise ArchiveError(
             f"the knowledge base index does not hold {ledger_relative}, so the ledger "
             "would never reach the remote. Check that the knowledge base tracks the "
@@ -246,12 +257,13 @@ def git_push(kb_root: Path, project_name: str, local_ledger: Path) -> str:
             f"  git -C {kb_root} check-ignore -v -- {ledger_relative}\n"
             f"  git -C {kb_root} ls-files --error-unmatch -- {ledger_relative}"
         )
-    if staged_hash.stdout.strip() != local_hash.stdout.strip():
+    if staged_bytes != local_bytes:
         raise ArchiveError(
-            f"the staged ledger differs from the local ledger; the archive would publish "
-            f"a stale history. Re-stage it explicitly:\n"
+            "the staged ledger is not byte-identical to the local ledger, so the archive "
+            "would publish altered log history. Common causes and fixes:\n"
             f"  git -C {kb_root} update-index --no-skip-worktree -- {ledger_relative}\n"
-            f"  git -C {kb_root} update-index --no-assume-unchanged -- {ledger_relative}"
+            f"  git -C {kb_root} update-index --no-assume-unchanged -- {ledger_relative}\n"
+            f"  # a clean filter or text/eol conversion on {ledger_relative} must be removed"
         )
 
     pending = subprocess.run(
@@ -274,6 +286,18 @@ def git_push(kb_root: Path, project_name: str, local_ledger: Path) -> str:
     )
     if committed.returncode:
         raise ArchiveError(f"git commit failed: {committed.stderr.strip()}")
+    head_bytes = blob_bytes(kb_root, f"HEAD:{ledger_relative}")
+    if head_bytes != local_bytes:
+        revision = subprocess.run(
+            ["git", "-C", str(kb_root), "rev-parse", "--short", "HEAD"],
+            capture_output=True, text=True, check=False,
+        ).stdout.strip()
+        raise ArchiveError(
+            "the committed ledger is not byte-identical to the local ledger; refusing to "
+            f"push commit {revision}. Undo it with a soft reset, remove the filter or "
+            f"attribute that rewrites {ledger_relative}, then re-run:\n"
+            f"  git -C {kb_root} reset --soft HEAD~1"
+        )
     pushed = subprocess.run(
         ["git", "-C", str(kb_root), "push"], capture_output=True, text=True, check=False,
     )
