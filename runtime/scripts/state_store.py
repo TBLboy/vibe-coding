@@ -22,6 +22,18 @@ BUSY_TIMEOUT_MS = 5000
 MAX_RECORD_PAYLOAD_BYTES = 16384
 MAX_DOCUMENT_BODY_CHARS = 4096
 
+# Columns that must match byte-for-byte between a ledger entry and the derived
+# command/event rows. Order matters only for the command table, which is checked
+# against the ledger by position as well.
+COMMAND_FIELDS = (
+    "command_id", "origin_kind", "origin_context_id", "origin_revision",
+    "action", "request_json", "request_hash", "receipt_json", "created_at",
+)
+EVENT_FIELDS = (
+    "command_id", "origin_kind", "origin_context_id", "origin_revision",
+    "action", "request_hash", "created_at",
+)
+
 RECORD_KINDS = {
     "business-atom": ("draft", "active", "experimental", "deprecated", "archived", "conflict"),
     "requirement": ("draft", "active", "superseded", "archived"),
@@ -1579,35 +1591,36 @@ class Store:
 
     def apply(self, envelope: dict) -> dict:
         request, canonical, request_hash = _request(envelope)
-        # Idempotent retry: a command that already committed returns its receipt
-        # without re-validating expected_revision.
-        known = self._known_receipt(request["command_id"])
-        if known is not None:
-            if known[0] != canonical:
-                raise StateError("command_conflict", "command_id already belongs to a different envelope")
-            return json.loads(known[1])
-        # expected_revision is compared against what the caller could observe before
-        # this call. A previous run may then have died between the ledger append and
-        # the SQLite commit, so the projection is healed and the command is applied
-        # on top of the healed state.
-        observed = self._local_revision()
-        if observed != request["expected_revision"]:
-            raise StateError("stale_revision", f"Expected revision {request['expected_revision']}; current is {observed}")
-        self.reconcile_with_ledger()
-        baseline = self._local_revision()
         timestamp = datetime.now(timezone.utc).isoformat()
+        # The read, the heal and the commit all happen inside one BEGIN IMMEDIATE
+        # transaction. Holding the write lock across all three is what makes
+        # expected_revision meaningful: a second writer cannot commit between the
+        # revision we compare against and the revision we write on top of, so a
+        # caller that observed an old revision is rejected instead of silently
+        # overwriting the writer that beat it.
         with self._connection(write=True) as connection:
             connection.execute("BEGIN IMMEDIATE")
+            self._metadata(connection)
+            self._heal_ledger(connection)
             metadata = self._metadata(connection)
+            # Idempotent retry: a command that already committed returns its receipt
+            # without re-validating expected_revision. This runs after the heal so a
+            # retry also repairs a ledger-ahead projection before answering.
             previous = connection.execute(
                 "SELECT request_json, receipt_json FROM commands WHERE command_id = ?", (request["command_id"],)
             ).fetchone()
             if previous:
                 if previous["request_json"] != canonical:
                     raise StateError("command_conflict", "command_id already belongs to a different envelope")
+                # Commit the heal before answering the retry, otherwise the
+                # projection repair would be rolled back with the empty transaction.
+                connection.commit()
                 return json.loads(previous["receipt_json"])
-            if metadata["local_revision"] != baseline:
-                raise StateError("stale_revision", f"Expected revision {baseline}; current is {metadata['local_revision']}")
+            if metadata["local_revision"] != request["expected_revision"]:
+                raise StateError(
+                    "stale_revision",
+                    f"Expected revision {request['expected_revision']}; current is {metadata['local_revision']}",
+                )
             if metadata["local_revision"] >= MAX_REVISION:
                 raise StateError("state_conflict", "Revision limit reached")
             sequence = metadata["local_revision"] + 1
@@ -1669,79 +1682,167 @@ class Store:
             created_at=timestamp,
         )
 
-    def _local_revision(self) -> int:
-        with self._connection() as connection:
-            connection.execute("BEGIN")
-            return self._metadata(connection)["local_revision"]
-
-    def _known_receipt(self, command_id: str) -> tuple[str, str] | None:
-        """The stored request/receipt for a command id, or None when it is new."""
-        with self._connection() as connection:
-            connection.execute("BEGIN")
-            self._metadata(connection)
-            row = connection.execute(
-                "SELECT request_json, receipt_json FROM commands WHERE command_id = ?", (command_id,)
-            ).fetchone()
-            return (row["request_json"], row["receipt_json"]) if row else None
-
     def reconcile_with_ledger(self) -> dict:
         """Heal drift between the durable ledger and the local SQLite projection.
 
-        Under the ledger-first write path a crash can only leave the ledger ahead
-        of SQLite, which is repaired by replaying the missing tail. A store that is
-        ahead of the ledger (for example after upgrading from the export-on-finish
-        path) is re-exported, but only when the existing ledger is a byte-identical
-        prefix of the store's command history; anything else is a real conflict and
-        is reported rather than silently overwritten.
+        Both directions are repaired, in a single exclusive transaction: a
+        ledger-ahead store is rebuilt by replaying the missing tail, and a
+        store-ahead ledger is re-exported. Divergence that is not a clean subset in
+        either direction fails closed rather than silently overwriting history.
+
+        Direction is decided by the ordered command-id sequence, never by a
+        revision number: ``origin_revision`` is provenance, and a merged ledger can
+        hold commands from another context whose revisions overlap this store's.
+        """
+        with self._connection(write=True) as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            self._metadata(connection)
+            report = self._heal_ledger(connection)
+            connection.commit()
+            return report
+
+    def heal_from_ledger(self) -> dict:
+        """Repair a projection that lags the ledger without ever rewriting it.
+
+        Read commands call this so ``vibe status`` cannot silently report a stale
+        revision after a crash between the ledger fsync and the SQLite commit. A
+        store that is ahead of the ledger is left untouched: only an explicit
+        attach/export may rewrite the ledger. A store whose history neither
+        contains nor is contained by the ledger fails closed with
+        ``ledger_diverged`` instead of returning a normal-looking status. The
+        common in-sync case is answered from a read connection, so a concurrent
+        writer only blocks a read that actually needs to heal.
         """
         path = self.ledger_path()
         if path is None:
-            return {"status": "unavailable", "reason": "store has no project root"}
-        from state_ledger import export_ledger, ledger_tip, read_ledger
+            return {"status": "unavailable", "reason": "store has no project root", "appended": 0}
+        from state_ledger import history_rewritten, read_ledger
 
-        revision = self._local_revision()
-        tip = ledger_tip(path) if path.is_file() else None
-        ledger_revision = tip["origin_revision"] if tip else 0
-        if ledger_revision == revision:
-            return {"status": "in_sync", "revision": revision}
-        if ledger_revision > revision:
-            report = self.sync_from_ledger(read_ledger(path))
+        with self._connection() as connection:
+            connection.execute("BEGIN")
+            metadata = self._metadata(connection)
+            local_rows = [
+                dict(row) for row in connection.execute(
+                    "SELECT * FROM commands ORDER BY local_sequence"
+                )
+            ]
+        local_ids = [row["command_id"] for row in local_rows]
+        try:
+            entries = read_ledger(path) if path.is_file() else []
+        except StateError:
+            # A torn trailing write can only be repaired safely while holding the
+            # write lock, so hand off to the reconciling path instead of truncating
+            # a line another process may still be appending.
+            return self.reconcile_with_ledger()
+        ledger_ids = [row["command_id"] for row in entries]
+        # Matching ids are not enough: a ledger can rewrite a command while keeping
+        # its id. A read must not present that as a clean status in any direction.
+        if history_rewritten({row["command_id"]: row for row in local_rows}, entries):
+            raise StateError(
+                "history_rewritten",
+                "Ledger rewrites a shared command; refusing to report a status",
+            )
+        if local_ids == ledger_ids:
+            return {"status": "in_sync", "revision": metadata["local_revision"], "appended": 0}
+        if not set(local_ids) <= set(ledger_ids):
+            if set(ledger_ids) <= set(local_ids):
+                # The store leads the ledger. A read path must not rewrite durable
+                # history, so report the drift and leave repair to attach/export.
+                return {
+                    "status": "store-ahead", "revision": metadata["local_revision"], "appended": 0,
+                }
+            # Neither history contains the other. Fail closed instead of returning
+            # a normal-looking status for a store that does not match the ledger.
+            raise StateError(
+                "ledger_diverged",
+                "Ledger and local store histories diverge; refusing to report a status",
+            )
+        return self.reconcile_with_ledger()
+
+    def _read_ledger_repairing_tail(self, path: Path) -> list[dict]:
+        """Read the ledger, dropping a torn trailing write if there is one.
+
+        Only safe to call while holding the store's write lock: that lock also
+        serializes appenders, so a truncated tail cannot belong to a live writer.
+        """
+        from state_ledger import read_ledger, repair_ledger_tail
+
+        try:
+            return read_ledger(path) if path.is_file() else []
+        except StateError:
+            # A partial final line can only belong to a command that was never
+            # committed, so it is safe to drop before deciding the direction.
+            repair_ledger_tail(path)
+            return read_ledger(path) if path.is_file() else []
+
+    def _heal_ledger(self, connection) -> dict:
+        """Reconcile the store with the ledger inside one open write transaction."""
+        path = self.ledger_path()
+        if path is None:
+            return {"status": "unavailable", "reason": "store has no project root", "appended": 0}
+        from state_ledger import export_ledger
+
+        entries = self._read_ledger_repairing_tail(path)
+        local_ids = [
+            row["command_id"] for row in connection.execute(
+                "SELECT command_id FROM commands ORDER BY local_sequence"
+            )
+        ]
+        ledger_ids = [row["command_id"] for row in entries]
+        if not local_ids and not ledger_ids:
+            return {"status": "in_sync", "revision": 0, "appended": 0}
+        local_set, ledger_set = set(local_ids), set(ledger_ids)
+        if local_set <= ledger_set:
+            # The ledger holds every local command, so it is authoritative. This
+            # includes the equal-id case on purpose: _apply_ledger proves each shared
+            # command is byte-identical (raising ``history_rewritten`` otherwise) and
+            # rebuilds the projection when it disagrees with replay. An id-only fast
+            # path here would let a same-id ledger rewrite or a forged projection
+            # pass as in-sync and corrupt the next write.
+            report = self._apply_ledger(connection, entries)
             return {
-                "status": report["status"], "direction": "ledger-ahead",
+                "status": report["status"],
+                "direction": "ledger-ahead" if report["appended"] else "in_sync",
                 "revision": report["revision"], "appended": report["appended"],
             }
-        entries = read_ledger(path) if path.is_file() else []
-        if not self._ledger_is_prefix(entries):
-            raise StateError(
-                "ledger_behind",
-                "Ledger history diverges from the local store; refusing to overwrite it",
-            )
-        result = export_ledger(self)
-        return {
-            "status": "exported", "direction": "store-ahead",
-            "revision": revision, "events": result["events"],
-        }
+        if ledger_set <= local_set:
+            self._assert_shared_commands_match(connection, entries)
+            result = export_ledger(self, path, rows=self._command_rows_on(connection))
+            return {
+                "status": "exported", "direction": "store-ahead",
+                "revision": len(local_ids), "appended": 0, "events": result["events"],
+            }
+        raise StateError(
+            "ledger_diverged",
+            "Ledger and local store histories diverge; refusing to overwrite either",
+        )
 
-    def _ledger_is_prefix(self, entries) -> bool:
-        """Whether the ledger's events are an exact prefix of the store's commands."""
+    @staticmethod
+    def _command_rows_on(connection) -> list[dict]:
+        """All command rows on an already-open connection, in local order."""
+        return [
+            {key: row[key] for key in row.keys()}
+            for row in connection.execute("SELECT * FROM commands ORDER BY local_sequence")
+        ]
+
+    def _assert_shared_commands_match(self, connection, entries) -> None:
+        """Refuse to re-export over a ledger that rewrote a shared command."""
         keys = (
             "command_id", "origin_kind", "origin_context_id", "origin_revision",
             "action", "request_json", "request_hash", "receipt_json", "created_at",
         )
-        with self._connection() as connection:
-            connection.execute("BEGIN")
-            self._metadata(connection)
-            local = [
-                dict(row) for row in connection.execute(
-                    "SELECT * FROM commands ORDER BY local_sequence LIMIT ?", (len(entries),)
+        local = {
+            row["command_id"]: dict(row)
+            for row in connection.execute("SELECT * FROM commands")
+        }
+        for entry in entries:
+            known = local.get(entry["command_id"])
+            if known is None:
+                continue
+            if any(known[key] != entry[key] for key in keys):
+                raise StateError(
+                    "history_rewritten", f"Ledger rewrites shared command {entry['command_id']}"
                 )
-            ]
-        if len(local) != len(entries):
-            return False
-        return all(
-            all(row[key] == entry[key] for key in keys)
-            for row, entry in zip(local, entries)
-        )
 
     def ledger(self, after_sequence: int = 0, limit: int = 100) -> list[dict]:
         """Bounded read of immutable command records ordered by local commit sequence."""
@@ -2118,85 +2219,124 @@ class Store:
         missing commands are appended at their ledger position; a projection that
         disagrees with replay is rebuilt whole rather than patched.
         """
+        with self._connection(write=True) as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            self._metadata(connection)
+            report = self._apply_ledger(connection, entries)
+            connection.commit()
+            return report
+
+    def _apply_ledger(self, connection, entries) -> dict:
+        """Replay ``entries`` into an already-open write transaction.
+
+        Shared by :meth:`sync_from_ledger` and the write path's in-transaction
+        heal. The caller owns the transaction and must commit or roll back.
+        """
         from state_replay import reduce_ledger
 
         entries = list(entries)
         state = reduce_ledger(entries)
         ledger_ids = {row["command_id"] for row in entries}
-        with self._connection(write=True) as connection:
-            connection.execute("BEGIN IMMEDIATE")
-            metadata = self._metadata(connection)
-            local = {
-                row["command_id"]: dict(row)
-                for row in connection.execute("SELECT * FROM commands")
-            }
-            for row in entries:
-                known = local.get(row["command_id"])
-                if known is None:
-                    continue
-                if any(known[key] != row[key] for key in (
-                        "origin_kind", "origin_context_id", "origin_revision", "action",
-                        "request_json", "request_hash", "receipt_json", "created_at")):
-                    raise StateError(
-                        "history_rewritten", f"Ledger rewrites shared command {row['command_id']}"
-                    )
-            if set(local) - ledger_ids:
+        local = {
+            row["command_id"]: dict(row)
+            for row in connection.execute("SELECT * FROM commands")
+        }
+        for row in entries:
+            known = local.get(row["command_id"])
+            if known is None:
+                continue
+            if any(known[key] != row[key] for key in COMMAND_FIELDS):
                 raise StateError(
-                    "ledger_behind",
-                    "Local state has commands the ledger is missing; export before attaching",
+                    "history_rewritten", f"Ledger rewrites shared command {row['command_id']}"
                 )
-            appended = [row for row in entries if row["command_id"] not in local]
-            if not appended:
-                if self._entity_rows(connection) == state:
-                    return {"status": "identical", "revision": len(entries), "appended": 0}
-                self._write_projection(connection, state, len(entries))
-                problems = self._verify_ledger(connection)
-                if problems:
-                    raise StateError("invalid_ledger", problems[0])
-                connection.commit()
-                return {"status": "rebuilt", "revision": len(entries), "appended": 0}
-            # A merge can place archived commands before commands this store already
-            # had, so the ledger order may differ from the stored order. When it does,
-            # rewrite the immutable command/event tables in ledger order; they are
-            # derived data, and every shared command was proven identical above.
-            local_order = [
-                row["command_id"] for row in connection.execute(
-                    "SELECT command_id FROM commands ORDER BY local_sequence"
-                )
-            ]
-            reordered = local_order != [
-                row["command_id"] for row in entries[: len(local_order)]
-            ]
-            if reordered:
-                connection.execute("DELETE FROM events")
-                connection.execute("DELETE FROM commands")
-            for index, row in enumerate(entries, start=1):
-                if row["local_sequence"] != index:
-                    raise StateError("invalid_ledger", "Ledger sequences are not contiguous")
-                if not reordered and row["command_id"] in local:
-                    continue
-                connection.execute(
-                    """INSERT INTO commands (command_id, local_sequence, origin_kind, origin_context_id,
-                           origin_revision, action, request_json, request_hash, receipt_json, created_at)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (row["command_id"], index, row["origin_kind"], row["origin_context_id"],
-                     row["origin_revision"], row["action"], row["request_json"], row["request_hash"],
-                     row["receipt_json"], row["created_at"]))
-                connection.execute(
-                    """INSERT INTO events (local_sequence, command_id, origin_kind, origin_context_id,
-                           origin_revision, action, request_hash, created_at)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (index, row["command_id"], row["origin_kind"], row["origin_context_id"],
-                     row["origin_revision"], row["action"], row["request_hash"], row["created_at"]))
-            self._write_projection(connection, state, len(entries))
-            problems = self._verify_ledger(connection)
-            if problems:
-                raise StateError("invalid_ledger", problems[0])
-            connection.commit()
-            return {
-                "status": "merged" if reordered else "appended",
-                "revision": len(entries), "appended": len(appended), "reordered": reordered,
-            }
+        if set(local) - ledger_ids:
+            raise StateError(
+                "ledger_behind",
+                "Local state has commands the ledger is missing; export before attaching",
+            )
+        appended = [row for row in entries if row["command_id"] not in local]
+        # A merge can place archived commands before commands this store already
+        # had, so the ledger order may differ from the stored order. When it does,
+        # rewrite the immutable command/event tables in ledger order; they are
+        # derived data, and every shared command was proven identical above.
+        local_order = [
+            row["command_id"] for row in connection.execute(
+                "SELECT command_id FROM commands ORDER BY local_sequence"
+            )
+        ]
+        prefix = entries[: len(local_order)]
+        rebuild = local_order != [row["command_id"] for row in prefix]
+        if not rebuild:
+            # Same ids in the same order is not enough: the derived command and event
+            # rows are caches that a crash or a forgery can leave disagreeing with the
+            # ledger, so check their bytes before treating the prefix as already applied.
+            rebuild = not self._derived_rows_match(connection, prefix)
+        if not appended and not rebuild:
+            # Only a byte-identical derived state counts as identical; a projection
+            # that disagrees with replay is rebuilt whole.
+            if self._entity_rows(connection) == state:
+                return {"status": "identical", "revision": len(entries), "appended": 0}
+            rebuild = True
+        if rebuild:
+            connection.execute("DELETE FROM events")
+            connection.execute("DELETE FROM commands")
+        for index, row in enumerate(entries, start=1):
+            if row["local_sequence"] != index:
+                raise StateError("invalid_ledger", "Ledger sequences are not contiguous")
+            if not rebuild and row["command_id"] in local:
+                continue
+            connection.execute(
+                """INSERT INTO commands (command_id, local_sequence, origin_kind, origin_context_id,
+                       origin_revision, action, request_json, request_hash, receipt_json, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (row["command_id"], index, row["origin_kind"], row["origin_context_id"],
+                 row["origin_revision"], row["action"], row["request_json"], row["request_hash"],
+                 row["receipt_json"], row["created_at"]))
+            connection.execute(
+                """INSERT INTO events (local_sequence, command_id, origin_kind, origin_context_id,
+                       origin_revision, action, request_hash, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (index, row["command_id"], row["origin_kind"], row["origin_context_id"],
+                 row["origin_revision"], row["action"], row["request_hash"], row["created_at"]))
+        self._write_projection(connection, state, len(entries))
+        problems = self._verify_ledger(connection)
+        if problems:
+            raise StateError("invalid_ledger", problems[0])
+        if not appended:
+            return {"status": "rebuilt", "revision": len(entries), "appended": 0}
+        return {
+            "status": "merged" if rebuild else "appended",
+            "revision": len(entries), "appended": len(appended), "reordered": rebuild,
+        }
+
+    @staticmethod
+    def _derived_rows_match(connection, entries) -> bool:
+        """Whether the command/event tables reproduce the ledger entries exactly."""
+        commands = [
+            dict(row) for row in connection.execute(
+                "SELECT * FROM commands ORDER BY local_sequence"
+            )
+        ]
+        if len(commands) != len(entries):
+            return False
+        for position, (row, entry) in enumerate(zip(commands, entries), start=1):
+            if row["local_sequence"] != position:
+                return False
+            if any(row[key] != entry[key] for key in COMMAND_FIELDS):
+                return False
+        events = [
+            dict(row) for row in connection.execute(
+                "SELECT * FROM events ORDER BY local_sequence"
+            )
+        ]
+        if len(events) != len(entries):
+            return False
+        for position, (row, entry) in enumerate(zip(events, entries), start=1):
+            if row["local_sequence"] != position:
+                return False
+            if any(row[key] != entry[key] for key in EVENT_FIELDS):
+                return False
+        return True
 
     def validate(self) -> list[str]:
         """Return diagnostics, or an empty list; audit never repairs authority."""

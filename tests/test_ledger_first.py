@@ -16,7 +16,7 @@ if str(SCRIPTS) not in sys.path:
 
 from state_context import attach, initialize, open_store  # noqa: E402
 from state_ledger import ledger_path, read_ledger, verify_ledger  # noqa: E402
-from state_store import Store  # noqa: E402
+from state_store import StateError, Store  # noqa: E402
 
 
 class LedgerFirstWriteTests(unittest.TestCase):
@@ -97,11 +97,22 @@ class LedgerFirstWriteTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 self.store.apply(self.goal())
 
-        # A plain reopen still lags; the next write heals it before validating.
-        reopened = open_store(self.root)
-        self.assertEqual(reopened.status()["revision"], 0)
+        # A read heals the projection: the command is already durable in the ledger,
+        # so reporting the pre-crash revision would be a silent lie.
+        reopened = open_store(self.root, heal=True)
+        self.assertEqual(reopened.status()["revision"], 1)
+
+        # A write stamped with the stale revision is rejected, because the ledger
+        # commit already happened and another observer could have seen it.
+        with self.assertRaises(StateError) as caught:
+            reopened.apply(self.envelope(
+                uuid.uuid4().hex, 0, "goal.create", {"id": "GOAL-002", "title": "Second"},
+            ))
+        self.assertEqual(caught.exception.code, "stale_revision")
+
+        # Re-stamping with the healed revision applies on top of the recovered state.
         reopened.apply(self.envelope(
-            uuid.uuid4().hex, 0, "goal.create", {"id": "GOAL-002", "title": "Second"},
+            uuid.uuid4().hex, 1, "goal.create", {"id": "GOAL-002", "title": "Second"},
         ))
 
         self.assertEqual(reopened.status()["revision"], 2)

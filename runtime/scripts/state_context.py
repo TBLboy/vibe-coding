@@ -99,11 +99,22 @@ def git_context(root: Path) -> tuple[str, Path]:
     return context_id, directory
 
 
-def open_store(root: Path) -> Store:
+def open_store(root: Path, heal: bool = False) -> Store:
+    """Open this worktree's store.
+
+    ``heal=True`` first repairs a projection that lags the ledger, so a read
+    cannot silently report a stale revision after a crash between the ledger
+    fsync and the SQLite commit. It never rewrites the ledger: a store-ahead
+    ledger is left for an explicit attach/export. Verification and portability
+    reporting open the pure store so drift stays observable.
+    """
     marker = read_marker(root)
     context_id, directory = git_context(root)
     path = directory / marker["project_id"] / context_id / "state.sqlite3"
-    return Store(path, marker["project_id"], context_id, root)
+    store = Store(path, marker["project_id"], context_id, root)
+    if heal:
+        store.heal_from_ledger()
+    return store
 
 
 def initialize(root: Path) -> Store:
@@ -154,16 +165,15 @@ def attach_with_report(root: Path) -> tuple[Store, dict]:
     marker = read_marker(root)
     context_id, directory = git_context(root)
     path = directory / marker["project_id"] / context_id / "state.sqlite3"
-    from state_ledger import ledger_path, read_ledger
-
-    entries = read_ledger(ledger_path(root))
     store = Store(path, marker["project_id"], context_id, root)
     if not (path.exists() or path.is_symlink()):
         store.initialize()
-    if entries:
-        report = store.sync_from_ledger(entries)
-    else:
-        report = {"status": "empty", "revision": store.status()["revision"], "appended": 0}
+    # Reconcile in both directions: a fresh clone replays the ledger, a store
+    # whose ledger was truncated/rolled back is re-exported, and a projection
+    # that disagrees with replay is rebuilt whole.
+    report = store.reconcile_with_ledger()
+    if report["status"] == "in_sync" and report["revision"] == 0:
+        report = {"status": "empty", "revision": 0, "appended": 0}
     return store, report
 
 
@@ -184,13 +194,13 @@ def apply_command(root: Path, envelope: dict) -> dict:
 def refresh_views(root: Path) -> dict:
     from state_views import publish
 
-    store = open_store(root)
+    store = open_store(root, heal=True)
     return publish(store, store.path.parent / "generated")
 
 
 def refresh_evidence(root: Path, reason: str | None = None, changed_paths=None) -> dict:
     """Invalidate active evidence whose recorded covered bytes changed."""
-    store = open_store(root)
+    store = open_store(root, heal=True)
     stale = store.stale_evidence(root)
     if changed_paths is not None:
         normalized = set()
@@ -285,7 +295,7 @@ def abandon_export(root: Path, reason: str) -> dict:
 
 
 def compact_context(root: Path) -> str:
-    store = open_store(root)
+    store = open_store(root, heal=True)
     state = store.status(limit=5)
     task = state.get("current_task") or state.get("latest_task")
     try:

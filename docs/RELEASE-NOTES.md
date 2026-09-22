@@ -10,11 +10,24 @@
 ### 写入路径
 
 - `Store.apply` 现在是 ledger-first：账本追加是唯一 commit point，SQLite 随后更新。
-  进程在两步之间崩溃，下次写入或 `state-attach` 会把 SQLite 从账本追平，不会出现半条命令。
+  读取 `expected_revision`、追平投影、提交命令处于同一个 `BEGIN IMMEDIATE` 事务内，
+  因此在锁外观测到旧 revision 的写入者会被判 `stale_revision`，不会覆盖先提交的写入者。
+- 进程在账本 `fsync` 与 SQLite commit 之间崩溃时，读取命令（`vibe status`/`context`/`gate` 等）
+  会先从账本追平投影再作答，不再静默返回崩溃前的旧 revision。
 - 同一 `command_id` 重放是幂等的：崩溃后重试同一信封会返回账本里已持久化的 receipt，
-  不会重复记账。
-- 账本追平只追加、不重写历史；只有在本机 SQLite 领先账本、且账本是本机命令历史的
-  字节前缀时才重新导出。
+  并在返回前先把落后的账本补回；不会重复记账。
+- 追平方向由命令 id 序列判定，不用账本 tip 的 `origin_revision` 冒充账本位置，
+  跨上下文 revision 相同的账本不会被误判为 in-sync。
+- 命令 id 相同不代表内容相同：共享命令仍逐字节校验，账本在同 id 下改写历史会
+  以 `history_rewritten` fail closed；投影与账本重放不一致时（含 id 完全一致的情况）
+  由 `state-attach` 整体重建，不会把伪造的投影当成 in-sync。
+- 读取路径同样按身份校验：`vibe status` 遇到同 id 改写或双向不包含的账本会 fail closed，
+  不再打印正常状态；派生的 command/event 行被篡改时 `state-attach` 会从账本整体重建。
+- 账本领先时只回放缺失尾部、不重写历史；SQLite 领先账本（例如账本被回滚或从未导出）时
+  重新导出，且共享命令必须逐字节一致，否则 fail closed 报 `ledger_diverged`。
+- `state-attach` 双向追平：干净克隆从账本重建，账本为空/落后的工作目录从 SQLite 重新导出。
+- `portability-status` 与生成视图的账本新鲜度按命令身份判定，不再只看 revision/事件数；
+  同 revision 的异源账本不会被报告为 portable。
 
 ### 项目级日志
 

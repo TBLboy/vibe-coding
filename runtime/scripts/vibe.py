@@ -126,7 +126,11 @@ def apply_cli_action(root: Path, action: str, payload: dict) -> dict:
     from state_context import apply_command, open_store
     from state_store import SCHEMA_VERSION
 
-    store = open_store(root)
+    # The CLI's own writes always start from a healed projection, so the
+    # expected_revision it stamps is the revision the command will really apply on
+    # top of. A crash between the ledger fsync and the SQLite commit must not make
+    # the next `vibe task ...` fail with a stale revision the user cannot see.
+    store = open_store(root, heal=True)
     envelope = {
         "schema_version": SCHEMA_VERSION,
         "command_id": uuid.uuid4().hex,
@@ -357,7 +361,7 @@ def main() -> int:
                 raise StateError("invalid_input", "command envelope exceeds 65536 characters")
             result = apply_command(root, json.loads(text))
         elif args.command == "state-task":
-            result = open_store(root).get_task(args.task_id)
+            result = open_store(root, heal=True).get_task(args.task_id)
         elif args.command == "state-views":
             result = refresh_views(root)
         elif args.command == "state-attach":
@@ -376,7 +380,7 @@ def main() -> int:
         elif args.command == "state-route":
             result = route(args.path, args.signal or None, args.files_touched, not args.irreversible)
         elif args.command == "state-context":
-            result = task_context(open_store(root), args.task_id, args.budget_bytes)
+            result = task_context(open_store(root, heal=True), args.task_id, args.budget_bytes)
         elif args.command == "state-fingerprint":
             result = fingerprint_file(args.path, args.selector, args.field)
         elif args.command == "state-evidence-check":
@@ -432,7 +436,7 @@ def main() -> int:
         elif args.command == "route":
             result = route(args.path, args.signal or None, args.files_touched, not args.irreversible)
         elif args.command == "context":
-            result = task_context(open_store(root), args.task_id, args.budget_bytes)
+            result = task_context(open_store(root, heal=True), args.task_id, args.budget_bytes)
         elif args.command == "exchange":
             if args.exchange_action == "status":
                 result = exchange_status(root)
@@ -448,7 +452,13 @@ def main() -> int:
             from state_ledger import export_ledger, verify_ledger
 
             if args.ledger_action == "export":
-                result = export_ledger(open_store(root))
+                # Never write the ledger straight from the store: if the ledger is
+                # ahead (a crash between its fsync and the SQLite commit) a blind
+                # export would truncate the durable tail. Reconcile first, which
+                # replays that tail or fails closed on divergence, then export.
+                store = open_store(root)
+                store.reconcile_with_ledger()
+                result = export_ledger(store)
             else:
                 result = verify_ledger(root)
         elif args.command == "portability-status":
@@ -528,7 +538,7 @@ def main() -> int:
             else:
                 result = apply_cli_action(root, "goal.complete", {"id": args.id})
         elif args.command == "gate":
-            result = open_store(root).gate_task(args.task)
+            result = open_store(root, heal=True).gate_task(args.task)
         elif args.command == "review":
             result = apply_cli_action(root, "review.record", {
                 "id": args.id, "task_id": args.task_id, "reviewer": args.reviewer,
@@ -537,7 +547,7 @@ def main() -> int:
             })
         elif is_transactional(root):
             if args.command == "status":
-                result = open_store(root).status()
+                result = open_store(root, heal=True).status()
             elif args.command == "validate":
                 errors = open_store(root).validate()
                 print(json.dumps({"errors": errors}, ensure_ascii=True))

@@ -99,10 +99,20 @@ def _render(snapshot: dict, portability: dict | None = None) -> dict[str, bytes]
             f"- Ledger events at revision {portability['ledger_tip_revision']}; "
             f"store revision {portability['store_revision']}."
         )
-        if portability["unexported_commands"]:
+        if portability.get("history_rewritten"):
+            handoff.append(
+                "- NOT PORTABLE: the ledger rewrites a command the local store already has; "
+                "run `ledger verify` and restore the ledger from Git before ending the session."
+            )
+        elif portability["unexported_commands"]:
             handoff.append(
                 f"- NOT PORTABLE: {portability['unexported_commands']} command(s) are only in "
                 "the local SQLite; run `ledger export` before ending the session."
+            )
+        elif not portability.get("in_sync", portability["unexported_commands"] == 0):
+            handoff.append(
+                "- NOT PORTABLE: the ledger does not match the local store's command history; "
+                "run `state-attach` or restore the ledger from Git before ending the session."
             )
         else:
             handoff.append("- Ledger is current with the local store.")
@@ -247,7 +257,7 @@ def publish(store: Store, destination: Path) -> dict:
             if store.root is not None:
                 from state_ledger import ledger_freshness
 
-                portability = ledger_freshness(store.root, revision)
+                portability = ledger_freshness(store.root, revision, store)
             contents = _render(snapshot, portability)
             manifest = {
                 "schema_version": SCHEMA_VERSION, "project_id": snapshot["project_id"],

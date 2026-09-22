@@ -122,7 +122,7 @@ def main() -> int:
 
         if is_transactional(root):
             if args.command in {"restore", "status"}:
-                output(open_store(root).status(), args.json)
+                output(open_store(root, heal=True).status(), args.json)
             elif args.command == "validate":
                 errors = open_store(root).validate()
                 output({"errors": errors}, args.json)
@@ -130,10 +130,10 @@ def main() -> int:
             elif args.command == "handoff":
                 output(refresh_views(root), args.json)
             elif args.command == "evaluate":
-                store = open_store(root)
+                store = open_store(root, heal=True)
                 output(store.evaluate_goal(store.active_goal_id()), args.json)
             elif args.command == "record-evidence":
-                store = open_store(root)
+                store = open_store(root, heal=True)
                 payload = {
                     "id": args.id,
                     "kind": args.kind,

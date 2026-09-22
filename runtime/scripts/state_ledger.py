@@ -124,7 +124,7 @@ def _tail_lines(path: Path, count: int) -> list[str]:
         raise StateError("invalid_ledger", f"Cannot decode the ledger tail: {error}") from error
 
 
-def _ensure_append_ready(path: Path) -> None:
+def repair_ledger_tail(path: Path) -> None:
     """Drop an incomplete trailing write so the next append starts on a clean line.
 
     A process killed mid-``write`` can leave a partial final line. Because the
@@ -132,6 +132,9 @@ def _ensure_append_ready(path: Path) -> None:
     incomplete tail can only belong to a command that was never committed, so it is
     safe to truncate. A tail that is already a complete event but merely lacks the
     trailing newline is completed instead of dropped.
+
+    Public because the store's reconciliation path must repair a torn tail before it
+    can read the ledger, not only just before its next append.
     """
     if not path.is_file():
         return
@@ -195,7 +198,7 @@ def append_event(
     """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    _ensure_append_ready(path)
+    repair_ledger_tail(path)
     previous_hash = GENESIS_HASH
     if path.is_file():
         tip = ledger_tip(path)
@@ -281,14 +284,19 @@ def _command_rows(store) -> list[dict]:
         ]
 
 
-def export_ledger(store, path: Path | None = None) -> dict:
-    """Write every accepted command to the Git-tracked ledger, idempotently."""
+def export_ledger(store, path: Path | None = None, rows=None) -> dict:
+    """Write every accepted command to the Git-tracked ledger, idempotently.
+
+    ``rows`` lets a caller that already holds an open write transaction reuse the
+    command rows it read on that connection instead of opening a second one.
+    """
     if path is None:
         if store.root is None:
             raise StateError("invalid_root", "Cannot locate the ledger without a project root")
         path = ledger_path(store.root)
     path = Path(path)
-    rows = _command_rows(store)
+    if rows is None:
+        rows = _command_rows(store)
     text = render_ledger(rows)
     digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
     existing = path.read_text(encoding="utf-8") if path.is_file() else None
@@ -356,18 +364,58 @@ def ledger_tip(path: Path) -> dict | None:
     return None
 
 
-def ledger_freshness(root: Path, revision: int) -> dict:
-    """Cheap check of whether the ledger's last event is the store's revision."""
+COMMAND_KEYS = (
+    "command_id", "origin_kind", "origin_context_id", "origin_revision",
+    "action", "request_json", "request_hash", "receipt_json", "created_at",
+)
+
+
+def command_identity(store) -> tuple[list[str], dict[str, dict]]:
+    """The store's command ids in local order, and its command rows by id."""
+    with store._connection() as connection:
+        connection.execute("BEGIN")
+        rows = [dict(row) for row in connection.execute("SELECT * FROM commands")]
+    rows.sort(key=lambda row: row["local_sequence"])
+    return [row["command_id"] for row in rows], {row["command_id"]: row for row in rows}
+
+
+def history_rewritten(local: dict[str, dict], entries) -> bool:
+    """Whether the ledger rewrites the stored bytes of a shared command."""
+    for entry in entries:
+        known = local.get(entry["command_id"])
+        if known is None:
+            continue
+        if any(known[key] != entry[key] for key in COMMAND_KEYS):
+            return True
+    return False
+
+
+def ledger_freshness(root: Path, revision: int, store=None) -> dict:
+    """Whether the ledger's tail is this store's history, not just its revision.
+
+    Without ``store`` this is the cheap tip-revision check. Callers that already
+    hold the store should pass it, because a foreign or rewritten ledger can share
+    the tip revision while holding completely different commands.
+    """
     path = ledger_path(root)
     tip = ledger_tip(path)
     tip_revision = tip["origin_revision"] if tip else 0
-    return {
+    report = {
         "ledger_present": path.is_file(),
         "ledger_tip_revision": tip_revision,
         "store_revision": revision,
         "unexported_commands": max(0, revision - tip_revision),
         "in_sync": revision == tip_revision,
     }
+    if store is None:
+        return report
+    entries = read_ledger(path) if path.is_file() else []
+    local_ids, local = command_identity(store)
+    ledger_ids = [row["command_id"] for row in entries]
+    ledger_set = set(ledger_ids)
+    report["unexported_commands"] = sum(1 for command_id in local_ids if command_id not in ledger_set)
+    report["in_sync"] = bool(ledger_ids == local_ids and not history_rewritten(local, entries))
+    return report
 
 
 def _git(root: Path, *arguments: str) -> tuple[bool, str]:
@@ -392,20 +440,36 @@ def portability_status(root: Path) -> dict:
     root = Path(root).resolve()
     path = ledger_path(root)
     entries = read_ledger(path)
+    ledger_ids = [row["command_id"] for row in entries]
+    local_ids: list[str] | None = None
+    local: dict[str, dict] = {}
+    revision = None
     try:
         from state_context import open_store
 
-        revision = open_store(root).status()["revision"]
+        store = open_store(root)
+        revision = store.status()["revision"]
+        local_ids, local = command_identity(store)
     except StateError:
-        revision = None
-    unexported = max(0, revision - len(entries)) if revision is not None else None
+        pass
+    rewritten = bool(local_ids is not None and history_rewritten(local, entries))
+    if local_ids is None:
+        unexported = None
+        in_sync = None
+    else:
+        ledger_set = set(ledger_ids)
+        unexported = sum(1 for command_id in local_ids if command_id not in ledger_set)
+        # Identity, not cardinality: a foreign ledger with the same number of
+        # events must not be reported as capturing this store's history.
+        in_sync = bool(ledger_ids == local_ids and not rewritten)
     report = {
         "ledger_path": str(path),
         "ledger_present": path.is_file(),
         "ledger_events": len(entries),
         "store_revision": revision,
         "unexported_commands": unexported,
-        "in_sync": unexported == 0,
+        "history_rewritten": rewritten,
+        "in_sync": in_sync,
         "git": None,
     }
     inside, _ = _git(root, "rev-parse", "--show-toplevel")
