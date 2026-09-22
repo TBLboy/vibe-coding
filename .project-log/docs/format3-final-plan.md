@@ -103,16 +103,19 @@ GPT 的 Format 3 提案面向"多人、多分支、多 Agent 长期协作"。本
 
 ## 五、实施阶段
 
-| 阶段 | 任务 | 内容 |
-|---|---|---|
-| Phase 0 | TASK-048 | Golden Replay Test：抽出 `reduce(ledger) -> state`，用现有命令建立 `logical_state_hash` 基线 |
-| Phase 1 | TASK-049 | 把现有命令无损导出为 Git 跟踪的账本 |
-| Phase 2 | TASK-050 | `state-attach` 从账本重放建库 + 启动对账（支持增量重放） |
-| Phase 3 | TASK-051 | 切换 Ledger-first 写入 |
-| Phase 4 | TASK-052 | `portability-status` 与收尾守卫 |
-| — | TASK-058 | 修复归档 skill：排除 `.state/`/`.git`、项目名撞车检测、合并追加、超集校验 |
-| — | TASK-059 | 新增"对齐项目进度" skill：从 KB 合并日志进 work 并触发 SQLite 重建 |
-| — | TASK-060 | 账本路径与 identity 与分支无关 |
+| 阶段 | 任务 | 内容 | 状态 |
+|---|---|---|---|
+| Phase 0 | TASK-048 | Golden Replay Test：抽出 `reduce(ledger) -> state`，用现有命令建立 `logical_state_hash` 基线 | implemented-unverified |
+| Phase 1 | TASK-049 | 把现有命令无损导出为 Git 跟踪的账本 | implemented-unverified |
+| Phase 2 | TASK-050 | `state-attach` 从账本重放建库 + 启动对账（支持增量重放） | implemented-unverified |
+| Phase 3 | TASK-051 / TASK-061 | 切换 Ledger-first 写入（TASK-051 的 per-writer 变体已取消，TASK-061 为项目级账本版本） | implemented-unverified |
+| Phase 4 | TASK-052 | `portability-status` 与收尾守卫 | implemented-unverified |
+| — | TASK-058 | 修复归档 skill：排除 `.state/`/`.git`、项目名撞车检测、合并追加、超集校验 | implemented-unverified |
+| — | TASK-059 | 新增"对齐项目进度" skill：从 KB 合并日志进 work 并触发 SQLite 重建 | implemented-unverified |
+| — | TASK-060 | 账本路径与 identity 与分支无关 | implemented-unverified |
+
+全部阶段已在框架 0.6.0 落地，并由 182 个 unittest（1 个跳过）与
+`validate_package.py` 覆盖；四个收尾任务（TASK-058/059/060/061）的完成门禁均为 `allowed`。
 
 ## 六、明确不做
 
