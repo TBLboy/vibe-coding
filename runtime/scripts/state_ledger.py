@@ -17,6 +17,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import subprocess
 
 from state_replay import logical_state_hash, reduce_ledger
 from state_store import StateError, _json
@@ -202,3 +203,111 @@ def verify_ledger(root: Path, store=None) -> dict:
         "matches": not mismatches,
         "mismatches": mismatches,
     }
+
+
+def _last_line(path: Path) -> str | None:
+    with path.open("rb") as stream:
+        stream.seek(0, os.SEEK_END)
+        position = stream.tell()
+        buffer = b""
+        while position > 0:
+            step = min(4096, position)
+            position -= step
+            stream.seek(position)
+            buffer = stream.read(step) + buffer
+            stripped = buffer.rstrip(b"\r\n")
+            if b"\n" in stripped:
+                return stripped.rsplit(b"\n", 1)[-1].decode("utf-8")
+        return buffer.strip().decode("utf-8") or None
+
+
+def ledger_tip(path: Path) -> dict | None:
+    """Read only the final ledger event, so freshness checks stay O(1)."""
+    path = Path(path)
+    if not path.is_file():
+        return None
+    try:
+        line = _last_line(path)
+    except (OSError, UnicodeError) as error:
+        raise StateError("invalid_ledger", f"Cannot read the ledger tip: {error}") from error
+    if line is None:
+        return None
+    try:
+        return json.loads(line)
+    except ValueError as error:
+        raise StateError("invalid_ledger", f"The ledger tip is not valid JSON: {error}") from error
+
+
+def ledger_freshness(root: Path, revision: int) -> dict:
+    """Cheap check of whether the ledger's last event is the store's revision."""
+    path = ledger_path(root)
+    tip = ledger_tip(path)
+    tip_revision = tip["origin_revision"] if tip else 0
+    return {
+        "ledger_present": path.is_file(),
+        "ledger_tip_revision": tip_revision,
+        "store_revision": revision,
+        "unexported_commands": max(0, revision - tip_revision),
+        "in_sync": revision == tip_revision,
+    }
+
+
+def _git(root: Path, *arguments: str) -> tuple[bool, str]:
+    try:
+        completed = subprocess.run(
+            ["git", "-C", str(root), *arguments],
+            capture_output=True, text=True, timeout=10, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False, ""
+    return completed.returncode == 0, completed.stdout.strip()
+
+
+def portability_status(root: Path) -> dict:
+    """Report whether local history is durably captured by the Git-tracked ledger.
+
+    "Tracked by Git" is not the same as "safe": the ledger can be stale (the store
+    holds commands it never exported), modified but uncommitted, or committed but
+    unpushed. This reports each of those so a finishing session can refuse to call
+    the work portable while history is still only on this machine.
+    """
+    root = Path(root).resolve()
+    path = ledger_path(root)
+    entries = read_ledger(path)
+    try:
+        from state_context import open_store
+
+        revision = open_store(root).status()["revision"]
+    except StateError:
+        revision = None
+    unexported = max(0, revision - len(entries)) if revision is not None else None
+    report = {
+        "ledger_path": str(path),
+        "ledger_present": path.is_file(),
+        "ledger_events": len(entries),
+        "store_revision": revision,
+        "unexported_commands": unexported,
+        "in_sync": unexported == 0,
+        "git": None,
+    }
+    inside, _ = _git(root, "rev-parse", "--show-toplevel")
+    if inside:
+        relative = path.relative_to(root).as_posix()
+        tracked, _ = _git(root, "ls-files", "--error-unmatch", "--", relative)
+        _, changes = _git(root, "status", "--porcelain", "--", relative)
+        known, ahead = _git(root, "rev-list", "--count", "@{upstream}..HEAD")
+        report["git"] = {
+            "ledger_tracked": tracked,
+            "uncommitted_ledger_changes": bool(changes),
+            "upstream_known": known,
+            "unpushed_commits": int(ahead) if known and ahead.isdigit() else 0,
+        }
+        report["portable"] = bool(
+            report["in_sync"] and tracked and not changes and known
+            and report["git"]["unpushed_commits"] == 0
+        )
+    else:
+        # A plain work directory carries no remote of its own; the KB is the
+        # transport, so the only signal available here is ledger freshness.
+        report["portable"] = report["in_sync"]
+    return report

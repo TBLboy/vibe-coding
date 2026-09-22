@@ -689,6 +689,14 @@ VIBE="$HOME/.codex/vibe-workflow/scripts/vibe.py"
 
 干净 clone 上执行 `state-attach` 会从账本重放构建本机 SQLite；已有 SQLite 时会自动对账，返回 `attach.status` 为 `appended`（SQLite 落后、已增量追加）、`rebuilt`（投影与账本不符、已整体重建）、`identical`（完全一致）或 `empty`（尚无账本）。如果本机 SQLite 里有账本尚未包含的命令，对账会以 `ledger_behind` 拒绝重建，必须先 `ledger export`，避免丢掉未归档的本地进度。
 
+### 检查日志是否可移植
+
+```bash
+"$PY" "$VIBE" --root . portability-status
+```
+
+`portable=false` 表示本机历史还没有安全落到 Git 账本里。输出区分几种情况：`unexported_commands>0` 表示 SQLite 里有命令尚未导出到账本（先跑 `ledger export`）；`git.ledger_tracked=false` 表示账本还没被 Git 跟踪；`git.uncommitted_ledger_changes=true` 表示账本改动尚未提交；`git.unpushed_commits>0` 表示已提交但未推送。handoff 视图也会在账本落后时显示 `NOT PORTABLE` 提示。
+
 ---
 
 ## 10. 常见问题排查

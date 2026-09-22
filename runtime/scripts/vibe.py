@@ -237,6 +237,7 @@ def main() -> int:
     ledger_sub = ledger.add_subparsers(dest="ledger_action", required=True)
     ledger_sub.add_parser("export")
     ledger_sub.add_parser("verify")
+    sub.add_parser("portability-status", help="report whether local history is safely captured")
     migrate = sub.add_parser("migrate", help="manage legacy format migration")
     migrate_sub = migrate.add_subparsers(dest="migrate_action", required=True)
     migrate_sub.add_parser("preview")
@@ -450,6 +451,10 @@ def main() -> int:
                 result = export_ledger(open_store(root))
             else:
                 result = verify_ledger(root)
+        elif args.command == "portability-status":
+            from state_ledger import portability_status
+
+            result = portability_status(root)
         elif args.command == "migrate":
             if args.migrate_action == "preview":
                 result = migration_preview(root)

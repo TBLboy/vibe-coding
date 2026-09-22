@@ -60,7 +60,7 @@ def _task_lines(task: dict) -> list[str]:
     return lines
 
 
-def _render(snapshot: dict) -> dict[str, bytes]:
+def _render(snapshot: dict, portability: dict | None = None) -> dict[str, bytes]:
     session = _header("Current session", snapshot)
     active = snapshot["current_task"]
     session.extend(["## Active run", ""])
@@ -93,6 +93,19 @@ def _render(snapshot: dict) -> dict[str, bytes]:
     handoff.extend(["## Recent task context (bounded; not a complete backlog)", ""])
     for task in snapshot["tasks"]:
         handoff.extend(_task_lines(task))
+    if portability is not None:
+        handoff.extend(["", "## Portability", ""])
+        handoff.append(
+            f"- Ledger events at revision {portability['ledger_tip_revision']}; "
+            f"store revision {portability['store_revision']}."
+        )
+        if portability["unexported_commands"]:
+            handoff.append(
+                f"- NOT PORTABLE: {portability['unexported_commands']} command(s) are only in "
+                "the local SQLite; run `ledger export` before ending the session."
+            )
+        else:
+            handoff.append("- Ledger is current with the local store.")
     return {
         name: ("\n".join(lines) + "\n").encode("utf-8")
         for name, lines in zip(_VIEW_NAMES, (session, progress, handoff))
@@ -230,7 +243,12 @@ def publish(store: Store, destination: Path) -> dict:
             revision = snapshot["revision"]
             if previous and previous["revision"] > revision:
                 raise StateError("projection_conflict", "Refusing to move CURRENT.json backwards")
-            contents = _render(snapshot)
+            portability = None
+            if store.root is not None:
+                from state_ledger import ledger_freshness
+
+                portability = ledger_freshness(store.root, revision)
+            contents = _render(snapshot, portability)
             manifest = {
                 "schema_version": SCHEMA_VERSION, "project_id": snapshot["project_id"],
                 "context_id": snapshot["context_id"], "revision": revision,
