@@ -248,7 +248,10 @@ def repository_identity(path: Path) -> str | None:
     """
     for arguments in (
         ("rev-parse", "--path-format=absolute", "--git-common-dir"),
-        ("rev-parse", "--absolute-git-dir"),
+        # Older Git has no --path-format; --git-common-dir alone still names the shared
+        # directory of a linked worktree, unlike --absolute-git-dir which names the
+        # worktree's own git dir and would make the same repository look different.
+        ("rev-parse", "--git-common-dir"),
     ):
         probe = subprocess.run(
             ["git", "-C", str(path), *arguments],
@@ -272,6 +275,11 @@ def local_path_of(target: str) -> Path | None:
     Git's ``file://`` transport opens the *path* component, whatever the authority says,
     so ``file://random.invalid/tmp/kb`` reads ``/tmp/kb`` just like ``file:///tmp/kb``.
     The path is therefore what must be compared against the knowledge base.
+
+    Git also expands a leading ``~`` in a plain local target, exactly like a shell, so
+    ``~/kb`` names ``$HOME/kb`` and must be compared after expansion. A ``~user`` that
+    cannot be resolved is reported instead of being treated as a relative directory name
+    that could not possibly be the knowledge base.
     """
     parsed = urlsplit(target)
     if parsed.scheme == "file":
@@ -280,7 +288,14 @@ def local_path_of(target: str) -> Path | None:
         return None
     if "@" in target.split("/", 1)[0] and ":" in target:
         return None  # scp-like ssh target, for example git@github.com:owner/repo.git
-    return Path(target)
+    try:
+        return Path(target).expanduser()
+    except RuntimeError as error:
+        raise ArchiveError(
+            f"the archive target {target!r} starts with '~' but the home directory it "
+            "names cannot be resolved, so the archive cannot prove it is not the "
+            "knowledge base itself; refusing to run. Use an absolute path instead."
+        ) from error
 
 
 def reject_self_reference(kb_root: Path, target: str) -> None:
@@ -295,6 +310,10 @@ def reject_self_reference(kb_root: Path, target: str) -> None:
     ``file://localhost:123/`` and ``file://%6cocalhost/`` and still opens a local path,
     but the rendering is platform- and version-dependent, so the archive cannot prove a
     non-self target here and fails closed instead of guessing.
+
+    Local targets are compared after ``~`` expansion because ``git push ~/kb`` and
+    ``git ls-remote ~/kb`` read ``$HOME/kb``; a ``~`` that survives expansion is treated
+    as unverifiable rather than as a directory literally named ``~``.
     """
     parsed = urlsplit(target)
     if parsed.scheme == "file" and parsed.netloc.lower() not in CANONICAL_FILE_AUTHORITIES:
@@ -308,6 +327,12 @@ def reject_self_reference(kb_root: Path, target: str) -> None:
     candidate = local_path_of(target)
     if candidate is None:
         return
+    if str(candidate) == "~" or str(candidate).startswith("~/"):
+        raise ArchiveError(
+            f"the archive target {target!r} names a home directory that could not be "
+            "expanded, so the archive cannot prove it is not the knowledge base itself; "
+            "refusing to run. Use an absolute path instead."
+        )
     path = candidate
     if not path.is_absolute():
         path = kb_root / path

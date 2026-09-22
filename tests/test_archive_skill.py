@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -93,10 +94,11 @@ class ArchiveSkillTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.temporary.cleanup()
 
-    def archive(self) -> subprocess.CompletedProcess:
+    def archive(self, env: dict | None = None) -> subprocess.CompletedProcess:
         return subprocess.run(
             [sys.executable, str(SCRIPT), "--project-root", str(self.work), "--kb", str(self.kb)],
             text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False,
+            env=None if env is None else {**os.environ, **env},
         )
 
     def commits(self) -> int:
@@ -496,6 +498,33 @@ class ArchiveSkillTests(unittest.TestCase):
             text=True, stdout=subprocess.PIPE, check=True,
         ).stdout
         self.assertEqual(status, "")
+
+    def test_archive_refuses_a_home_relative_path_to_itself(self) -> None:
+        # Git expands `~`, so `~/kb` names $HOME/kb and can be the knowledge base itself.
+        # The knowledge base lives at <temp>/kb, so HOME is pointed at <temp> here.
+        self.point_upstream_at("~/kb")
+        before = self.commits()
+
+        result = self.archive(env={"HOME": str(self.base)})
+
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertNotIn('"pushed"', result.stdout)
+        self.assertIn("resolves to the knowledge base itself", result.stderr)
+        self.assertEqual(self.commits(), before)
+        self.assertFalse(self.remote_has_ledger())
+
+    def test_archive_refuses_an_unresolvable_home_relative_target(self) -> None:
+        # `~user` that cannot be resolved must fail closed rather than be read as a
+        # relative directory name that trivially is not the knowledge base.
+        self.point_upstream_at("~vibe-no-such-user-9f3a/kb")
+        before = self.commits()
+
+        result = self.archive()
+
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertNotIn('"pushed"', result.stdout)
+        self.assertEqual(self.commits(), before)
+        self.assertFalse(self.remote_has_ledger())
 
     def test_archive_refuses_a_linked_worktree_of_itself(self) -> None:
         linked = self.kb.parent / "linked-worktree"
