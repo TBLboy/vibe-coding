@@ -1,6 +1,7 @@
 """TASK-058: archiving merges the ledger instead of replacing the KB copy."""
 from __future__ import annotations
 
+import importlib.util
 import json
 from pathlib import Path
 import shutil
@@ -14,6 +15,16 @@ import uuid
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "skills" / "a-project-log-archive" / "scripts" / "archive.py"
 LEDGER_RELATIVE = Path("ledger") / "v1" / "ledger.jsonl"
+
+
+def load_archive_module():
+    spec = importlib.util.spec_from_file_location("archive_under_test", SCRIPT)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+archive_module = load_archive_module()
 
 
 def event(command_id: str, action: str = "goal.create") -> dict:
@@ -158,6 +169,69 @@ class ArchiveSkillTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('"project": "work"', result.stdout)
         self.assertTrue((self.kb / "工程记录" / "work").is_dir())
+
+    # -- TASK-079: a silent archive must fail loudly ---------------------------------
+
+    def ignore_project_logs(self) -> None:
+        """Reproduce the knowledge base rule that hid every format 3 archive."""
+        (self.kb / ".gitignore").write_text(".project-log/\n", encoding="utf-8")
+        subprocess.run(["git", "-C", str(self.kb), "add", "-A"], check=True)
+        subprocess.run(
+            ["git", "-C", str(self.kb), "commit", "-qm", "ignore project logs"], check=True
+        )
+
+    def remote_ledger(self) -> list[dict]:
+        completed = subprocess.run(
+            [
+                "git", "--git-dir", str(self.remote), "show",
+                f"HEAD:工程记录/work/.project-log/{LEDGER_RELATIVE.as_posix()}",
+            ],
+            text=True, stdout=subprocess.PIPE, check=True,
+        )
+        return [json.loads(line) for line in completed.stdout.splitlines() if line.strip()]
+
+    def test_archive_publishes_new_events_to_the_remote(self) -> None:
+        self.assertEqual(self.archive().returncode, 0)
+        self.events.append(event("c" * 32, "task.create"))
+        write_ledger(self.log / LEDGER_RELATIVE, self.events)
+
+        result = self.archive()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.remote_ledger(), self.events)
+
+    def test_archive_refuses_when_the_ledger_is_ignored(self) -> None:
+        self.ignore_project_logs()
+        before = self.commits()
+
+        result = self.archive()
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("ignores the archived ledger", result.stderr)
+        self.assertIn("!工程记录/work/.project-log/", result.stderr)
+        self.assertEqual(self.commits(), before)
+
+    def test_archive_accepts_an_ignored_but_already_tracked_ledger(self) -> None:
+        self.assertEqual(self.archive().returncode, 0)
+        self.ignore_project_logs()
+
+        result = self.archive()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("no-changes", result.stdout)
+
+    def test_git_push_refuses_appended_commands_without_a_git_change(self) -> None:
+        self.assertEqual(self.archive().returncode, 0)
+
+        with self.assertRaises(archive_module.ArchiveError) as caught:
+            archive_module.git_push(self.kb, "work", expected_appended=2)
+
+        self.assertIn("produced no Git change", str(caught.exception))
+
+    def test_git_push_reports_no_changes_when_nothing_was_appended(self) -> None:
+        self.assertEqual(self.archive().returncode, 0)
+
+        self.assertEqual(archive_module.git_push(self.kb, "work", expected_appended=0), "no-changes")
 
 
 if __name__ == "__main__":
