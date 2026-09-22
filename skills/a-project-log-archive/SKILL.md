@@ -1,0 +1,58 @@
+---
+name: a-project-log-archive
+description: Archive the current project's .project-log to the centralized knowledge base for later analysis. Use when the user wants to save progress, archive records, or sync project logs.
+license: MIT
+compatibility: codex
+metadata:
+  type: tool-skill-pack
+  output: synced-and-pushed-project-log
+---
+
+# Project Log Archive
+
+Archive the current project's `.project-log/` into the knowledge base and push the knowledge base to remote.
+
+## When to Use
+
+The user asks to archive project logs, save progress, sync records, or "归档".
+
+## First Run — Path Setup
+
+Before the first archive, the knowledge base path must be configured. The script checks a config file at `<skill-dir>/scripts/kb_path.conf`. If the file is missing or contains the placeholder `__UNSET__`, the script will report the missing config. In that case:
+
+1. Ask the user for the absolute path to their `My_knowledge_base` on this machine.
+2. Verify the path exists, is a directory, and contains `工程记录/`.
+3. Write the verified path to the config file.
+
+Only the `工程记录/` subdirectory within the knowledge base will be affected by archiving.
+
+## What It Does
+
+1. Load the KB path from config.
+2. Determine the project name from `--project-root` (the work folder name).
+3. Verify `.project-log/` exists in the project root.
+4. Verify the KB copy of `.project-log/state-format.json` has the same `project_id`.
+5. Verify the KB ledger is an exact prefix of the local ledger, so only new commands are added.
+6. Merge the local `.project-log/` into `<kb>/工程记录/<project-name>/.project-log/`,
+   excluding `.state/`, `.git`, `.migration/`, `legacy/new-writes/` and copying the ledger separately.
+7. Run `git add -A && git commit -m "archive: <project-name>" && git push` in the knowledge base.
+
+Re-running the archive is idempotent: unchanged logs produce no commit.
+
+## Execution
+
+```bash
+python3 ~/.codex/skills/a-project-log-archive/scripts/archive.py \
+  --project-root <project-root-path>
+```
+
+## Safety
+
+- Only copies directories containing `.project-log/`.
+- Refuses when the KB holds commands the local ledger is missing; run the
+  align-project-progress skill first so the two histories are merged.
+- Refuses when the KB `project_id` differs from the local one, so two unrelated
+  projects that share a folder name can never overwrite each other.
+- Never copies the local SQLite cache (`.state/`) or Git internals.
+- Merges instead of replacing, so an existing KB copy is never deleted wholesale.
+- Only affects `<kb>/工程记录/`, never other files.

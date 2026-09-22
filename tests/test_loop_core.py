@@ -1,0 +1,573 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+import tempfile
+import unittest
+
+import yaml
+
+
+ROOT = Path(__file__).resolve().parents[1]
+SCRIPTS = ROOT / "runtime" / "scripts"
+if str(SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS))
+
+from init_project import initialize_project
+from loop_state import (
+    apply_decision,
+    evaluate_goal,
+    invalidate_evidence,
+    load_active_run,
+    load_yaml,
+    record_evidence,
+    restore_active_run,
+    save_active_run,
+    save_yaml,
+    start_run,
+    sync_native_goal,
+)
+from validate_project import validate
+
+
+class LoopCoreTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temporary = tempfile.TemporaryDirectory()
+        self.root = Path(self.temporary.name)
+        initialize_project(self.root, format=1)
+
+    def tearDown(self) -> None:
+        self.temporary.cleanup()
+
+    def test_fresh_template_validates(self) -> None:
+        self.assertEqual(validate(self.root), [])
+
+    def test_clarification_gate_blocks_later_phase(self) -> None:
+        workflow_path = self.root / ".project-log/workflow.yaml"
+        workflow = load_yaml(workflow_path)
+        workflow["current_phase"] = "requirement-baseline"
+        save_yaml(workflow_path, workflow)
+        errors = validate(self.root)
+        self.assertTrue(any("clarification gate" in error for error in errors))
+
+        clarification_path = self.root / ".project-log/business-logic/clarification.yaml"
+        clarification = load_yaml(clarification_path)
+        clarification["status"] = "passed"
+        clarification["gate"]["status"] = "passed"
+        save_yaml(clarification_path, clarification)
+        self.assertEqual(validate(self.root), [])
+
+    def define_goal(self, risk: str = "normal") -> None:
+        save_yaml(
+            self.root / ".project-log/goals/active-goal.yaml",
+            {
+                "schema_version": 1,
+                "goal": {
+                    "id": "GOAL-001",
+                    "statement": "Deliver tested behavior",
+                    "success_conditions": [
+                        {
+                            "id": "SC-001",
+                            "statement": "Behavior is verified",
+                            "status": "passed",
+                            "evidence_refs": ["EVID-001"],
+                        }
+                    ],
+                    "non_goals": [],
+                    "constraints": [],
+                    "required_evidence": [
+                        {"kind": "test", "subject": "behavior", "evidence_refs": ["EVID-001"]}
+                    ],
+                    "risk_level": risk,
+                    "status": "active",
+                    "created_at": None,
+                    "updated_at": None,
+                },
+            },
+        )
+
+    def test_goal_requires_valid_evidence(self) -> None:
+        self.define_goal()
+        result = evaluate_goal(self.root)
+        self.assertFalse(result["passed"])
+        record_evidence(
+            self.root,
+            evidence_id="EVID-001",
+            kind="test",
+            subject="behavior",
+            status="valid",
+            files=[],
+            requirements=[],
+            tasks=[],
+            command="test",
+            result_ref=None,
+            replace=False,
+        )
+        self.assertTrue(evaluate_goal(self.root)["passed"])
+
+    def test_high_risk_goal_requires_review(self) -> None:
+        self.define_goal("high")
+        record_evidence(
+            self.root,
+            evidence_id="EVID-001",
+            kind="test",
+            subject="behavior",
+            status="valid",
+            files=[],
+            requirements=[],
+            tasks=[],
+            command="test",
+            result_ref=None,
+            replace=False,
+        )
+        self.assertFalse(evaluate_goal(self.root)["passed"])
+        record_evidence(
+            self.root,
+            evidence_id="EVID-REVIEW",
+            kind="review",
+            subject="goal-final-review",
+            status="valid",
+            files=[],
+            requirements=[],
+            tasks=[],
+            command=None,
+            result_ref=None,
+            replace=False,
+        )
+        self.assertTrue(evaluate_goal(self.root)["passed"])
+
+    def test_evidence_becomes_stale(self) -> None:
+        source = self.root / "src.txt"
+        source.write_text("one", encoding="utf-8")
+        record_evidence(
+            self.root,
+            evidence_id="EVID-001",
+            kind="test",
+            subject="file",
+            status="valid",
+            files=["src.txt"],
+            requirements=[],
+            tasks=["TASK-001"],
+            command="test",
+            result_ref=None,
+            replace=False,
+        )
+        source.write_text("two", encoding="utf-8")
+        self.assertEqual(invalidate_evidence(self.root, ["src.txt"], "changed"), ["EVID-001"])
+        item = load_yaml(self.root / ".project-log/loop/evidence-index.yaml")["evidence"][0]
+        self.assertEqual(item["status"], "stale")
+
+    def record_file_evidence(self, files: list[str], evidence_id: str = "EVID-001") -> None:
+        record_evidence(
+            self.root,
+            evidence_id=evidence_id,
+            kind="test",
+            subject="file",
+            status="valid",
+            files=files,
+            requirements=[],
+            tasks=["TASK-001"],
+            command="test",
+            result_ref=None,
+            replace=False,
+        )
+
+    def test_touching_an_unchanged_covered_file_keeps_the_record_current(self) -> None:
+        source = self.root / "src.txt"
+        source.write_text("one", encoding="utf-8")
+        self.record_file_evidence(["src.txt"])
+
+        self.assertEqual(invalidate_evidence(self.root, ["src.txt"], "PostToolUse:apply_patch"), [])
+        item = load_yaml(self.root / ".project-log/loop/evidence-index.yaml")["evidence"][0]
+        self.assertEqual(item["status"], "valid")
+        self.assertIsNone(item["invalidated_at"])
+
+    def test_rewriting_identical_bytes_keeps_the_record_current(self) -> None:
+        source = self.root / "src.txt"
+        source.write_text("one", encoding="utf-8")
+        self.record_file_evidence(["src.txt"])
+        source.write_text("one", encoding="utf-8")
+
+        self.assertEqual(invalidate_evidence(self.root, ["src.txt"], "PostToolUse:apply_patch"), [])
+
+    def test_a_covered_path_without_a_recorded_hash_is_still_invalidated(self) -> None:
+        self.record_file_evidence(["later.txt"])
+        (self.root / "later.txt").write_text("new", encoding="utf-8")
+
+        self.assertEqual(
+            invalidate_evidence(self.root, ["later.txt"], "PostToolUse:apply_patch"), ["EVID-001"]
+        )
+
+    def test_a_removed_covered_file_is_still_invalidated(self) -> None:
+        source = self.root / "src.txt"
+        source.write_text("one", encoding="utf-8")
+        self.record_file_evidence(["src.txt"])
+        source.unlink()
+
+        self.assertEqual(
+            invalidate_evidence(self.root, ["src.txt"], "PostToolUse:apply_patch"), ["EVID-001"]
+        )
+
+    def test_an_uncovered_path_does_not_invalidate(self) -> None:
+        source = self.root / "src.txt"
+        source.write_text("one", encoding="utf-8")
+        self.record_file_evidence(["src.txt"])
+
+        self.assertEqual(invalidate_evidence(self.root, ["other.txt"], "PostToolUse:apply_patch"), [])
+
+    def retry_payload(self, delta: str) -> dict:
+        return {
+            "decision_id": "LD-001",
+            "scope": "task",
+            "trigger": "verification-completed",
+            "subject": {"phase": "verification", "task_id": "TASK-001"},
+            "assessment": {
+                "result": "failed",
+                "failure_origin": "implementation",
+                "failure_signature": "same-failure",
+                "new_information": True,
+            },
+            "decision": {"action": "retry-current-task", "reason": "fix"},
+            "retry_contract": {
+                "hypothesis": "change fixes it",
+                "delta": delta,
+                "expected_evidence": "focused test",
+            },
+        }
+
+    def test_no_change_retry_is_rejected(self) -> None:
+        state = load_active_run(self.root)
+        state["task_id"] = "TASK-001"
+        save_active_run(self.root, state)
+        apply_decision(self.root, self.retry_payload("change-a"))
+        with self.assertRaisesRegex(ValueError, "no-change retry"):
+            apply_decision(self.root, self.retry_payload("change-a"))
+        apply_decision(self.root, self.retry_payload("change-b"))
+
+    def test_native_goal_state_does_not_delete_project_goal(self) -> None:
+        self.define_goal()
+        sync_native_goal(self.root, "paused", "native-1")
+        self.assertEqual(load_active_run(self.root)["status"], "handed-off")
+        sync_native_goal(self.root, "cleared", "native-1")
+        self.assertIsNotNone(load_yaml(self.root / ".project-log/goals/active-goal.yaml")["goal"])
+
+    def test_active_run_is_rebuilt_from_decision_event(self) -> None:
+        state = load_active_run(self.root)
+        state["task_id"] = "TASK-001"
+        save_active_run(self.root, state)
+        apply_decision(self.root, self.retry_payload("change-a"))
+        expected = load_active_run(self.root)["counters"]["task_attempts"]
+        (self.root / ".project-log/loop/active-run.yaml").unlink()
+        restored, warnings = restore_active_run(self.root, force=True)
+        self.assertEqual(restored["counters"]["task_attempts"], expected)
+        self.assertTrue(any("rebuilt" in warning for warning in warnings))
+
+    def test_invalid_event_tail_is_quarantined(self) -> None:
+        events = self.root / ".project-log/loop/events.jsonl"
+        events.write_text(
+            '{"schema_version":1,"event_id":"LE-000001","type":"run-started"}\n{bad',
+            encoding="utf-8",
+        )
+        (self.root / ".project-log/loop/active-run.yaml").unlink()
+        _, warnings = restore_active_run(self.root, force=True)
+        self.assertTrue(any("quarantined" in warning for warning in warnings))
+        self.assertEqual(len(list((self.root / ".project-log/loop").glob("events.corrupt-*.json"))), 1)
+
+    def test_business_failures_return_to_the_correct_clarification_domain(self) -> None:
+        for origin in ("functional-business-logic", "technical-business-logic"):
+            with self.subTest(origin=origin):
+                payload = {
+                    "decision_id": f"LD-{origin}",
+                    "subject": {"phase": "verification", "task_id": "TASK-001"},
+                    "assessment": {
+                        "result": "failed",
+                        "failure_origin": origin,
+                        "failure_signature": origin,
+                        "new_information": True,
+                    },
+                    "decision": {
+                        "action": "return-to-phase",
+                        "target_phase": "business-clarification",
+                        "target_domain": origin,
+                        "reason": "clarify",
+                    },
+                }
+                result = apply_decision(self.root, payload)
+                self.assertEqual(result["state"]["clarification_domain"], origin)
+
+    def test_environment_and_harness_failures_do_not_rewrite_business_phase(self) -> None:
+        for origin, action in (("environment", "repair-environment"), ("verification-harness", "repair-harness")):
+            with self.subTest(origin=origin):
+                state = load_active_run(self.root)
+                state["phase"] = "verification"
+                save_active_run(self.root, state)
+                payload = {
+                    "decision_id": f"LD-{origin}",
+                    "subject": {"phase": "verification", "task_id": "TASK-001"},
+                    "assessment": {
+                        "result": "failed",
+                        "failure_origin": origin,
+                        "failure_signature": origin,
+                        "new_information": True,
+                    },
+                    "decision": {"action": action, "reason": "repair"},
+                }
+                result = apply_decision(self.root, payload)
+                self.assertEqual(result["state"]["phase"], "verification")
+
+    def test_goal_complete_updates_project_and_run_state(self) -> None:
+        self.define_goal()
+        record_evidence(
+            self.root,
+            evidence_id="EVID-001",
+            kind="test",
+            subject="behavior",
+            status="valid",
+            files=[],
+            requirements=[],
+            tasks=[],
+            command="test",
+            result_ref=None,
+            replace=False,
+        )
+        payload = {
+            "decision_id": "LD-COMPLETE",
+            "subject": {"phase": "verification", "task_id": None},
+            "assessment": {"result": "passed", "new_information": True},
+            "decision": {"action": "goal-complete", "reason": "all evidence is valid"},
+        }
+        result = apply_decision(self.root, payload)
+        self.assertEqual(result["state"]["status"], "complete")
+        self.assertEqual(load_yaml(self.root / ".project-log/goals/active-goal.yaml")["goal"]["status"], "complete")
+
+    def test_start_run_resets_completed_run_state(self) -> None:
+        state = load_active_run(self.root)
+        state["status"] = "complete"
+        state["task_id"] = "TASK-OLD"
+        state["next_action"] = {"statement": "obsolete"}
+        state["counters"]["task_attempts"] = 2
+        state["native_goal"]["binding_status"] = "bound"
+        save_active_run(self.root, state)
+
+        result = start_run(self.root, task_id="TASK-NEW")
+
+        state = result["state"]
+        self.assertTrue(state["run_id"].startswith("RUN-"))
+        self.assertEqual(state["status"], "active")
+        self.assertEqual(state["task_id"], "TASK-NEW")
+        self.assertIsNone(state["next_action"])
+        self.assertEqual(state["counters"]["task_attempts"], 0)
+        self.assertEqual(state["native_goal"]["binding_status"], "unbound")
+        self.assertEqual(result["event"]["type"], "run-started")
+
+    def test_start_run_binds_the_open_project_goal(self) -> None:
+        self.define_goal()
+
+        result = start_run(self.root, phase="verification", task_id="TASK-NEW")
+
+        self.assertEqual(result["state"]["goal_id"], "GOAL-001")
+        self.assertEqual(result["event"]["goal_id"], "GOAL-001")
+        self.assertEqual(validate(self.root), [])
+
+    def test_start_run_does_not_borrow_a_completed_goal(self) -> None:
+        self.define_goal()
+        document = load_yaml(self.root / ".project-log/goals/active-goal.yaml")
+        document["goal"]["status"] = "complete"
+        save_yaml(self.root / ".project-log/goals/active-goal.yaml", document)
+
+        result = start_run(self.root, task_id="TASK-NEW")
+
+        self.assertIsNone(result["state"]["goal_id"])
+
+    def test_start_run_without_a_goal_stays_unbound(self) -> None:
+        result = start_run(self.root, task_id="TASK-NEW")
+
+        self.assertIsNone(result["state"]["goal_id"])
+        self.assertEqual(validate(self.root), [])
+
+    def test_restore_replays_the_run_goal_and_task_binding(self) -> None:
+        self.define_goal()
+        start_run(self.root, phase="verification", task_id="TASK-NEW")
+
+        state, warnings = restore_active_run(self.root, force=True)
+
+        self.assertEqual(state["goal_id"], "GOAL-001")
+        self.assertEqual(state["task_id"], "TASK-NEW")
+        self.assertEqual(state["phase"], "verification")
+        self.assertTrue(any("active-run rebuilt" in warning for warning in warnings), warnings)
+
+
+class HookTests(unittest.TestCase):
+    def test_session_and_compact_hooks_emit_context(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            project = Path(temporary)
+            initialize_project(project, format=1)
+            payload = json.dumps({"cwd": str(project)})
+            for script in ("session_start.py", "pre_compact.py"):
+                result = subprocess.run(
+                    [sys.executable, str(ROOT / "runtime/hooks" / script)],
+                    input=payload,
+                    text=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    check=False,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                output = json.loads(result.stdout)
+                specific = output["hookSpecificOutput"]
+                self.assertEqual(specific["hookEventName"], "SessionStart" if script == "session_start.py" else "PreCompact")
+                self.assertIn("additionalContext", specific)
+            self.assertTrue((project / ".project-log/loop/handoff.md").is_file())
+
+    def test_fresh_project_is_rendered_as_idle(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            project = Path(temporary)
+            initialize_project(project, format=1)
+            result = subprocess.run(
+                [sys.executable, str(ROOT / "runtime/hooks/session_start.py")],
+                input=json.dumps({"cwd": str(project)}),
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            context = json.loads(result.stdout)["hookSpecificOutput"]["additionalContext"]
+            self.assertIn("Run status: idle", context)
+            self.assertIn("No active Vibe work is restored", context)
+
+    def test_session_start_does_not_append_handoff_event(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            project = Path(temporary)
+            initialize_project(project, format=1)
+            events = project / ".project-log/loop/events.jsonl"
+            before = events.read_text(encoding="utf-8")
+            result = subprocess.run(
+                [sys.executable, str(ROOT / "runtime/hooks/session_start.py")],
+                input=json.dumps({"cwd": str(project)}),
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(events.read_text(encoding="utf-8"), before)
+
+    def test_pre_compact_persists_handoff(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            project = Path(temporary)
+            initialize_project(project, format=1)
+            events = project / ".project-log/loop/events.jsonl"
+            result = subprocess.run(
+                [sys.executable, str(ROOT / "runtime/hooks/pre_compact.py")],
+                input=json.dumps({"cwd": str(project)}),
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('"type":"handoff-generated"', events.read_text(encoding="utf-8"))
+
+    def test_completed_run_is_not_restored_as_active_work(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            project = Path(temporary)
+            initialize_project(project, format=1)
+            state = load_active_run(project)
+            state["status"] = "complete"
+            state["task_id"] = "TASK-OLD"
+            save_active_run(project, state)
+            result = subprocess.run(
+                [sys.executable, str(ROOT / "runtime/hooks/session_start.py")],
+                input=json.dumps({"cwd": str(project)}),
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+            context = json.loads(result.stdout)["hookSpecificOutput"]["additionalContext"]
+            self.assertIn("No active Vibe work is restored", context)
+            self.assertIn("Active task: -", context)
+
+    def test_new_directory_does_not_inherit_parent_project_log(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = Path(temporary)
+            initialize_project(workspace)
+            parent_marker = json.loads(
+                (workspace / ".project-log/state-format.json").read_text(encoding="utf-8")
+            )
+            new_project = workspace / "new-project"
+            new_project.mkdir()
+            result = subprocess.run(
+                [sys.executable, str(ROOT / "runtime/hooks/session_start.py")],
+                input=json.dumps({"cwd": str(new_project)}),
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            marker_path = new_project / ".project-log/state-format.json"
+            self.assertTrue(marker_path.is_file(), result.stdout)
+            marker = json.loads(marker_path.read_text(encoding="utf-8"))
+            self.assertEqual(marker["format"], 2)
+            self.assertNotEqual(marker["project_id"], parent_marker["project_id"])
+
+    def test_format_two_project_emits_transactional_context(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            project = Path(temporary)
+            result = subprocess.run(
+                [sys.executable, str(ROOT / "runtime/hooks/session_start.py")],
+                input=json.dumps({"cwd": str(project)}),
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            context = json.loads(result.stdout)["hookSpecificOutput"]["additionalContext"]
+            self.assertIn("transactional", context)
+            self.assertTrue((project / ".project-log/state-format.json").is_file())
+            self.assertFalse((project / ".project-log/loop/active-run.yaml").exists())
+
+    def test_explicit_workspace_root_wins_over_cwd(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = Path(temporary) / "workspace"
+            child = workspace / "src"
+            child.mkdir(parents=True)
+            result = subprocess.run(
+                [sys.executable, str(ROOT / "runtime/hooks/session_start.py")],
+                input=json.dumps({"cwd": str(child), "workspace_root": str(workspace)}),
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            context = json.loads(result.stdout)["hookSpecificOutput"]["additionalContext"]
+            self.assertIn("transactional", context)
+            self.assertTrue((workspace / ".project-log/state-format.json").is_file())
+            self.assertFalse((child / ".project-log").exists())
+
+    def test_hooks_tolerate_non_ascii_payloads(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            project = Path(temporary)
+            payload = json.dumps({"cwd": str(project), "user": "\u7528\u6237\u6d4b\u8bd5"}, ensure_ascii=False)
+            for script in ("session_start.py", "pre_compact.py"):
+                result = subprocess.run(
+                    [sys.executable, str(ROOT / "runtime/hooks" / script)],
+                    input=payload.encode("utf-8"),
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    check=False,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                output = json.loads(result.stdout.decode("utf-8"))
+                self.assertIn("hookSpecificOutput", output)
+
+
+if __name__ == "__main__":
+    unittest.main()

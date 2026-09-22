@@ -1,0 +1,9 @@
+#!/usr/bin/env python3
+"""Compatibility wrapper for validating an installed Vibe Workflow project."""
+from __future__ import annotations
+import subprocess, sys
+from pathlib import Path
+
+if __name__ == "__main__":
+    script = Path(__file__).with_name("validate_project.py")
+    raise SystemExit(subprocess.call([sys.executable, str(script), *sys.argv[1:]]))

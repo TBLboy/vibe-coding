@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "roles": {
+    "business-analyst": {"mode": "read-log-draft", "skill": "a-business-clarify", "writes_product_code": false},
+    "codebase-onboarder": {"mode": "read-only", "skill": "a-codebase-onboarding", "writes_product_code": false},
+    "solution-researcher": {"mode": "research", "skill": "a-solution-research", "writes_product_code": false},
+    "implementation-builder": {"mode": "scoped-write", "skill": "a-engineering-landing", "writes_product_code": true},
+    "verification-reviewer": {"mode": "verification", "skill": "a-verification", "writes_product_code": false},
+    "alignment-reviewer": {"mode": "read-only", "skill": "a-business-code-align", "writes_product_code": false},
+    "paper-reader": {"mode": "research", "skill": "a-paper-reading", "writes_product_code": false},
+    "workflow-distiller": {"mode": "read-log-draft", "skill": "a-operator-distill", "writes_product_code": false}
+  }
+}

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Source Code Tutoring"
+  short_description: "Explain code through runtime traces and state changes."
+  default_prompt: "Use this skill to guide me through a code path from concrete inputs to downstream effects."
