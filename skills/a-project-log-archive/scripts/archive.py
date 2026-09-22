@@ -123,14 +123,15 @@ def compare_ledgers(local_events: list[dict], kb_events: list[dict]) -> dict:
 
 def read_committed_ledger(kb_root: Path, ledger_relative: str) -> list[dict]:
     """Read the ledger as committed at HEAD, or an empty list when HEAD has none."""
-    probe = subprocess.run(
-        ["git", "-C", str(kb_root), "show", f"HEAD:{ledger_relative}"],
-        capture_output=True, text=True, check=False,
-    )
-    if probe.returncode:
+    raw = blob_bytes(kb_root, f"HEAD:{ledger_relative}")
+    if raw is None:
         return []
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise ArchiveError(f"HEAD:{ledger_relative} is not valid UTF-8: {error}") from error
     events: list[dict] = []
-    for number, line in enumerate(probe.stdout.splitlines(), start=1):
+    for number, line in enumerate(text.splitlines(), start=1):
         if not line.strip():
             continue
         try:
@@ -215,6 +216,53 @@ def blob_bytes(kb_root: Path, revision: str) -> bytes | None:
     return probe.stdout
 
 
+def revision(kb_root: Path, name: str) -> str | None:
+    """Resolve a revision to a full object name, or None when Git cannot."""
+    probe = subprocess.run(
+        ["git", "-C", str(kb_root), "rev-parse", name],
+        capture_output=True, text=True, check=False,
+    )
+    if probe.returncode:
+        return None
+    return probe.stdout.strip() or None
+
+
+def config_value(kb_root: Path, key: str) -> str:
+    probe = subprocess.run(
+        ["git", "-C", str(kb_root), "config", "--get", key],
+        capture_output=True, text=True, check=False,
+    )
+    return probe.stdout.strip() if probe.returncode == 0 else ""
+
+
+def push_target(kb_root: Path) -> tuple[str, str]:
+    """Resolve the single remote and ref this archive is allowed to publish to.
+
+    A bare ``git push`` obeys ``remote.<name>.push`` and ``push.default``, so it can
+    publish an unrelated ref while the archive commit stays local. The upstream of the
+    checked-out branch is the only target, and it is resolved before anything is
+    committed so a missing upstream cannot leave a stray commit behind.
+    """
+    branch = subprocess.run(
+        ["git", "-C", str(kb_root), "symbolic-ref", "--short", "HEAD"],
+        capture_output=True, text=True, check=False,
+    )
+    if branch.returncode:
+        raise ArchiveError(
+            f"{kb_root} is not on a branch, so the archive has no unambiguous push "
+            "target; check out the archive branch before archiving"
+        )
+    name = branch.stdout.strip()
+    remote = config_value(kb_root, f"branch.{name}.remote")
+    ref = config_value(kb_root, f"branch.{name}.merge")
+    if not remote or not ref:
+        raise ArchiveError(
+            f"branch {name} has no upstream in {kb_root}, so the archive cannot decide "
+            f"where to publish. Set one first:\n  git -C {kb_root} push -u <remote> {name}"
+        )
+    return remote, ref
+
+
 def git_push(kb_root: Path, project_name: str, local_ledger: Path) -> str:
     """Stage, commit, and push only this project's archive directory.
 
@@ -226,6 +274,7 @@ def git_push(kb_root: Path, project_name: str, local_ledger: Path) -> str:
     """
     relative = str(Path("工程记录") / project_name)
     ledger_relative = str(Path("工程记录") / project_name / ".project-log" / LEDGER_RELATIVE)
+    remote, remote_ref = push_target(kb_root)
     rule = ignored_rule(kb_root, ledger_relative)
     if rule is not None:
         raise ArchiveError(
@@ -277,6 +326,7 @@ def git_push(kb_root: Path, project_name: str, local_ledger: Path) -> str:
             "cannot inspect the staged archive; refusing to commit blindly. "
             f"Re-run: git -C {kb_root} diff --cached -- {relative}"
         )
+    parent = revision(kb_root, "HEAD")
     committed = subprocess.run(
         [
             "git", "-C", str(kb_root), "commit", "--only", "-m",
@@ -286,23 +336,42 @@ def git_push(kb_root: Path, project_name: str, local_ledger: Path) -> str:
     )
     if committed.returncode:
         raise ArchiveError(f"git commit failed: {committed.stderr.strip()}")
+    archive_commit = revision(kb_root, "HEAD")
     head_bytes = blob_bytes(kb_root, f"HEAD:{ledger_relative}")
     if head_bytes != local_bytes:
-        revision = subprocess.run(
-            ["git", "-C", str(kb_root), "rev-parse", "--short", "HEAD"],
-            capture_output=True, text=True, check=False,
-        ).stdout.strip()
         raise ArchiveError(
             "the committed ledger is not byte-identical to the local ledger; refusing to "
-            f"push commit {revision}. Undo it with a soft reset, remove the filter or "
-            f"attribute that rewrites {ledger_relative}, then re-run:\n"
-            f"  git -C {kb_root} reset --soft HEAD~1"
+            "push. Inspect with:\n"
+            f"  git -C {kb_root} log --oneline -2\n"
+            f"  git -C {kb_root} cat-file blob HEAD:{ledger_relative}\n"
+            f"If HEAD is still the archive commit, undo it with:\n"
+            f"  git -C {kb_root} reset --soft {parent}\n"
+            "(that reset is only safe while HEAD is the archive commit; it is now "
+            f"{archive_commit})."
+        )
+    if revision(kb_root, "HEAD") != archive_commit:
+        raise ArchiveError(
+            "HEAD moved after the archive commit, so the revision that was verified is no "
+            "longer the checked-out one; refusing to push"
         )
     pushed = subprocess.run(
-        ["git", "-C", str(kb_root), "push"], capture_output=True, text=True, check=False,
+        ["git", "-C", str(kb_root), "push", "--porcelain", remote, f"HEAD:{remote_ref}"],
+        capture_output=True, text=True, check=False,
     )
     if pushed.returncode:
-        raise ArchiveError(f"git push failed: {pushed.stderr.strip()}")
+        detail = pushed.stderr.strip() or pushed.stdout.strip()
+        raise ArchiveError(f"git push {remote} HEAD:{remote_ref} failed: {detail}")
+    observed = subprocess.run(
+        ["git", "-C", str(kb_root), "ls-remote", "--exit-code", remote, remote_ref],
+        capture_output=True, text=True, check=False,
+    )
+    reported = observed.stdout.split()[0] if observed.stdout.split() else None
+    if observed.returncode != 0 or reported != archive_commit:
+        raise ArchiveError(
+            f"the archive commit did not reach {remote} {remote_ref}: the remote reports "
+            f"{reported or '<missing>'} but the archived revision is {archive_commit}. "
+            "Check for a remote hook that rewrites, rejects, or delays the ref update."
+        )
     return "pushed"
 
 
