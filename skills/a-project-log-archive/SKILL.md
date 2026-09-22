@@ -82,6 +82,9 @@ python3 "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/skills/a-project-log-arc
   local path for them, but the rendering is platform-dependent, so they are treated as
   unverifiable rather than as a remote. Plain paths, `file:///absolute/path` and
   `file://localhost/absolute/path` remain supported.
+- Expands a leading `~` before that comparison, because `git push ~/kb` reads `$HOME/kb`.
+  A `~` that cannot be expanded (`~user` with no such account) is refused rather than read
+  as a relative directory name.
 - Resolves the publish target **before** copying anything into the knowledge base, so a
   rejected upstream, detached HEAD, or self-referential remote leaves the KB worktree clean.
 - Verifies every configured push URL after pushing and reports failure when any of them
