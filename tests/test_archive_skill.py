@@ -190,6 +190,16 @@ class ArchiveSkillTests(unittest.TestCase):
         )
         return [json.loads(line) for line in completed.stdout.splitlines() if line.strip()]
 
+    def remote_has_ledger(self) -> bool:
+        completed = subprocess.run(
+            [
+                "git", "--git-dir", str(self.remote), "cat-file", "-e",
+                f"HEAD:工程记录/work/.project-log/{LEDGER_RELATIVE.as_posix()}",
+            ],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False,
+        )
+        return completed.returncode == 0
+
     def test_archive_publishes_new_events_to_the_remote(self) -> None:
         self.assertEqual(self.archive().returncode, 0)
         self.events.append(event("c" * 32, "task.create"))
@@ -238,7 +248,7 @@ class ArchiveSkillTests(unittest.TestCase):
         result = self.archive()
 
         self.assertEqual(result.returncode, 1)
-        self.assertIn("differs from the local ledger", result.stderr)
+        self.assertIn("not byte-identical", result.stderr)
         self.assertEqual(self.commits(), before)
         self.assertEqual(len(self.remote_ledger()), 2)
 
@@ -276,6 +286,49 @@ class ArchiveSkillTests(unittest.TestCase):
             text=True, stdout=subprocess.PIPE, check=True,
         ).stdout
         self.assertIn("unrelated-secret.txt", still_staged)
+
+    def write_ledger_with_crlf(self) -> None:
+        text = "".join(f"{json.dumps(item, ensure_ascii=False, sort_keys=True)}\r\n" for item in self.events)
+        (self.log / LEDGER_RELATIVE).write_text(text, encoding="utf-8", newline="")
+
+    def test_archive_refuses_a_clean_filter_that_rewrites_the_ledger(self) -> None:
+        # hash-object applies clean filters, so hashing cannot prove the raw ledger
+        # landed; only comparing raw blob bytes can.
+        subprocess.run(
+            ["git", "-C", str(self.kb), "config", "filter.drop.clean", "head -n 1"], check=True
+        )
+        (self.kb / ".gitattributes").write_text("*.jsonl filter=drop\n", encoding="utf-8")
+        before = self.commits()
+
+        result = self.archive()
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("not byte-identical", result.stderr)
+        self.assertEqual(self.commits(), before)
+        self.assertFalse(self.remote_has_ledger())
+
+    def test_archive_refuses_end_of_line_normalisation(self) -> None:
+        (self.kb / ".gitattributes").write_text("*.jsonl text=auto\n", encoding="utf-8")
+        self.write_ledger_with_crlf()
+
+        result = self.archive()
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("not byte-identical", result.stderr)
+
+    def test_archive_accepts_no_conversion_attributes(self) -> None:
+        (self.kb / ".gitattributes").write_text("*.jsonl -text\n", encoding="utf-8")
+        self.write_ledger_with_crlf()
+
+        result = self.archive()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        published = subprocess.run(
+            ["git", "--git-dir", str(self.remote), "cat-file", "blob",
+             "HEAD:工程记录/work/.project-log/ledger/v1/ledger.jsonl"],
+            capture_output=True, check=True,
+        ).stdout
+        self.assertEqual(published, (self.log / LEDGER_RELATIVE).read_bytes())
 
 
 if __name__ == "__main__":

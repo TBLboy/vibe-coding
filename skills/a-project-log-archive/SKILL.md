@@ -35,12 +35,14 @@ Only the `工程记录/` subdirectory within the knowledge base will be affected
 5. Verify the KB ledger is an exact prefix of the local ledger, so only new commands are added.
 6. Merge the local `.project-log/` into `<kb>/工程记录/<project-name>/.project-log/`,
    excluding `.state/`, `.git`, `.migration/`, `legacy/new-writes/` and copying the ledger separately.
-7. Stage only `工程记录/<project-name>`, verify the staged ledger hashes to the local
-   ledger, then `git commit --only -- 工程记录/<project-name>` and `git push`.
-8. Fail loudly instead of reporting `no-changes` whenever the staged ledger is not
-   byte-identical to the local ledger: an ignored, `skip-worktree`, or `assume-unchanged`
-   ledger keeps the index stale while unrelated files still stage, which would otherwise
-   be reported as a successful archive.
+7. Stage only `工程记录/<project-name>`, verify the staged ledger is byte-identical to the
+   local ledger, then `git commit --only -- 工程记录/<project-name>`, re-verify the
+   committed blob, and `git push`.
+8. Fail loudly instead of reporting `no-changes` whenever either blob differs from the
+   local ledger: an ignored, `skip-worktree`, or `assume-unchanged` ledger keeps the index
+   stale while unrelated files still stage, and a content filter or end-of-line
+   conversion rewrites the ledger on the way into Git. Both would otherwise be reported
+   as a successful archive.
 
 Re-running the archive is idempotent: unchanged logs produce no commit.
 
@@ -61,9 +63,11 @@ python3 ~/.codex/skills/a-project-log-archive/scripts/archive.py \
 - Refuses when the KB `.gitignore` excludes the archived ledger, and prints the matching
   rule plus the negation lines to add, so a globally ignored `.project-log/` can never
   turn into a silent no-op.
-- Refuses to commit unless the ledger in the knowledge base index hashes to the local
-  ledger, so an ignored, skipped, or otherwise unstaged ledger can never be reported as
-  archived.
+- Refuses to commit or push unless the ledger blob in the knowledge base index and in the
+  new commit is byte-identical to the local ledger, so an ignored, skipped, filtered, or
+  otherwise rewritten ledger can never be reported as archived.
+- Rejects content filters and end-of-line conversion on the ledger path by design: the
+  ledger must reach the remote as the exact bytes that were written locally.
 - Never copies the local SQLite cache (`.state/`) or Git internals.
 - Merges instead of replacing, so an existing KB copy is never deleted wholesale.
 - Commits with an explicit pathspec, so `<kb>/工程记录/` is the only thing the archive
