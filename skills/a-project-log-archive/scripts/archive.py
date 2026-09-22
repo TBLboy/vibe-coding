@@ -9,6 +9,9 @@ Archiving is a merge, never a replacement:
   and ``legacy/new-writes/`` rollback bundles are never copied.
 * The project identity in ``state-format.json`` must match, so two unrelated
   projects that share a folder name can never silently overwrite each other.
+* A silent archive is treated as a failure: if the local ledger holds commands the
+  knowledge base lacks but staging produces no Git change, the run stops loudly
+  instead of reporting ``no-changes``.
 * Re-running the archive is idempotent.
 """
 from __future__ import annotations
@@ -139,9 +142,51 @@ def copy_project_log(src: Path, dst: Path) -> dict:
     }
 
 
-def git_push(kb_root: Path, project_name: str) -> str:
-    """Stage, commit, and push only this project's archive directory."""
+def ignored_rule(kb_root: Path, relative: str) -> str | None:
+    """Return the .gitignore rule that excludes ``relative``, or None when it is tracked.
+
+    ``git check-ignore`` reports a path as ignored even when it is already tracked, so
+    tracking status is checked first: a tracked file reaches the remote regardless of
+    ignore rules, and only genuinely unreachable paths are reported.
+    """
+    tracked = subprocess.run(
+        ["git", "-C", str(kb_root), "ls-files", "--error-unmatch", "--", relative],
+        capture_output=True, text=True, check=False,
+    )
+    if tracked.returncode == 0:
+        return None
+    probe = subprocess.run(
+        ["git", "-C", str(kb_root), "check-ignore", "-v", "--", relative],
+        capture_output=True, text=True, check=False,
+    )
+    if probe.returncode != 0:
+        # 1 means "not ignored"; 128 means the probe itself failed (for example a
+        # non-repository root). Neither proves the path is unreachable, so the caller
+        # falls through to the ordinary staging checks.
+        return None
+    return probe.stdout.strip() or "(matched an ignore rule)"
+
+
+def git_push(kb_root: Path, project_name: str, expected_appended: int = 0) -> str:
+    """Stage, commit, and push only this project's archive directory.
+
+    ``expected_appended`` is the number of ledger commands this run adds. When it is
+    positive, Git must observe a change: an empty staging area means the new commands
+    never reached version control, which used to be reported as a successful
+    ``no-changes`` run and silently dropped log history.
+    """
     relative = str(Path("工程记录") / project_name)
+    ledger_relative = str(Path("工程记录") / project_name / ".project-log" / LEDGER_RELATIVE)
+    rule = ignored_rule(kb_root, ledger_relative)
+    if rule is not None:
+        raise ArchiveError(
+            "the knowledge base ignores the archived ledger, so the log history would "
+            f"never reach the remote:\n  {rule}\n"
+            "add negations for this project to the knowledge base .gitignore:\n"
+            f"  !{Path('工程记录') / project_name}/.project-log/\n"
+            f"  !{Path('工程记录') / project_name}/.project-log/**\n"
+            "then re-run the archive"
+        )
     completed = subprocess.run(
         ["git", "-C", str(kb_root), "add", "-A", "--", relative],
         capture_output=True, text=True, check=False,
@@ -153,6 +198,14 @@ def git_push(kb_root: Path, project_name: str) -> str:
         check=False,
     )
     if staged.returncode == 0:
+        if expected_appended > 0:
+            raise ArchiveError(
+                f"the local ledger holds {expected_appended} command(s) the knowledge base "
+                f"lacks, but staging {relative} produced no Git change; the archive would "
+                "silently drop them. Confirm the knowledge base tracks the ledger:\n"
+                f"  git -C {kb_root} check-ignore -v -- {ledger_relative}\n"
+                f"  git -C {kb_root} status --ignored --short -- {relative}"
+            )
         return "no-changes"
     committed = subprocess.run(
         ["git", "-C", str(kb_root), "commit", "-m", f"archive: {project_name}"],
@@ -196,7 +249,9 @@ def archive(project_root: Path, kb_base: Path) -> dict:
 
     ledger = verify_ledger_superset(source / LEDGER_RELATIVE, destination / LEDGER_RELATIVE)
     copied = copy_project_log(source, destination)
-    pushed = git_push(Path(kb_base).expanduser(), project_name)
+    pushed = git_push(
+        Path(kb_base).expanduser(), project_name, expected_appended=ledger["appended"]
+    )
     return {
         "project": project_name,
         "project_id": local_id,

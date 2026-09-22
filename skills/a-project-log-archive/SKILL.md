@@ -36,6 +36,9 @@ Only the `工程记录/` subdirectory within the knowledge base will be affected
 6. Merge the local `.project-log/` into `<kb>/工程记录/<project-name>/.project-log/`,
    excluding `.state/`, `.git`, `.migration/`, `legacy/new-writes/` and copying the ledger separately.
 7. Run `git add -A && git commit -m "archive: <project-name>" && git push` in the knowledge base.
+8. Fail loudly instead of reporting `no-changes` when the local ledger holds commands the
+   knowledge base lacks but Git staged nothing; that combination means the log history would
+   be silently dropped.
 
 Re-running the archive is idempotent: unchanged logs produce no commit.
 
@@ -53,6 +56,11 @@ python3 "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/skills/a-project-log-arc
   align-project-progress skill first so the two histories are merged.
 - Refuses when the KB `project_id` differs from the local one, so two unrelated
   projects that share a folder name can never overwrite each other.
+- Refuses when the KB `.gitignore` excludes the archived ledger, and prints the matching
+  rule plus the negation lines to add, so a globally ignored `.project-log/` can never
+  turn into a silent no-op.
+- Refuses when the ledger grew but staging produced no Git change, rather than reporting
+  a successful `no-changes` run.
 - Never copies the local SQLite cache (`.state/`) or Git internals.
 - Merges instead of replacing, so an existing KB copy is never deleted wholesale.
 - Only affects `<kb>/工程记录/`, never other files.
