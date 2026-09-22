@@ -199,14 +199,23 @@ def validate(root: Path) -> list[str]:
     if is_transactional(root):
         try:
             store = open_store(root)
-            errors = store.validate()
-            if not errors:
-                errors.extend(store.audit_gates())
-                errors.extend(transactional_record_errors(store))
-                errors.extend(migration_state_errors(root))
-            return errors
         except (StateError, OSError, ValueError) as exc:
             return [str(exc)]
+        # Collect every diagnostic instead of stopping at the first: a store with
+        # ledger drift can still expose actionable gate or payload problems, and
+        # the earlier short-circuit hid them behind a generic integrity error.
+        errors: list[str] = []
+        for check in (
+            store.validate,
+            store.audit_gates,
+            lambda: transactional_record_errors(store),
+            lambda: migration_state_errors(root),
+        ):
+            try:
+                errors.extend(check())
+            except (StateError, OSError, ValueError) as exc:
+                errors.append(str(exc))
+        return list(dict.fromkeys(errors))
     schema, loaded = schema_errors(root)
     return schema + cross_reference_errors(loaded) + clarification_gate_errors(loaded) + validate_loop(root)
 

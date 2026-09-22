@@ -1932,21 +1932,16 @@ class Store:
         """Replay the ledger against the entity tables on one connection.
 
         Shared by the read-only audit and by import validation, so a snapshot
-        can never be accepted into a store that then fails its own audit.
+        can never be accepted into a store that then fails its own audit. The
+        canonical request/receipt/event header and the entity projection are
+        both derived from the shared ``state_replay.reduce_ledger`` replay so the
+        audit and the migration tooling can never drift apart.
         """
+        from state_replay import reduce_ledger
+
         metadata = self._metadata(connection)
         problems: list[str] = []
-        run_links = {row["id"]: row["run_id"] for row in connection.execute("SELECT id, run_id FROM tasks")}
-        created_goals: set[str] = set()
-        goal_statuses: dict[str, str] = {}
-        created_tasks: set[str] = set()
-        begun_runs: dict[str, str] = {}
-        waited: list[tuple[str, str]] = []
-        records: dict[tuple[str, str], dict] = {}
-        links: set[tuple[str, str, str, str, str]] = set()
-        evidence: dict[str, dict] = {}
-        reviews: dict[str, dict] = {}
-        position = 0
+        entries: list[dict] = []
         offset = 0
         while True:
             rows = connection.execute(
@@ -1962,220 +1957,51 @@ class Store:
             if not rows:
                 break
             offset += len(rows)
-            for row in rows:
-                position += 1
-                try:
-                    request, canonical, digest = _request(json.loads(row["request_json"]))
-                    receipt = json.loads(row["receipt_json"])
-                    payload = request["payload"]
-                    action = request["action"]
-                    if action == "goal.create":
-                        run_id = None
-                        result = {"goal_id": payload["id"], "status": "active"}
-                        created_goals.add(payload["id"])
-                        goal_statuses[payload["id"]] = "active"
-                    elif action == "goal.complete":
-                        run_id = None
-                        if payload["id"] not in created_goals:
-                            raise ValueError("Goal completion references an unknown goal")
-                        goal_statuses[payload["id"]] = "complete"
-                        result = {"goal_id": payload["id"], "status": "complete"}
-                    elif action == "goal.update":
-                        run_id = None
-                        if payload["id"] not in created_goals:
-                            raise ValueError("Goal update references an unknown goal")
-                        result = {"goal_id": payload["id"], "updated": True}
-                    elif action == "task.create":
-                        task_id = payload["id"]
-                        run_id = None
-                        created_tasks.add(task_id)
-                        result = {"task_id": task_id, "run_id": None, "status": "ready"}
-                    elif action == "task.update":
-                        task_id = payload["task_id"]
-                        run_id = None
-                        if task_id not in created_tasks:
-                            raise ValueError("Task update references an unknown task")
-                        result = {"task_id": task_id, "updated": True}
-                    elif action in {
-                        "task.begin", "task.resume", "task.wait", "task.handoff",
-                        "task.finish", "task.cancel",
-                    }:
-                        task_id = payload["task_id"]
-                        status = {
-                            "task.begin": "in-progress", "task.resume": "in-progress",
-                            "task.wait": "waiting-user" if payload.get("kind") == "user" else "blocked",
-                            "task.handoff": "handed-off", "task.finish": "implemented-unverified",
-                            "task.cancel": "cancelled",
-                        }[action]
-                        if task_id in run_links:
-                            run_id = run_links[task_id]
-                        else:
-                            raise ValueError("Receipt references an unknown task")
-                        if action == "task.begin":
-                            if run_id != payload["run_id"]:
-                                raise ValueError("Begin receipt run disagrees with the authoritative task run")
-                            begun_runs[payload["run_id"]] = task_id
-                        elif action == "task.wait":
-                            waited.append((task_id, payload["kind"]))
-                        result = {"task_id": task_id, "run_id": run_id, "status": status}
-                    elif action == "record.create":
-                        key = (payload["kind"], payload["id"])
-                        if key in records:
-                            raise ValueError("Duplicate record create in ledger")
-                        records[key] = {
-                            "title": payload["title"], "status": payload["status"],
-                            "revision": 1, "created_sequence": row["local_sequence"],
-                            "updated_sequence": row["local_sequence"],
-                        }
-                        result = {
-                            "record_kind": key[0], "record_id": key[1],
-                            "status": payload["status"], "revision": 1,
-                        }
-                    elif action == "record.update":
-                        key = (payload["kind"], payload["id"])
-                        state = records.get(key)
-                        if state is None:
-                            raise ValueError("Record update references an unknown record")
-                        if state["revision"] != payload["expected_record_revision"]:
-                            raise ValueError("Record update revision mismatch in ledger")
-                        status = payload.get("status", state["status"])
-                        state.update({
-                            "status": status, "revision": state["revision"] + 1,
-                            "updated_sequence": row["local_sequence"],
-                        })
-                        result = {
-                            "record_kind": key[0], "record_id": key[1],
-                            "status": status, "revision": state["revision"],
-                        }
-                    elif action == "record.link":
-                        key = (
-                            payload["from_kind"], payload["from_id"], payload["relation"],
-                            payload["to_kind"], payload["to_id"],
-                        )
-                        if key in links:
-                            raise ValueError("Duplicate record link in ledger")
-                        links.add(key)
-                        result = {
-                            "from_kind": payload["from_kind"], "from_id": payload["from_id"],
-                            "relation": payload["relation"], "to_kind": payload["to_kind"],
-                            "to_id": payload["to_id"],
-                        }
-                    elif action == "evidence.record":
-                        if payload["id"] in evidence:
-                            raise ValueError("Duplicate evidence record in ledger")
-                        evidence[payload["id"]] = {
-                            "task_id": payload.get("task_id"), "status": payload["status"],
-                            "recorded_sequence": row["local_sequence"],
-                            "invalidated_sequence": None, "invalidation_reason": None,
-                        }
-                        result = {"evidence_id": payload["id"], "status": payload["status"]}
-                    elif action == "evidence.invalidate":
-                        state = evidence.get(payload["id"])
-                        if state is None or state["invalidated_sequence"] is not None:
-                            raise ValueError("Evidence invalidation references an unknown or invalidated record")
-                        state.update({
-                            "status": "stale",
-                            "invalidated_sequence": row["local_sequence"],
-                            "invalidation_reason": payload["reason"],
-                        })
-                        result = {
-                            "evidence_id": payload["id"], "status": "stale",
-                            "reason": payload["reason"],
-                        }
-                    elif action == "review.record":
-                        if payload["id"] in reviews:
-                            raise ValueError("Duplicate review record in ledger")
-                        reviews[payload["id"]] = {
-                            "task_id": payload["task_id"], "verdict": payload["verdict"],
-                            "created_sequence": row["local_sequence"],
-                        }
-                        result = {
-                            "review_id": payload["id"], "task_id": payload["task_id"],
-                            "verdict": payload["verdict"],
-                        }
-                    else:
-                        raise ValueError(f"Unknown ledger action: {action}")
-                    expected = {
-                        "schema_version": SCHEMA_VERSION, "project_id": self.project_id,
-                        "context_id": row["origin_context_id"], "command_id": row["command_id"],
-                        "revision": row["origin_revision"], "action": row["action"],
-                        "request_hash": digest, "created_at": row["created_at"], "result": result,
-                    }
-                    local_chain = row["origin_kind"] == "local" and row["origin_context_id"] == self.context_id
-                    if (row["local_sequence"] != position
-                            or (local_chain and (row["origin_revision"] != row["local_sequence"]
-                                                 or request["expected_revision"] != row["origin_revision"] - 1))
-                            or canonical != row["request_json"] or digest != row["request_hash"]
-                            or request["command_id"] != row["command_id"] or request["action"] != row["action"]
-                            or row["event_command"] != row["command_id"] or row["event_action"] != row["action"]
-                            or row["event_hash"] != digest or row["event_time"] != row["created_at"]
-                            or row["event_origin_kind"] != row["origin_kind"]
-                            or row["event_origin_context"] != row["origin_context_id"]
-                            or row["event_origin_revision"] != row["origin_revision"]
-                            or receipt["context_id"] != row["origin_context_id"]
-                            or receipt["revision"] != row["origin_revision"]
-                            or _json(receipt) != _json(expected)):
-                        raise ValueError("Ledger header mismatch")
-                except (ValueError, TypeError, KeyError) as error:
-                    problems.append(
-                        f"Invalid receipt/event at local sequence {row['local_sequence']}: {error}"
-                    )
-        if position != metadata["local_revision"]:
+            entries.extend({key: row[key] for key in row.keys()} for row in rows)
+        if len(entries) != metadata["local_revision"]:
             problems.append("Local revision/receipt cardinality mismatch")
-        goals = {row["id"] for row in connection.execute("SELECT id FROM goals")}
-        stored_goal_statuses = {
-            row["id"]: row["status"] for row in connection.execute("SELECT id, status FROM goals")
-        }
-        tasks = {row["id"] for row in connection.execute("SELECT id FROM tasks")}
-        runs = {row["id"]: row["task_id"] for row in connection.execute("SELECT id, task_id FROM runs")}
-        blockers = sorted(
-            (row["task_id"], row["kind"]) for row in connection.execute("SELECT task_id, kind FROM blockers")
-        )
-        stored_records = {
-            (row["kind"], row["id"]): {
-                "title": row["title"], "status": row["status"], "revision": row["revision"],
-                "created_sequence": row["created_sequence"], "updated_sequence": row["updated_sequence"],
-            }
-            for row in connection.execute("SELECT * FROM records")
-        }
-        stored_links = {
-            (row["from_kind"], row["from_id"], row["relation"], row["to_kind"], row["to_id"])
-            for row in connection.execute("SELECT * FROM record_links")
-        }
-        stored_evidence = {
-            row["id"]: {
-                "task_id": row["task_id"], "status": row["status"],
-                "recorded_sequence": row["recorded_sequence"],
-                "invalidated_sequence": row["invalidated_sequence"],
-                "invalidation_reason": row["invalidation_reason"],
-            }
-            for row in connection.execute("SELECT * FROM evidence")
-        }
-        stored_reviews = {
-            row["id"]: {
-                "task_id": row["task_id"], "verdict": row["verdict"],
-                "created_sequence": row["created_sequence"],
-            }
-            for row in connection.execute("SELECT * FROM reviews")
-        }
-        if goals != created_goals:
-            problems.append("Ledger and entity tables disagree on goals")
-        if goal_statuses != stored_goal_statuses:
-            problems.append("Ledger and entity tables disagree on goal statuses")
-        if tasks != created_tasks:
-            problems.append("Ledger and entity tables disagree on tasks")
-        if runs != begun_runs:
-            problems.append("Ledger and entity tables disagree on runs")
-        if blockers != sorted(waited):
-            problems.append("Ledger and entity tables disagree on blockers")
-        if records != stored_records:
-            problems.append("Ledger and entity tables disagree on records")
-        if links != stored_links:
-            problems.append("Ledger and entity tables disagree on record links")
-        if evidence != stored_evidence:
-            problems.append("Ledger and entity tables disagree on evidence")
-        if reviews != stored_reviews:
-            problems.append("Ledger and entity tables disagree on reviews")
+        try:
+            expected_state, expected_results = reduce_ledger(entries, with_results=True)
+        except (StateError, ValueError, TypeError, KeyError) as error:
+            return problems + [f"Ledger replay failed: {error}"]
+        for position, row in enumerate(entries, start=1):
+            try:
+                request, canonical, digest = _request(json.loads(row["request_json"]))
+                receipt = json.loads(row["receipt_json"])
+                expected_receipt = {
+                    "schema_version": SCHEMA_VERSION, "project_id": self.project_id,
+                    "context_id": row["origin_context_id"], "command_id": row["command_id"],
+                    "revision": row["origin_revision"], "action": row["action"],
+                    "request_hash": digest, "created_at": row["created_at"],
+                    "result": expected_results.get(row["local_sequence"]),
+                }
+                local_chain = (
+                    row["origin_kind"] == "local"
+                    and row["origin_context_id"] == self.context_id
+                )
+                if (row["local_sequence"] != position
+                        or (local_chain and (row["origin_revision"] != row["local_sequence"]
+                                             or request["expected_revision"] != row["origin_revision"] - 1))
+                        or canonical != row["request_json"] or digest != row["request_hash"]
+                        or request["command_id"] != row["command_id"] or request["action"] != row["action"]
+                        or row["event_command"] != row["command_id"] or row["event_action"] != row["action"]
+                        or row["event_hash"] != digest or row["event_time"] != row["created_at"]
+                        or row["event_origin_kind"] != row["origin_kind"]
+                        or row["event_origin_context"] != row["origin_context_id"]
+                        or row["event_origin_revision"] != row["origin_revision"]
+                        or receipt["context_id"] != row["origin_context_id"]
+                        or receipt["revision"] != row["origin_revision"]
+                        or _json(receipt) != _json(expected_receipt)):
+                    raise ValueError("Ledger header mismatch")
+            except (ValueError, TypeError, KeyError) as error:
+                problems.append(
+                    f"Invalid receipt/event at local sequence {row['local_sequence']}: {error}"
+                )
+        if problems:
+            return problems
+        for table, rows in self._entity_rows(connection).items():
+            if expected_state[table] != rows:
+                problems.append(f"Ledger and entity tables disagree on {table}")
         return problems
 
     def _audit(self) -> None:
