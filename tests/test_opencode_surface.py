@@ -27,17 +27,22 @@ EXPECTED_AGENTS = {
     "workflow-distiller",
 }
 SUBAGENTS = EXPECTED_AGENTS - {"vibe-main"}
+# `/goal` is no longer forbidden: the user authorised declaring a per-client session Goal
+# controller (ALIGN-OPENCODE-002), and a real opencode 1.18.31 run verified the plugin's
+# commands are registered and idle auto-continuation starts further turns
+# (RESEARCH-OPENCODE-003). The runtime-specific verbs below still do not exist in OpenCode.
 FORBIDDEN_SESSION_GOAL_PATTERNS = {
-    "session-goal-command": r"(?<!/)/goal(?=[\s。,，;；]|$)",
     "goal-bind-command": r"goal-bind",
     "goal-sync-command": r"goal-sync",
 }
+# Claiming a *native* session Goal in OpenCode stays forbidden: the capability comes from a
+# pinned third-party plugin, not from the client. Any mention must carry a negation of that
+# native framing.
 FORBIDDEN_SESSION_GOAL_CLAIMS = {
-    "session-goal-zh": r"会话 Goal",
-    "session-goal-en": r"session Goal",
     "native-goal-zh": r"原生 Goal",
     "native-goal-en": r"native Goal",
 }
+DECLARED_SESSION_GOAL_CONTROLLER = "@prevalentware/opencode-goal-plugin"
 SESSION_GOAL_NEGATION = re.compile(
     r"没有|不存在|无内建|不得调用|不得宣称|不是唯一|待实现|未实现|no built-in|does not provide",
 )
@@ -144,7 +149,11 @@ class OpenCodeStaticSurfaceTests(unittest.TestCase):
             "127.0.0.1:10808",
         ):
             self.assertIn(required, text)
-        self.assertIn("没有内建会话 Goal", text)
+        # The authorised contract (ALIGN-OPENCODE-002): a declared per-client controller,
+        # pinned, with the plugin state explicitly excluded from completion evidence.
+        self.assertIn(DECLARED_SESSION_GOAL_CONTROLLER, text)
+        self.assertIn("0.1.51", text)
+        self.assertIn("永不作为完成依据", text)
         for forbidden in (
             "CODEX_HOME", ".codex", "Codex", "TOML", "marketplace", "vibe-toolbelt",
         ):
@@ -234,10 +243,15 @@ class OpenCodeIsolatedLoadTests(unittest.TestCase):
             self.assertEqual(set(resolved_config["command"]), EXPECTED_COMMANDS)
             # `--pure` resolves config without external plugins; it proves the plugin spec is
             # resolvable but not that OpenCode imports the plugin module.
-            self.assertEqual(len(resolved_config.get("plugin", [])), 1)
+            plugins = resolved_config.get("plugin", [])
+            self.assertIn(
+                "@prevalentware/opencode-goal-plugin@0.1.51", plugins, plugins
+            )
+            local_plugins = [item for item in plugins if not str(item).startswith("@")]
+            self.assertEqual(len(local_plugins), 1, plugins)
             self.assertTrue(
-                Path(resolved_config["plugin"][0].removeprefix("file://")).is_absolute(),
-                resolved_config["plugin"],
+                Path(str(local_plugins[0]).removeprefix("file://")).is_absolute(),
+                plugins,
             )
 
             # Non-pure debug agent performs the real plugin load in OpenCode.

@@ -25,6 +25,12 @@ PACKAGE_VERSION = VERSION
 STATE_NAME = ".vibe-opencode-installation-state.json"
 PLUGIN_RELATIVE = "plugins/vibe-workflow.ts"
 DEFAULT_PLUGIN_SPEC = "./plugins/vibe-workflow.ts"
+# The session Goal controller the global rules declare for OpenCode. It is pinned: the
+# rule text names one version, so installing any other version would make the rule false.
+GOAL_PLUGIN_PACKAGE = "@prevalentware/opencode-goal-plugin"
+GOAL_PLUGIN_VERSION = "0.1.51"
+GOAL_PLUGIN_SPEC = f"{GOAL_PLUGIN_PACKAGE}@{GOAL_PLUGIN_VERSION}"
+MANAGED_PLUGIN_SPECS = (DEFAULT_PLUGIN_SPEC, GOAL_PLUGIN_SPEC)
 AGENTS_RELATIVE = "AGENTS.md"
 AGENTS_BEGIN = "<!-- VIBE-OPENCODE-GLOBAL:BEGIN -->"
 AGENTS_END = "<!-- VIBE-OPENCODE-GLOBAL:END -->"
@@ -577,8 +583,22 @@ def merge_config(home: Path, root: Path, previous_ownership: Any) -> dict[str, A
     if not isinstance(plugin_ownership, dict) or "present" not in plugin_ownership:
         plugin_ownership = {"present": any(plugin_key(item) == spec_key for item in plugins)}
     ownership["plugin"] = plugin_ownership
-    kept = [item for item in plugins if plugin_key(item) != spec_key]
-    merged["plugin"] = dedupe_plugins([*kept, DEFAULT_PLUGIN_SPEC])
+    # Third-party specs the installer registers on the user's behalf, each recorded with
+    # whether the user already had it so uninstall removes only what the installer added.
+    plugins_added = previous.get("plugins_added")
+    if not isinstance(plugins_added, dict):
+        plugins_added = {}
+    managed_ownership: dict[str, bool] = {}
+    managed_keys = {plugin_key(spec) for spec in MANAGED_PLUGIN_SPECS}
+    for spec in MANAGED_PLUGIN_SPECS[1:]:
+        key = plugin_key(spec)
+        if key in plugins_added:
+            managed_ownership[key] = bool(plugins_added[key])
+        else:
+            managed_ownership[key] = any(plugin_key(item) == key for item in plugins)
+    ownership["plugins_added"] = managed_ownership
+    kept = [item for item in plugins if plugin_key(item) not in managed_keys]
+    merged["plugin"] = dedupe_plugins([*kept, *MANAGED_PLUGIN_SPECS])
 
     # --- managed permission rules -----------------------------------------
     permissions = dict(existing.get("permission")) if isinstance(existing.get("permission"), dict) else {}
@@ -825,6 +845,11 @@ def verify(root: Path, home: Path) -> None:
         raise RuntimeError("opencode.json default_agent must be vibe-main")
     if DEFAULT_PLUGIN_SPEC not in (config.get("plugin") or []):
         raise RuntimeError("opencode.json does not register the Vibe Workflow plugin")
+    if GOAL_PLUGIN_SPEC not in (config.get("plugin") or []):
+        raise RuntimeError(
+            f"opencode.json does not register the pinned session Goal controller "
+            f"({GOAL_PLUGIN_SPEC}); the global rules declare it for OpenCode"
+        )
     python_pointer = destination_for(home, "vibe-python")
     if not python_pointer.is_file() or not python_pointer.read_text(encoding="utf-8").strip():
         raise RuntimeError("vibe-python pointer is missing")
@@ -875,6 +900,19 @@ def remove_managed_config(home: Path, ownership: Any) -> None:
             config["plugin"] = remaining
         else:
             config.pop("plugin", None)
+        plugins = config.get("plugin")
+
+    # Remove the third-party Goal controller the installer added, keeping any the user
+    # already had before installation.
+    plugins_added = own.get("plugins_added")
+    if isinstance(plugins, list) and isinstance(plugins_added, dict):
+        removable = {key for key, present in plugins_added.items() if not present}
+        if removable:
+            remaining = [item for item in plugins if plugin_key(item) not in removable]
+            if remaining:
+                config["plugin"] = remaining
+            else:
+                config.pop("plugin", None)
 
     permissions = config.get("permission")
     managed_permissions = own.get("permissions_added")

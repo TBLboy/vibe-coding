@@ -239,6 +239,63 @@ class OpenCodeInstallerTests(unittest.TestCase):
             self.assertEqual(config["model"], "user/model")
             self.assertNotIn("default_agent", config)
 
+    def test_install_registers_the_pinned_goal_controller(self) -> None:
+        # The global rules declare @prevalentware/opencode-goal-plugin@0.1.51 as the
+        # OpenCode session Goal controller, so a fresh install must actually register it.
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary) / "opencode"
+
+            install = self.install(home)
+
+            self.assertEqual(install.returncode, 0, install.stdout)
+            config = json.loads((home / "opencode.json").read_text(encoding="utf-8"))
+            self.assertIn(
+                "@prevalentware/opencode-goal-plugin@0.1.51", config["plugin"]
+            )
+            # The rule text names one version, so an unpinned spec must never appear.
+            self.assertNotIn("@prevalentware/opencode-goal-plugin", config["plugin"])
+
+            uninstall = run_installer("uninstall", "--opencode-home", str(home))
+
+            self.assertEqual(uninstall.returncode, 0, uninstall.stdout)
+            # With nothing of the user's left, uninstall removes the file it created.
+            config_path = home / "opencode.json"
+            removed = (
+                json.loads(config_path.read_text(encoding="utf-8"))
+                if config_path.is_file()
+                else {}
+            )
+            self.assertNotIn(
+                "@prevalentware/opencode-goal-plugin@0.1.51", removed.get("plugin", [])
+            )
+
+    def test_goal_controller_the_user_already_had_is_kept_after_uninstall(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary) / "opencode"
+            home.mkdir()
+            (home / "opencode.json").write_text(
+                json.dumps(
+                    {"plugin": ["@prevalentware/opencode-goal-plugin@0.1.51"]}, indent=2
+                ),
+                encoding="utf-8",
+            )
+
+            install = self.install(home)
+
+            self.assertEqual(install.returncode, 0, install.stdout)
+            config = json.loads((home / "opencode.json").read_text(encoding="utf-8"))
+            self.assertEqual(
+                config["plugin"].count("@prevalentware/opencode-goal-plugin@0.1.51"), 1
+            )
+
+            uninstall = run_installer("uninstall", "--opencode-home", str(home))
+
+            self.assertEqual(uninstall.returncode, 0, uninstall.stdout)
+            config = json.loads((home / "opencode.json").read_text(encoding="utf-8"))
+            self.assertEqual(
+                config["plugin"], ["@prevalentware/opencode-goal-plugin@0.1.51"]
+            )
+
     def test_pre_existing_asset_conflict_aborts_without_writing(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             home = Path(temporary) / "opencode"
