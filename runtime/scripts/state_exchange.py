@@ -287,12 +287,20 @@ def publish(store: Store, root: Path) -> dict:
                 raise StateError("stale_revision", "Local state changed during export preparation")
             path = directory(root) / SNAPSHOT_NAME
             path.parent.mkdir(parents=True, exist_ok=True)
-            temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
-            with temporary.open("xb") as stream:
-                stream.write(_canonical({"schema_version": SCHEMA_VERSION, "snapshot_id": snapshot_id}))
-                stream.flush()
-                os.fsync(stream.fileno())
-            os.replace(temporary, path)
+            # Same temporary naming as the object writes, so the exchange
+            # .gitignore also covers a pointer write killed mid-flight.
+            temporary = path.with_name(f".{path.name}{TEMP_SUFFIX}{uuid.uuid4().hex}")
+            try:
+                with temporary.open("xb") as stream:
+                    stream.write(_canonical({"schema_version": SCHEMA_VERSION, "snapshot_id": snapshot_id}))
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                os.replace(temporary, path)
+            finally:
+                try:
+                    temporary.unlink()
+                except FileNotFoundError:
+                    pass
     except Exception:
         try:
             store.abandon_export("export aborted before the pointer was acknowledged")

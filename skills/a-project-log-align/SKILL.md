@@ -62,9 +62,8 @@ merging the ledger.
 
 A branch switch never hides or forks the Project Log: one work folder has one
 `.project-log`, regardless of branch. `git worktree add` is different — it creates a
-**separate work folder**, and the framework treats it that way. The worktree behaviour
-below is fixed by `tests/test_cross_platform_surface.py`; the ledger-graft rejection is
-also covered by `tests/test_exchange_scenarios.py`:
+**separate work folder**, and the framework treats it that way. The behaviour below is
+fixed by `tests/test_cross_platform_surface.py` (including the ledger-graft rejection):
 
 - **Shared:** every worktree of one repository sees the same `project_id` and the same
   Git-tracked `.project-log` contents, including `.project-log/ledger/v1/ledger.jsonl`.
@@ -75,9 +74,10 @@ also covered by `tests/test_exchange_scenarios.py`:
 - **Isolated writes:** each worktree carries its own working copy of the ledger. A write
   in one is not visible in the other until an explicit attach/reconcile; grafting one
   ledger over the other fails closed with `ledger_diverged`.
-- **Exchange locks do not span worktrees:** Git's index lock is per worktree, so each
-  worktree publishes its own pointer and the two exports do not serialise against each
-  other. Cross-worktree publication is therefore outside what the exchange lock protects.
+- **Exchange locks are per worktree:** Git's index lock does not span worktrees, so each
+  worktree publishes its own pointer. Two exports across worktrees are therefore expected
+  to be independent rather than serialised by the exchange lock — the tests verify
+  independence, not concurrency.
 
 Treat a worktree as a separate work folder: run `vibe state-attach` after entering a new
 one, and do not let two worktrees write the same logical log while expecting an automatic

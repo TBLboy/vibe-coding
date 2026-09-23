@@ -39,6 +39,7 @@ if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
 from state_context import open_store, publish_snapshot  # noqa: E402
+from state_exchange import SNAPSHOT_NAME  # noqa: E402
 from state_exchange import directory as exchange_directory  # noqa: E402
 from state_exchange import git_index_lock, read_pointer  # noqa: E402
 from state_store import StateError  # noqa: E402
@@ -430,6 +431,30 @@ class ExchangeScenarioTests(unittest.TestCase):
         with self.assertRaises(StateError) as caught:
             _write_exclusive(target, b'{"schema_version": 2}')
         self.assertEqual(caught.exception.code, "snapshot_conflict")
+
+    def test_killed_publish_temporaries_stay_out_of_git_status(self) -> None:
+        """A temporary file a kill leaves behind must not surface in `git status`.
+
+        Both the object write and the pointer write name their temporary file with
+        ``TEMP_SUFFIX``, so one ignore rule in the exchange directory covers both.
+        """
+        self.seed_goal(self.repo)
+        self.vibe_ok(self.repo, "exchange", "export")
+        exchange = exchange_directory(self.repo)
+        orphans = [
+            exchange / f".{SNAPSHOT_NAME}.tmp-deadbeef",
+            exchange / "objects" / f"{'c' * 64}.payload.json.tmp-deadbeef",
+        ]
+        for orphan in orphans:
+            orphan.write_text("orphan\n", encoding="utf-8")
+        status = subprocess.run(
+            ["git", "-C", str(self.repo), "status", "--porcelain"],
+            capture_output=True, text=True, check=True,
+        ).stdout
+        for orphan in orphans:
+            self.assertNotIn(
+                orphan.name, status, f"{orphan.name} surfaced in git status instead of being ignored"
+            )
 
 
 @unittest.skipUnless(shutil.which("git"), "git is required for the exchange scenarios")
