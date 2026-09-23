@@ -124,48 +124,47 @@ export VIBE_PYTHON=/absolute/path/to/python
 
 ### 2.3 安装方式
 
-Linux/macOS：
+OpenCode 版的入口是 `runtime/opencode/install.sh`。仓库根目录的 `install.sh` / `update.sh` /
+`uninstall.sh` 属于 **codex 面**（安装到 `~/.codex`），不要用它们安装 OpenCode 版。
+
+Linux / WSL：
 
 ```bash
-chmod +x install.sh update.sh uninstall.sh
-./install.sh
-```
-
-Windows PowerShell：
-
-```powershell
-.\install.ps1
+chmod +x runtime/opencode/install.sh
+./runtime/opencode/install.sh preflight
+./runtime/opencode/install.sh install
+./runtime/opencode/install.sh verify
 ```
 
 默认安装行为：
 
-- 保留现有 Codex 权限配置。
-- 安装主 Agent、Skills、runtime 和三个低风险 Hooks。
-- 自动创建带时间戳的备份。
-- 新安装默认不启用可选 MCP。
-- 不静默删除用户已有配置。
+- 以标记块合并用户级 `AGENTS.md`，保留用户已有规则。
+- 合并而非覆盖 `opencode.json`：设置 `default_agent`、注册插件与权限规则，保留用户自己的
+  `plugin`、`mcp`、`model`、`permission` 等键。
+- 安装主 Agent、八个受限 subagent、七个生命周期命令、全部内置 Skills、runtime 与
+  `vibe-workflow` 插件，并注册固定版本的会话 Goal 控制器
+  `@prevalentware/opencode-goal-plugin@0.1.51`。
+- 自动创建带时间戳的备份到 `<home>/backups/<action>-<stamp>/`。
+- 可选 MCP 在 `opencode.json` 的 `mcp` 段按需声明，安装器不强制安装任何可选 MCP。
+- 不静默删除用户已有配置；安装、升级、卸载对其触及的文件是事务性的。
 
-如需显式选择可选 MCP，可以重复指定 `--mcp`：
-
-```bash
-./install.sh --mcp codegraph
-./install.sh --mcp codegraph --mcp vibe-toolbelt
-```
-
-受限网络下可以显式跳过可选 MCP：
-
-```bash
-./install.sh --without-mcp
-```
+可选 MCP 直接在 `opencode.json` 的 `mcp` 段添加即可（例如 `context7`、`github`、`playwright`），
+不需要 `--mcp` 参数。
 
 安装完成后建议验证：
 
 ```bash
-${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/vibe-workflow/scripts/loopctl.py --help
-python scripts/global_installer.py verify
+"$(cat "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/vibe-python")" \
+  runtime/scripts/validate_package.py --root .
+./runtime/opencode/install.sh verify
 ```
 
+Windows（PowerShell 5.1/7）实机矩阵尚未验证，本版支持范围为 Linux/WSL。
+
 日常运行可使用平台原生入口，它会读取 `vibe-python`，不要求 PATH 中存在 `py` 或 `python3`。
+
+以下 `vibe.sh` / `vibe.ps1` wrapper 属于 **codex 面**（其配置根默认仍是 `~/.codex`），保留用于 codex 客户端；OpenCode 版请直接使用上文的
+`runtime/opencode/install.sh` 或全局 `vibe` 运行时：
 
 Windows PowerShell：
 
@@ -180,7 +179,7 @@ Linux/macOS Bash：
 bash "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/vibe-workflow/vibe.sh" --root "$PWD" status
 ```
 
-入口也支持 `--codex-home <目录>` 或 `--codex-home=<目录>`。通过 `pwsh -File` 从外部程序启动时，请使用分开的 `--codex-home "D:\配置目录"`：已测试的 PowerShell 7.4.6 宿主会在脚本收到参数前拆开 `--codex-home=D:\配置目录` 中的盘符冒号。入口对这种歧义报错并提示分开传参，不猜测重组路径。直接在 PowerShell 内调用脚本的等号形式不受此限制。
+该 codex 面 wrapper 也支持 `--codex-home <目录>` 或 `--codex-home=<目录>`。通过 `pwsh -File` 从外部程序启动时，请使用分开的 `--codex-home "D:\配置目录"`：已测试的 PowerShell 7.4.6 宿主会在脚本收到参数前拆开 `--codex-home=D:\配置目录` 中的盘符冒号。入口对这种歧义报错并提示分开传参，不猜测重组路径。直接在 PowerShell 内调用脚本的等号形式不受此限制。
 
 解释器优先级为显式 `VIBE_PYTHON`、该目录的 `vibe-python`；配置必须是单行绝对可执行路径，Python 至少为 3.11。配置文件接受 UTF-8 BOM 与 CRLF，但不接受多条路径或相对路径。错误配置明确报错，不静默切换 PATH、WSL 或安装环境；子进程的文本输入输出明确使用 UTF-8。
 
@@ -193,7 +192,7 @@ PY="$(cat "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/vibe-python")"
 "$PY" runtime/scripts/validate_package.py --root .
 ```
 
-> Windows 上如果 Codex 报告 Hook 启动失败，请参考 `AI_INSTALL.md` 的“Windows Hook 命令适配（Codex 0.147.0+）”。Linux/macOS 不需要该适配。
+> Windows 上的 Codex Hook 适配属于 **codex 面**（见 `codex` 分支文档）；OpenCode 版用插件而非 Hooks，且 Windows 实机矩阵延期。
 
 ---
 
@@ -566,7 +565,10 @@ Vibe Coding 的规则和项目日志与接入端无关，以下客户端共享�
 
 ---
 
-## 8. cc-switch 与可选 MCP
+## 8. cc-switch 与可选 MCP（codex 面）
+
+> 本节描述 **codex 面**的工具（cc-switch、Codex TOML、marketplace）。OpenCode 版不使用
+> cc-switch、也不需要 TOML；可选 MCP 直接在 `opencode.json` 的 `mcp` 段声明（见 §8.2）。
 
 ### 8.1 cc-switch 通用配置
 
@@ -601,25 +603,31 @@ python scripts/generate_cc_switch_config.py --output cc-switch-common-config-cod
 cat runtime/mcp/optional-mcps.json
 ```
 
-选择 MCP：
+OpenCode 版的可选 MCP 直接在 `opencode.json` 的 `mcp` 段声明（`type`、`command`/`url`、
+`enabled`），安装器不强制安装任何一项：
 
-```bash
-./install.sh --mcp codegraph
+```json
+{
+  "mcp": {
+    "context7": { "type": "remote", "url": "https://mcp.context7.com/mcp", "enabled": true }
+  }
+}
 ```
 
 验证配置：
 
 ```bash
-codex mcp list
-python scripts/global_installer.py verify
+"$(cat "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/vibe-python")" \
+  runtime/scripts/validate_package.py --root .
+./runtime/opencode/install.sh verify
 ```
 
-如果 MCP 安装失败，先确认：
+如果 MCP 不可用，先确认：
 
 - 代理是否可用。
-- 外部命令是否存在。
-- 当前 Codex 会话是否需要重启才能加载新配置。
-- 核心 Hooks 和 Project Log 是否仍然正常。
+- 外部命令是否存在（`npx` / `uvx` 等）。
+- 当前 OpenCode 会话是否需要重启才能加载新配置。
+- 插件与 Project Log 是否仍然正常。
 
 MCP 是可选增强，不应阻塞没有 MCP 时的核心 Vibe 工作流。
 
@@ -776,11 +784,11 @@ PY="$(cat "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/vibe-python")"
 "$PY" "$HOME/.config/opencode/vibe-workflow/scripts/loopctl.py" --root . validate
 ```
 
-### 10.4 Windows Hook 失败
+### 10.4 Windows Hook 失败（codex 面）
 
-Codex 0.147.0 及更新版本在部分 Windows 环境下对 Hook 命令的引号解析方式发生变化。如果错误表现为 Hook 进程没有启动，而脚本直接运行正常，按 `AI_INSTALL.md` 中的 Windows 专用适配步骤检查 `commandWindows`；不要修改 Linux/macOS 的 `command`。
+Codex 0.147.0 及更新版本在部分 Windows 环境下对 Hook 命令的引号解析方式发生变化。如果错误表现为 Hook 进程没有启动，而脚本直接运行正常，按 codex 分支文档中的 Windows 专用适配步骤检查 `commandWindows`；不要修改 Linux/macOS 的 `command`。OpenCode 版使用插件而非 Hooks，不适用该适配。
 
-### 10.5 cc-switch 切换后 Hooks、插件或 marketplace 消失
+### 10.5 cc-switch 切换后 Hooks、插件或 marketplace 消失（codex 面）
 
 这通常意味着 cc-switch 整写了 `config.toml`。处理顺序：
 

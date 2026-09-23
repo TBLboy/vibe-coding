@@ -100,20 +100,22 @@ chmod +x runtime/opencode/install.sh
 ./runtime/opencode/install.sh verify
 
 # 包结构与 Skills 契约
-"$(cat ~/.config/opencode/vibe-python)" runtime/scripts/validate_package.py --root .
+"$(cat "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/vibe-python")" runtime/scripts/validate_package.py --root .
 
 # 回归套件
-"$(cat ~/.config/opencode/vibe-python)" -m unittest discover -s tests
+"$(cat "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/vibe-python")" -m unittest discover -s tests
 
 # 真实 OpenCode 端到端验收（S1–S6）
-"$(cat ~/.config/opencode/vibe-python)" .project-log/docs/opencode-acceptance-probe.py \
+# 探针位于工作目录的 .project-log/docs/ 下（不在本仓库内）
+"$(cat "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/vibe-python")" \
+  <工作目录>/.project-log/docs/opencode-acceptance-probe.py \
   --phases s1,s2,s3,s4,s5,s6 --model opencode-go/glm-5.3-flash --seconds 150
 ```
 
 项目初始化与校验：
 
 ```bash
-"$(cat ~/.config/opencode/vibe-python)" \
+"$(cat "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/vibe-python")" \
   "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/vibe-workflow/scripts/vibe.py" init \
   --root /path/to/project
 ```
@@ -150,13 +152,13 @@ vibe migrate preview|apply|resume|rollback
 
 - **支持**：Linux / WSL。
 - **延期**：Windows（PowerShell 5.1/7 实机矩阵未验证，见
-  [.project-log/docs/task-043-cross-platform-acceptance.md](.project-log/docs/task-043-cross-platform-acceptance.md)）。
+  工作目录 `.project-log/docs/task-043-cross-platform-acceptance.md`）。
 
 ## 客户端差异与保留的 codex 面
 
 - OpenCode 与 codex 的行为差异、能力对齐矩阵见
   [runtime/opencode/README.md](runtime/opencode/README.md) 与
-  [`.project-log/docs/opencode-parity-matrix.md`](.project-log/docs/opencode-parity-matrix.md)。
+  工作目录 `.project-log/docs/opencode-parity-matrix.md`。
 - 仓库仍保留 codex 交付面（`runtime/agents/`、`runtime/hooks/`、`prompts/vibe-global-agent.md`、
   `scripts/global_installer.py`、根目录的 `install.*`/`update.*`/`uninstall.*`、
   `runtime/mcp/optional-mcps.json`）。`validate_package.py` 的 `REQUIRED_*` 契约要求它们存在，
