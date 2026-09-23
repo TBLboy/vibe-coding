@@ -14,7 +14,11 @@ metadata:
 
 Use the installed `vibe` runtime as the deterministic controller for Project Goal state, evidence validity, failure attribution, retry limits, and Handoff. `loopctl` remains the compatibility entry for legacy-format projects.
 
-Project Goal is the only completion contract. OpenCode 1.18.31 has no built-in session Goal or automatic continuation interface; this Skill must not invent or call one. Until the TASK-072 plugin integration exists, continuation is driven by explicit user turns plus restored `.project-log` state and Handoff.
+Project Goal is the only completion contract. The session-level Goal control surface is the pinned
+`@prevalentware/opencode-goal-plugin@0.1.51` (`/goal`, `/pause_goal`, `/resume_goal`); its state is a
+session control surface and never counts as completion evidence. This Skill must not invent or call
+any other continuation interface. If the plugin is absent or disabled, continuation falls back to
+explicit user turns plus the restored `.project-log` state and Handoff.
 
 ## Restore
 

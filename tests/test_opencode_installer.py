@@ -188,6 +188,25 @@ class OpenCodeInstallerTests(unittest.TestCase):
             self.assertTrue(skill.is_file())
             self.assertIn("local change", skill.read_text(encoding="utf-8"))
 
+    def test_plugin_package_name_normalises_case_whitespace_and_versions(self) -> None:
+        installer = load_installer_module()
+        cases = {
+            "@prevalentware/opencode-goal-plugin@0.1.51": "@prevalentware/opencode-goal-plugin",
+            "@prevalentware/opencode-goal-plugin": "@prevalentware/opencode-goal-plugin",
+            "@prevalentware/opencode-goal-plugin@latest": "@prevalentware/opencode-goal-plugin",
+            "  @prevalentware/opencode-goal-plugin@0.1.51  ": "@prevalentware/opencode-goal-plugin",
+            "@PREVALENTWARE/OpenCode-Goal-Plugin": "@prevalentware/opencode-goal-plugin",
+            "opencode-notify@1.0.0": "opencode-notify",
+            "  OpenCode-Notify  ": "opencode-notify",
+        }
+        for spec, expected in cases.items():
+            self.assertEqual(installer.plugin_package_name(spec), expected, spec)
+        # Not an installable spelling, but the normalisation must stay deterministic.
+        self.assertEqual(installer.plugin_package_name("pkg@1@2"), "pkg@1")
+        for odd in ("", "   ", ".", "./plugins/vibe-workflow.ts", "/abs/plugin.ts",
+                    "file:///abs/plugin.ts", None, 42, ["a"], {"a": 1}):
+            self.assertIsNone(installer.plugin_package_name(odd), odd)
+
     def test_plugin_dependency_install_uses_package_manager(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             workspace = Path(temporary)

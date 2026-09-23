@@ -514,13 +514,20 @@ def plugin_package_name(spec: Any) -> str | None:
 
     ``@scope/name@1.2.3``, ``@scope/name`` and ``@scope/name@latest`` all name the same
     package, so ownership and conflict checks must not depend on the exact string.
+    Surrounding whitespace and letter case are normalised away as well: a user entry
+    spelled ``@Scope/Name`` must still be recognised as the same package as
+    ``@scope/name``, which is what makes the conflict guard reliable.
     """
-    if not isinstance(spec, str) or spec.startswith((".", "/", "file:")):
+    if not isinstance(spec, str):
         return None
-    body = spec[1:] if spec.startswith("@") else spec
+    spec = spec.strip()
+    if not spec or spec.startswith((".", "/", "file:")):
+        return None
+    scoped = spec.startswith("@")
+    body = spec[1:] if scoped else spec
     name, _, _version = body.rpartition("@")
-    name = name or body
-    return f"@{name}" if spec.startswith("@") else name
+    name = (name or body).lower()
+    return f"@{name}" if scoped else name
 
 
 def dedupe_plugins(items: list[Any]) -> list[Any]:

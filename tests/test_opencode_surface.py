@@ -43,6 +43,22 @@ FORBIDDEN_SESSION_GOAL_CLAIMS = {
     "native-goal-en": r"native Goal",
 }
 DECLARED_SESSION_GOAL_CONTROLLER = "@prevalentware/opencode-goal-plugin"
+PINNED_SESSION_GOAL_VERSION = "0.1.51"
+# A surface must not deny that the client has a session Goal capability: the
+# controller is declared (ALIGN-OPENCODE-002), and a surviving denial is exactly
+# how the round-1 B1 slipped through when only AGENTS.md was asserted.
+FORBIDDEN_SESSION_GOAL_DENIALS = {
+    "no-built-in-goal": r"no built-in session Goal",
+    "no-continuation-interface": r"has no .{0,32}automatic continuation",
+    "plugin-not-integrated": r"Until the TASK-\d+ plugin integration",
+}
+# Surfaces that must positively declare the pinned session Goal controller.
+CONTROLLER_DECLARATION_SURFACES = (
+    "AGENTS.md",
+    "agents/vibe-main.md",
+    "commands/vibe-status.md",
+)
+CONTROLLER_DECLARATION_SKILLS = ("a-loop-control",)
 SESSION_GOAL_NEGATION = re.compile(
     r"没有|不存在|无内建|不得调用|不得宣称|不是唯一|待实现|未实现|no built-in|does not provide",
 )
@@ -188,6 +204,40 @@ class OpenCodeStaticSurfaceTests(unittest.TestCase):
         for label, pattern in FORBIDDEN_SESSION_GOAL_PATTERNS.items():
             self.assertIsNone(re.search(pattern, text), f"AGENTS.md references {label}")
         self._assert_no_session_goal_claim(text, "AGENTS.md")
+
+    def test_session_goal_controller_is_declared_on_every_required_surface(self) -> None:
+        """Every surface that talks about session Goal must name the pinned controller."""
+        for relative in CONTROLLER_DECLARATION_SURFACES:
+            text = (OPENCODE / relative).read_text(encoding="utf-8")
+            self.assertIn(DECLARED_SESSION_GOAL_CONTROLLER, text, relative)
+            self.assertIn(PINNED_SESSION_GOAL_VERSION, text, relative)
+        for name in CONTROLLER_DECLARATION_SKILLS:
+            text = (ROOT / "skills" / name / "SKILL.md").read_text(encoding="utf-8")
+            self.assertIn(DECLARED_SESSION_GOAL_CONTROLLER, text, name)
+            self.assertIn(PINNED_SESSION_GOAL_VERSION, text, name)
+
+    def test_no_surface_denies_the_session_goal_capability(self) -> None:
+        """A denial of the capability contradicts the controller the surface declares."""
+        paths = [OPENCODE / "AGENTS.md", OPENCODE / "README.md"]
+        paths += sorted((OPENCODE / "agents").glob("*.md"))
+        paths += sorted((OPENCODE / "commands").glob("*.md"))
+        paths += sorted((ROOT / "skills").glob("*/SKILL.md"))
+        self.assertTrue(paths)
+        for path in paths:
+            text = path.read_text(encoding="utf-8")
+            for label, pattern in FORBIDDEN_SESSION_GOAL_DENIALS.items():
+                self.assertIsNone(
+                    re.search(pattern, text), f"{path} denies the session Goal capability: {label}"
+                )
+
+    def test_every_surface_avoids_native_goal_claims(self) -> None:
+        """The native-Goal rule also covers agents, commands and the module README."""
+        paths = [OPENCODE / "AGENTS.md", OPENCODE / "README.md"]
+        paths += sorted((OPENCODE / "agents").glob("*.md"))
+        paths += sorted((OPENCODE / "commands").glob("*.md"))
+        self.assertTrue(paths)
+        for path in paths:
+            self._assert_no_session_goal_claim(path.read_text(encoding="utf-8"), str(path))
 
     def _assert_no_session_goal_claim(self, text: str, label: str) -> None:
         for name, pattern in FORBIDDEN_SESSION_GOAL_CLAIMS.items():
