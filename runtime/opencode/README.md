@@ -162,6 +162,16 @@ The following subagents are available through the OpenCode `task` tool:
 Read-only roles explicitly deny the `edit` tool. `verification-reviewer` and `alignment-reviewer`
 additionally deny Bash by default and allow only read-only `git`/search commands plus the unittest
 and package-validation entry points; any other shell command is denied even under `--auto`.
+Those entry points go through `bin/vibe-python`, a machine-independent wrapper that execs the
+interpreter named in the `vibe-python` pointer next to the config. The wrapper exists because
+OpenCode expands only `~` and `$HOME` in permission patterns and never `$VIBE_PYTHON`, while the
+real interpreter path can sit outside the home directory. The allowlist names the wrapper with its
+two exact subcommands (`-m unittest*` and `runtime/scripts/validate_package.py*`) rather than the
+bare wrapper, so a read-only role cannot reach `vibe-python -c "<arbitrary python>"`. `sha256sum`
+is allowed so a reviewer can recompute artifact hashes instead of trusting the implementer's. The
+allowlist is pinned to the default `~/.config/opencode` location: with a custom
+`OPENCODE_CONFIG_DIR` the wrapper patterns do not match, and independent review then fails
+explicitly instead of silently falling back to a possibly older `python3` on `PATH`.
 Research, onboarding, paper-reading, `business-analyst` and `workflow-distiller` roles have Bash
 fully denied and rely on built-in read/search tools or web tools. `business-analyst` and
 `workflow-distiller` may write draft records under `.project-log/**`; they cannot edit product

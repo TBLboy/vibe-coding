@@ -14,10 +14,9 @@ permission:
     "git ls-files*": allow
     "grep *": allow
     "rg *": allow
-    "python -m unittest*": allow
-    "python3 -m unittest*": allow
-    "python runtime/scripts/validate_package.py*": allow
-    "python3 runtime/scripts/validate_package.py*": allow
+    "*/.config/opencode/bin/vibe-python -m unittest*": allow
+    "*/.config/opencode/bin/vibe-python runtime/scripts/validate_package.py*": allow
+    "sha256sum *": allow
   task:
     "*": deny
 ---

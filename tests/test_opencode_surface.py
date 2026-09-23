@@ -126,6 +126,33 @@ class OpenCodeStaticSurfaceTests(unittest.TestCase):
                 f"{role} must keep an explicit read-only allowlist",
             )
 
+    def test_read_only_roles_can_run_the_project_interpreter(self) -> None:
+        # A reviewer must be able to run the pinned interpreter and recompute hashes.
+        # The `python3` on PATH can be older than what the runtime requires (3.10 vs
+        # 3.11), which silently downgrades independent verification; the wrapper gives
+        # the allowlist a stable path without naming a machine-specific interpreter.
+        for role in ("verification-reviewer", "alignment-reviewer"):
+            bash = parse_frontmatter(OPENCODE / f"agents/{role}.md")["permission"]["bash"]
+            allow = {pattern for pattern, action in bash.items() if action == "allow"}
+            self.assertIn(
+                "*/.config/opencode/bin/vibe-python -m unittest*", allow, role
+            )
+            self.assertIn(
+                "*/.config/opencode/bin/vibe-python runtime/scripts/validate_package.py*",
+                allow, role,
+            )
+            self.assertIn("sha256sum *", allow, role)
+            # Least privilege: the bare wrapper pattern would also permit
+            # `vibe-python -c "<arbitrary python>"` for a read-only role.
+            self.assertNotIn("*/.config/opencode/bin/vibe-python *", allow, role)
+            # The legacy PATH-based entry points silently pick whatever python3 is
+            # installed (3.10 here) and make reviews fail for environmental reasons.
+            self.assertNotIn("python -m unittest*", allow, role)
+            self.assertNotIn("python3 -m unittest*", allow, role)
+        wrapper = OPENCODE / "bin" / "vibe-python"
+        self.assertTrue(wrapper.is_file(), "bin/vibe-python entry point is missing")
+        self.assertTrue(wrapper.stat().st_mode & 0o111, "bin/vibe-python must be executable")
+
     def test_commands_are_thin_primary_agent_entrypoints(self) -> None:
         paths = sorted((OPENCODE / "commands").glob("*.md"))
         self.assertEqual({path.stem for path in paths}, EXPECTED_COMMANDS)

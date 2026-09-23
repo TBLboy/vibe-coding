@@ -37,7 +37,7 @@ AGENTS_END = "<!-- VIBE-OPENCODE-GLOBAL:END -->"
 OPENCODE_PACKAGE = "@opencode-ai/plugin"
 OPENCODE_PACKAGE_VERSION = "1.18.4"
 EXCLUDED_NAMES = {"__pycache__", "node_modules"}
-ASSET_DIRECTORIES = ("agents", "commands", "plugins")
+ASSET_DIRECTORIES = ("agents", "bin", "commands", "plugins")
 SKILLS_RELATIVE = "skills"
 RUNTIME_RELATIVE = "vibe-workflow"
 

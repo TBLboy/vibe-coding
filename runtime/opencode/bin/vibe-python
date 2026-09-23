@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Machine-independent entry point for read-only role agents that must run the
+# project interpreter (Python 3.11+) instead of whatever `python3` happens to be
+# on PATH.
+#
+# Why this file exists: OpenCode's bash permission patterns are expanded by
+# permission/index.ts expand(), which understands `~`, `$HOME` and `$HOME/` only
+# and never runs command substitution or expands arbitrary variables such as
+# $VIBE_PYTHON. The real interpreter lives in a machine-specific absolute path
+# outside the home directory, so it cannot be named by a static permission
+# pattern. This wrapper gives the agents a stable path to allow
+# (`*/.config/opencode/bin/vibe-python *`); the actual interpreter stays in
+# ../vibe-python, which the installer writes next to the OpenCode config.
+set -euo pipefail
+
+here="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+pointer="$here/../vibe-python"
+
+if [[ ! -f "$pointer" ]]; then
+  printf '%s\n' "vibe-python: missing interpreter pointer at $pointer" >&2
+  exit 2
+fi
+
+interpreter="$(<"$pointer")"
+if [[ ! -x "$interpreter" ]]; then
+  printf '%s\n' "vibe-python: configured interpreter is not executable: $interpreter" >&2
+  exit 2
+fi
+
+exec "$interpreter" "$@"
