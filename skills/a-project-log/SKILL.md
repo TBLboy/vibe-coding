@@ -50,7 +50,7 @@ VIBE_PYTHON="${VIBE_PYTHON:-$(cat "$VIBE_CONFIG/vibe-python")}"
 - 代码差异不能自动改写业务逻辑；
 - 只记录可复核的决策摘要，不记录冗长隐性推理；
 - 会话结束或压缩前更新 current-session、任务、验证和下一步。
-- OpenCode 1.18.31 无内建会话 Goal；Project Goal 与 Loop 状态是唯一权威完成事实，当前版本不得调用不存在的会话 Goal 入口。
+- OpenCode 的会话 Goal 由 `@prevalentware/opencode-goal-plugin`（固定版本）提供，属客户端控制面；Project Goal 与 Loop 状态是唯一权威完成事实，插件状态不得作为完成依据。
 
 ## 长文档维护约定
 

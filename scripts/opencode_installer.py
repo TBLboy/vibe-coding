@@ -509,6 +509,20 @@ def plugin_key(item: Any) -> str:
     return json.dumps(item, sort_keys=True, ensure_ascii=False, default=str)
 
 
+def plugin_package_name(spec: Any) -> str | None:
+    """Registry package name of a plugin spec, or None for local/path specs.
+
+    ``@scope/name@1.2.3``, ``@scope/name`` and ``@scope/name@latest`` all name the same
+    package, so ownership and conflict checks must not depend on the exact string.
+    """
+    if not isinstance(spec, str) or spec.startswith((".", "/", "file:")):
+        return None
+    body = spec[1:] if spec.startswith("@") else spec
+    name, _, _version = body.rpartition("@")
+    name = name or body
+    return f"@{name}" if spec.startswith("@") else name
+
+
 def dedupe_plugins(items: list[Any]) -> list[Any]:
     seen: set[str] = set()
     ordered: list[Any] = []
@@ -595,8 +609,25 @@ def merge_config(home: Path, root: Path, previous_ownership: Any) -> dict[str, A
         if key in plugins_added:
             managed_ownership[key] = bool(plugins_added[key])
         else:
-            managed_ownership[key] = any(plugin_key(item) == key for item in plugins)
+            managed_ownership[key] = any(
+                plugin_package_name(item) == plugin_package_name(spec) for item in plugins
+            )
     ownership["plugins_added"] = managed_ownership
+    # The global rules name one version, so a second entry for the same package would make
+    # the rule ambiguous and could double-register the controller. Refuse instead.
+    for spec in MANAGED_PLUGIN_SPECS[1:]:
+        name = plugin_package_name(spec)
+        conflicts = [
+            item for item in plugins
+            if plugin_package_name(item) == name and plugin_key(item) != plugin_key(spec)
+        ]
+        if conflicts:
+            raise RuntimeError(
+                f"opencode.json already registers {name} as {conflicts[0]!r}, but this "
+                f"package pins {spec!r}. Remove or align that entry first: the session Goal "
+                "controller version is declared by the global rules, so two versions would "
+                "be ambiguous."
+            )
     kept = [item for item in plugins if plugin_key(item) not in managed_keys]
     merged["plugin"] = dedupe_plugins([*kept, *MANAGED_PLUGIN_SPECS])
 

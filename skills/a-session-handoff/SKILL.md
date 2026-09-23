@@ -28,4 +28,4 @@ metadata:
 - **超限归档**：文件超过约 50-100 KB 或会话区块达到约 10 条时，把旧区块移到 `.project-log/docs/archive/`，不删除任何记录。
 - **单一事实源**：精确下一步以 `loop/active-run.yaml`、`loop/handoff.md` 为准；不手工重排机器维护的结构化状态文件。
 
-同时运行 `loopctl handoff` 生成 `.project-log/loop/handoff.md`。Handoff 只记录 Project Goal、Task 与 Run 状态；Project Goal 不因会话状态变化而改变。OpenCode 1.18.31 无内建会话 Goal。
+同时运行 `loopctl handoff` 生成 `.project-log/loop/handoff.md`。Handoff 只记录 Project Goal、Task 与 Run 状态；Project Goal 不因会话状态变化而改变。OpenCode 的会话 Goal 由插件控制面提供，不进入 Handoff 的权威字段。

@@ -296,6 +296,42 @@ class OpenCodeInstallerTests(unittest.TestCase):
                 config["plugin"], ["@prevalentware/opencode-goal-plugin@0.1.51"]
             )
 
+    def test_conflicting_goal_controller_version_aborts_before_writing(self) -> None:
+        # Two versions of the same package would make the declared controller ambiguous,
+        # so this must fail closed instead of registering a second entry.
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary) / "opencode"
+            home.mkdir()
+            original = {
+                "plugin": ["@prevalentware/opencode-goal-plugin@0.1.50"],
+                "model": "user/model",
+            }
+            config_path = home / "opencode.json"
+            config_path.write_text(json.dumps(original, indent=2), encoding="utf-8")
+
+            install = self.install(home)
+
+            self.assertNotEqual(install.returncode, 0, install.stdout)
+            self.assertIn("already registers", install.stdout)
+            self.assertEqual(
+                json.loads(config_path.read_text(encoding="utf-8")), original
+            )
+            self.assertFalse((home / "AGENTS.md").exists())
+
+    def test_unpinned_goal_controller_is_treated_as_a_conflict(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary) / "opencode"
+            home.mkdir()
+            (home / "opencode.json").write_text(
+                json.dumps({"plugin": ["@prevalentware/opencode-goal-plugin"]}, indent=2),
+                encoding="utf-8",
+            )
+
+            install = self.install(home)
+
+            self.assertNotEqual(install.returncode, 0, install.stdout)
+            self.assertIn("already registers", install.stdout)
+
     def test_pre_existing_asset_conflict_aborts_without_writing(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             home = Path(temporary) / "opencode"
