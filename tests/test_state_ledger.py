@@ -9,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 import uuid
 
 
@@ -105,6 +106,49 @@ class LedgerExportTests(unittest.TestCase):
 
         self.assertFalse(result["unchanged"])
         self.assertEqual(path.read_bytes(), expected)
+
+    def test_ledger_rewrite_cleans_up_and_ignores_its_temporary(self) -> None:
+        """A killed rewrite must not leave a file that `git add -A` could stage."""
+        self.build()
+        path = self.root / LEDGER_RELATIVE
+        path.unlink()  # force a real rewrite
+
+        result = export_ledger(self.store)
+
+        self.assertFalse(result["unchanged"])
+        self.assertTrue(path.is_file())
+        ledger_directory = path.parent
+        self.assertEqual(
+            list(ledger_directory.glob("*.tmp*")), [], "a temporary file was left behind"
+        )
+        ignore = ledger_directory / ".gitignore"
+        self.assertTrue(ignore.is_file(), "the ledger directory has no ignore rule")
+        self.assertIn(".tmp-", ignore.read_text(encoding="utf-8"))
+
+        # The rule must actually cover a leftover orphan, not merely exist.
+        orphan = ledger_directory / f"{path.name}.tmp-deadbeef"
+        orphan.write_text("orphan\n", encoding="utf-8")
+        subprocess.run(["git", "init", "-q", str(self.root)], check=True)
+        checked = subprocess.run(
+            ["git", "-C", str(self.root), "check-ignore", "-q",
+             str(orphan.relative_to(self.root))],
+            capture_output=True,
+        )
+        self.assertEqual(checked.returncode, 0, "git does not ignore the leftover temporary file")
+
+    def test_interrupted_ledger_rewrite_leaves_no_temporary_behind(self) -> None:
+        self.build()
+        elsewhere = ledger_path(self.root).with_name("other-ledger.jsonl")
+
+        with mock.patch("state_ledger.os.replace", side_effect=OSError("killed mid-rewrite")):
+            with self.assertRaises(OSError):
+                export_ledger(self.store, path=elsewhere)
+
+        # The rename never ran, so the target is untouched and the temporary file
+        # the rewrite wrote is cleaned up instead of being left beside it. The glob
+        # covers any temporary naming, so it also fails if the cleanup disappears.
+        self.assertFalse(elsewhere.exists())
+        self.assertEqual(list(elsewhere.parent.glob("*.tmp*")), [])
 
     def test_export_preserves_every_command_verbatim(self) -> None:
         self.build()

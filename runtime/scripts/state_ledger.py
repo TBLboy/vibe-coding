@@ -18,6 +18,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import uuid
 
 from state_replay import logical_state_hash, reduce_ledger
 from state_store import StateError, _json
@@ -284,6 +285,21 @@ def _command_rows(store) -> list[dict]:
         ]
 
 
+LEDGER_TEMP_SUFFIX = ".tmp-"
+
+
+def _ensure_ledger_ignore(path: Path) -> None:
+    """Keep a killed ledger rewrite's temporary file out of the repository index.
+
+    The rewrite writes a sibling temporary file and renames it into place; a
+    SIGKILL between those two steps cannot run the cleanup, so the ledger
+    directory carries an ignore rule for whatever is left behind.
+    """
+    ignore = path.parent / ".gitignore"
+    if not ignore.exists():
+        ignore.write_text(f"*{LEDGER_TEMP_SUFFIX}*\n", encoding="utf-8")
+
+
 def export_ledger(store, path: Path | None = None, rows=None) -> dict:
     """Write every accepted command to the Git-tracked ledger, idempotently.
 
@@ -303,12 +319,19 @@ def export_ledger(store, path: Path | None = None, rows=None) -> dict:
     unchanged = existing == text
     if not unchanged:
         path.parent.mkdir(parents=True, exist_ok=True)
-        temporary = path.with_name(path.name + ".tmp")
-        with temporary.open("w", encoding="utf-8", newline="\n") as stream:
-            stream.write(text)
-            stream.flush()
-            os.fsync(stream.fileno())
-        os.replace(temporary, path)
+        _ensure_ledger_ignore(path)
+        temporary = path.with_name(f"{path.name}{LEDGER_TEMP_SUFFIX}{uuid.uuid4().hex}")
+        try:
+            with temporary.open("w", encoding="utf-8", newline="\n") as stream:
+                stream.write(text)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temporary, path)
+        finally:
+            try:
+                temporary.unlink()
+            except FileNotFoundError:
+                pass
     return {
         "path": str(path),
         "events": len(rows),
