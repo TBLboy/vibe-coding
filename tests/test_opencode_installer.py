@@ -336,6 +336,13 @@ class OpenCodeInstallerTests(unittest.TestCase):
                 json.loads(config_path.read_text(encoding="utf-8")), original
             )
             self.assertFalse((home / "AGENTS.md").exists())
+            # The pre-run snapshot is taken before the config merge, so this refusal
+            # does leave a fresh backup directory behind. That is the documented
+            # behaviour, and it is not a write into the config itself.
+            self.assertTrue(
+                list((home / "backups").glob("install-*")),
+                "a refused version conflict should leave the pre-run backup",
+            )
 
     def test_unpinned_goal_controller_is_treated_as_a_conflict(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

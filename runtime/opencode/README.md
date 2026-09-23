@@ -73,20 +73,21 @@ What the installer does:
 
 Safety properties, all covered by `tests/test_opencode_installer.py`:
 
-- Conflicts are detected before the config is touched: a file that already exists but does not match
-  the package (or that both the user and the package changed) aborts the install with a
+- File conflicts are detected before anything is written: a file that already exists but does not
+  match the package (or that both the user and the package changed) aborts the install with a
   `pre-existing file differs from package` / `local and package versions both changed` message, and
-  `opencode.json`, `AGENTS.md` and the managed assets are left byte-identical. There is no silent
-  overwrite and no `--force`. A pre-run snapshot still lands in `<home>/backups/<action>-<stamp>/`
-  before that check runs, so an aborted run does leave a fresh backup directory behind — that
-  snapshot is what a later rollback would restore, and it never rewrites the config.
+  `opencode.json`, `AGENTS.md` and the managed assets are left byte-identical — no backup directory
+  is created on this path. There is no silent overwrite and no `--force`.
 - Repeated `install`/`update` runs are idempotent: the managed plugin appears once and
   `installed_at` is stable.
 - A plugin entry naming the same package at a **different version** is refused rather than
   registered alongside the managed one, so a config never ends up with two Goal controller entries.
-  Unpinned entries (`@scope/name`, `@scope/name@latest`) and unrelated packages install normally.
-  Ownership and conflict checks normalise surrounding whitespace and letter case, so `@Scope/Name`
-  and `@scope/name` are treated as the same package.
+  This check runs inside the config merge, after the pre-run snapshot, so a refused version conflict
+  does leave a fresh directory in `<home>/backups/<action>-<stamp>/` — that snapshot is what a later
+  rollback would restore, and the config itself is never rewritten. Unpinned entries (`@scope/name`,
+  `@scope/name@latest`) and unrelated packages install normally. Ownership and conflict checks
+  normalise surrounding whitespace and letter case, so `@Scope/Name` and `@scope/name` are treated
+  as the same package.
 - `verify` fails if either managed plugin entry is missing, so a config that silently lost the
   Goal controller cannot pass installation verification.
 - Files the user edited after install — including `skills/**` and `vibe-workflow/**` — are reported

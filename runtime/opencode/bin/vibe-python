@@ -8,9 +8,12 @@
 # and never runs command substitution or expands arbitrary variables such as
 # $VIBE_PYTHON. The real interpreter lives in a machine-specific absolute path
 # outside the home directory, so it cannot be named by a static permission
-# pattern. This wrapper gives the agents a stable path to allow
-# (`*/.config/opencode/bin/vibe-python *`); the actual interpreter stays in
-# ../vibe-python, which the installer writes next to the OpenCode config.
+# pattern. This wrapper gives the agents a stable path to allow; the allowlist
+# names it with its two exact subcommands (`-m unittest*` and the
+# `runtime/scripts/validate_package.py*` form) rather than the bare wrapper, so a
+# read-only role cannot reach `vibe-python -c "<arbitrary python>"`. The actual
+# interpreter stays in ../vibe-python, which the installer writes next to the
+# OpenCode config.
 set -euo pipefail
 
 here="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
