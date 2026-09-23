@@ -410,6 +410,19 @@ PY="$(cat "${CODEX_HOME:-$HOME/.codex}/vibe-python")"
 
 覆盖对象发生变化后，旧证据应变为 `stale`，不能删除旧证据来掩盖失效。
 
+#### 两个验证入口的分工
+
+框架有两个校验入口，检查范围不同，不能互相替代：
+
+| 入口 | 检查内容 | 何时使用 |
+|---|---|---|
+| `vibe validate` | 状态库结构完整性：账本重放与投影一致、schema、sequence 与生命周期不变量、失效的文档引用 | 日常快速自检；通过只说明事实源本身结构完整 |
+| `validate_project.py --root <项目>` | 在 `vibe validate` 的全部检查之上追加：`implemented-unverified` 任务的证据覆盖、`complete` Goal 的成功条件与必需证据、多 active Goal 的歧义、记录 payload 的长度边界、迁移状态标记 | 宣布里程碑、Goal 完成或交付之前的完整审计 |
+
+`validate_project.py` 比 `vibe validate` 严格；`vibe validate` 通过**不代表**门禁已经满足。
+
+当存在多个 active Goal 时，`active_goal_id()` 只会返回最早创建的那一个，因此 `vibe goal` 与 `loopctl evaluate goal` 的默认目标可能并不是你正在推进的 Goal。`validate_project.py` 会把这个歧义作为诊断报出，而不是让它静默生效。
+
 ### 4.7 对齐、复盘和沉淀
 
 实现后可以继续说：

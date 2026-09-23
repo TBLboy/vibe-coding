@@ -960,6 +960,22 @@ class Store:
         with self._connection() as connection:
             connection.execute("BEGIN")
             self._metadata(connection)
+            # ``active_goal_id()`` answers with the earliest active goal only, so a
+            # second active goal is silently ignored by every default target
+            # (``vibe goal`` / ``loopctl evaluate goal``). Audit it instead of
+            # letting the default quietly point at the wrong goal.
+            active_goals = [
+                row["id"] for row in connection.execute(
+                    "SELECT id FROM goals WHERE status = 'active' "
+                    "ORDER BY created_sequence"
+                )
+            ]
+            if len(active_goals) > 1:
+                errors.append(
+                    "multiple active goals: " + ", ".join(active_goals)
+                    + f"; the earliest ({active_goals[0]}) is what active_goal_id() "
+                    "silently selects as the default target"
+                )
             for row in connection.execute(
                 "SELECT * FROM tasks WHERE status = 'implemented-unverified' ORDER BY id"
             ):

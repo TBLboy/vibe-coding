@@ -487,6 +487,24 @@ class GateStoreTests(unittest.TestCase):
         self.assert_error("invalid_input", "goal.update", {"id": "GOAL-001", "risk_level": "high"})
         self.assert_error("invalid_input", "goal.update", {"id": "GOAL-001"})
 
+    def test_audit_reports_multiple_active_goals_without_changing_the_default(self) -> None:
+        self.apply("goal.create", {"id": "GOAL-001", "title": "Earlier"})
+        self.apply("goal.create", {"id": "GOAL-002", "title": "Later"})
+        problems = [item for item in self.store.audit_gates() if "multiple active goals" in item]
+        self.assertEqual(len(problems), 1, self.store.audit_gates())
+        self.assertIn("GOAL-001", problems[0])
+        self.assertIn("GOAL-002", problems[0])
+        # The runtime default is deliberately unchanged: it still answers with the
+        # earliest goal, so the audit is where the ambiguity becomes visible.
+        self.assertEqual(self.store.active_goal_id(), "GOAL-001")
+
+    def test_audit_stays_quiet_with_a_single_active_goal(self) -> None:
+        self.apply("goal.create", {"id": "GOAL-001", "title": "Only"})
+        self.assertEqual(
+            [item for item in self.store.audit_gates() if "multiple active goals" in item],
+            [],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
