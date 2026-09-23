@@ -26,6 +26,7 @@ MANIFEST_FIELDS = {
 }
 MAX_OBJECT_BYTES = 32 * 1024 * 1024
 SNAPSHOT_NAME = "current.json"
+TEMP_SUFFIX = ".tmp-"
 
 
 def _canonical(value) -> bytes:
@@ -141,16 +142,46 @@ def _read_bounded(path: Path, maximum: int) -> bytes:
 
 
 def _write_exclusive(path: Path, content: bytes) -> None:
+    """Create an immutable object without ever exposing a partial file.
+
+    The bytes go to a sibling temporary file that is fsynced first and then
+    linked into place. ``os.link`` is atomic and refuses to replace an existing
+    name, so the exclusive-create guarantee survives while a reader can only
+    ever observe either no object or the complete object. A kill during the
+    write leaves a temporary file at worst, never a truncated object that a
+    later export would report as ``snapshot_conflict``.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f"{path.name}{TEMP_SUFFIX}{uuid.uuid4().hex}")
     try:
-        with path.open("xb") as stream:
+        with temporary.open("xb") as stream:
             stream.write(content)
             stream.flush()
             os.fsync(stream.fileno())
-    except FileExistsError:
-        existing = _read_bounded(path, MAX_OBJECT_BYTES)
-        if existing != content:
-            raise StateError("snapshot_conflict", f"Immutable object exists with different content: {path}")
+        try:
+            os.link(temporary, path)
+        except FileExistsError:
+            existing = _read_bounded(path, MAX_OBJECT_BYTES)
+            if existing != content:
+                raise StateError("snapshot_conflict", f"Immutable object exists with different content: {path}")
+    finally:
+        try:
+            temporary.unlink()
+        except FileNotFoundError:
+            pass
+
+
+def _ensure_object_ignore(root: Path) -> None:
+    """Keep a killed publish's temporary file out of the repository index.
+
+    A SIGKILL cannot run the ``finally`` that removes the temporary file, so the
+    exchange directory carries an ignore rule for it. Without one, ``git add -A``
+    in a user project would stage the orphan.
+    """
+    directory(root).mkdir(parents=True, exist_ok=True)
+    ignore = directory(root) / ".gitignore"
+    if not ignore.exists():
+        ignore.write_text(f"*{TEMP_SUFFIX}*\n", encoding="utf-8")
 
 
 def _decode(content: bytes, label: str) -> dict:
@@ -227,6 +258,7 @@ def _descends_from(root: Path, manifest: dict, base_snapshot: str | None) -> boo
 def publish(store: Store, root: Path) -> dict:
     """Prepare the snapshot, then briefly own Git's index lock to publish it."""
     _require_repository(root)
+    _ensure_object_ignore(root)
     before = git_context(root)
     bundle = store.export_bundle()
     payload = _canonical(bundle)

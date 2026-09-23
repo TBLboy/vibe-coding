@@ -58,6 +58,31 @@ python3 "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/skills/a-project-log-ali
 Use `--dry-run` to preview the merge without writing, and `--no-attach` to stop after
 merging the ledger.
 
+## Git Worktrees Are Separate Work Folders
+
+A branch switch never hides or forks the Project Log: one work folder has one
+`.project-log`, regardless of branch. `git worktree add` is different — it creates a
+**separate work folder**, and the framework treats it that way. The worktree behaviour
+below is fixed by `tests/test_cross_platform_surface.py`; the ledger-graft rejection is
+also covered by `tests/test_exchange_scenarios.py`:
+
+- **Shared:** every worktree of one repository sees the same `project_id` and the same
+  Git-tracked `.project-log` contents, including `.project-log/ledger/v1/ledger.jsonl`.
+- **Not shared:** the local SQLite store lives under that worktree's own git dir
+  (`git rev-parse --absolute-git-dir` is per worktree), so `context_id` differs. In a
+  fresh worktree `vibe status` fails with `missing_store` until `vibe state-attach`
+  replays the committed ledger.
+- **Isolated writes:** each worktree carries its own working copy of the ledger. A write
+  in one is not visible in the other until an explicit attach/reconcile; grafting one
+  ledger over the other fails closed with `ledger_diverged`.
+- **Exchange locks do not span worktrees:** Git's index lock is per worktree, so each
+  worktree publishes its own pointer and the two exports do not serialise against each
+  other. Cross-worktree publication is therefore outside what the exchange lock protects.
+
+Treat a worktree as a separate work folder: run `vibe state-attach` after entering a new
+one, and do not let two worktrees write the same logical log while expecting an automatic
+merge.
+
 ## Safety
 
 - Never deletes a local command; the merge is a union by `command_id`.
