@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 import unittest
 
 
@@ -38,6 +39,25 @@ class DocumentationConsistencyTests(unittest.TestCase):
         self.assertIn("scripts/vibe.py", log_skill)
         self.assertIn("format 2", reference)
         self.assertIn("migration window", reference)
+
+    def test_user_docs_point_at_the_opencode_entry(self) -> None:
+        """The OpenCode entry must not be displaced by the retained codex surface.
+
+        A review of TASK-076 found docs/USAGE.md still telling readers to run the
+        root ./install.sh, which installs the *codex* client to ~/.codex. The same
+        class of drift had already slipped through once (TASK-080 B-b), so the entry
+        point is asserted here instead of being trusted to stay correct.
+        """
+        entry = "runtime/opencode/install.sh"
+        for relative in ("README.md", "docs/USAGE.md", "AI_INSTALL.md", "AI_UPGRADE.md"):
+            text = (ROOT / relative).read_text(encoding="utf-8")
+            self.assertIn(entry, text, relative)
+            self.assertNotIn("global_installer.py verify", text, relative)
+            self.assertNotIn("codex mcp list", text, relative)
+            self.assertIsNone(
+                re.search(r"(?m)^\s*\./install\.sh\b", text),
+                f"{relative} still directs the reader at the codex-surface root installer",
+            )
 
     def test_readme_and_install_guide_use_the_formal_entry(self) -> None:
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
