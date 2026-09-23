@@ -14,15 +14,24 @@ into `${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}` by the OpenCode installer.
 | Reusable workflow Skills | top-level `skills/*/SKILL.md` | supported |
 | Default agent and task permissions | `opencode.json` | supported |
 | Session/compaction/tool hooks | `plugins/vibe-workflow.ts` | supported |
-| Goal and automatic continuation | `TASK-072` plugin integration | deferred to Goal task |
+| Session Goal and automatic continuation | `@prevalentware/opencode-goal-plugin@0.1.51` | adapted |
 | Install/update/uninstall | `runtime/opencode/install.sh` + `scripts/opencode_installer.py` | supported |
 
 The Codex marketplace, Codex plugin manifest and `cc-switch` TOML generation are intentionally
 not carried into this client surface. OpenCode uses its own plugin and MCP configuration.
 
-This surface has no session Goal and no `/goal` command. Project Goal lives in `.project-log` and
-is the only completion contract; session continuation is explicit until TASK-072 ships a verified
-runner interface.
+Session Goal is delegated to `@prevalentware/opencode-goal-plugin`, pinned at `0.1.51` and
+registered by the installer as a managed plugin entry. Verified on a real `opencode 1.18.31`
+runtime: the client loads and registers `/goal`, `/pause_goal` and `/resume_goal`, an active goal
+drives further turns by itself through `session.promptAsync`, and a closable objective reaches
+`status=complete` with recorded completion evidence.
+
+The plugin is only a session control surface. Project Goal lives in `.project-log` and is still
+the only completion contract: `vibe goal` evidence gating decides completion, and the plugin's
+own state never counts as evidence. Compaction survival, pause/resume semantics and the
+`max_auto_turns` ceiling are not yet verified. If the plugin is absent or disabled, session
+continuation falls back to explicit user instruction and must be labelled
+`serial-role-fallback`.
 
 ## Installation
 
@@ -53,6 +62,10 @@ What the installer does:
   the OpenCode config directory.
 - Merges — never overwrites — `opencode.json`: it sets `default_agent` and registers the plugin and
   permission rules while preserving user `plugin`, `mcp`, `model`, `permission` and other keys.
+  Two plugin entries are managed: `./plugins/vibe-workflow.ts` and the pinned session Goal
+  controller `@prevalentware/opencode-goal-plugin@0.1.51`. The version is pinned because the global
+  rule names it; each managed entry records whether the user already had it, so `uninstall` removes
+  only what the installer added.
 - Installs the `@opencode-ai/plugin` dependency with `npm` or `bun` unless `--skip-plugin-install`.
   `--no-audit`/`--no-fund` are npm-only and are not passed to `bun`.
 - Writes install state to `<home>/.vibe-opencode-installation-state.json` and backs up any replaced
@@ -66,6 +79,8 @@ Safety properties, all covered by `tests/test_opencode_installer.py`:
   leaves the tree untouched. There is no silent overwrite and no `--force`.
 - Repeated `install`/`update` runs are idempotent: the managed plugin appears once and
   `installed_at` is stable.
+- `verify` fails if either managed plugin entry is missing, so a config that silently lost the
+  Goal controller cannot pass installation verification.
 - Files the user edited after install — including `skills/**` and `vibe-workflow/**` — are reported
   as `PRESERVED local modification` and never overwritten; `uninstall` keeps them too.
 - Permission rules the installer added but the user then edited are handed back to the user: `update`
