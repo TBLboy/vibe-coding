@@ -1,182 +1,92 @@
-# Vibe Coding - OpenCode Migration Seed
+# Vibe Coding — OpenCode 版
 
-本分支是 OpenCode 版 Vibe Coding 的迁移起点，从 `main` 独立派生，不继承 `codex` 分支的
-Git 提交历史。当前工作树中的实现文件来自 codex 基线 `ad51501`，仅作为可复用的成熟实现
-和回归测试起点；安装入口、Agent 定义、Commands、Skills、Hooks/plugin、Goal 集成和文档
-仍按 `TASK-070` 至 `TASK-076` 迁移到 OpenCode 客户端。
+面向 **OpenCode** 客户端的用户级全局 Vibe Coding 工作流。本分支（`opencode`）从 `main`
+独立派生，不继承 `codex` 分支的提交历史；它与 codex 版**功能对齐、各自独立演进**。
 
-本分支的目标职责：
-
-- 提供与 codex 版核心工作流行为对齐的 OpenCode 用户级安装包；
-- 继续使用同一套 format 2/3 `.project-log` 与 `vibe` CLI，不创建第二套业务事实源；
-- 保留 Linux/WSL 首版支持范围，Windows 延期；
-- 明确记录 codex 与 OpenCode 之间的客户端差异，禁止静默漂移。
-
-> 当前 README 下方仍保留 codex 版使用说明，作为迁移参考；在 `TASK-076` 完成前，不应把
-> 其中的 Codex TOML、marketplace 或 hook 配置当作 OpenCode 版最终入口。
-
-## 上游 Codex 参考文档
-
-以下内容继承自 codex 基线 `ad51501`，用于对照实现能力；OpenCode 版入口将在后续任务中替换。
-
-面向 Codex CLI、VS Code 插件、桌面端与 ACP 外部协议连接端等 Codex 客户端的用户级全局 Vibe Coding 工作流。
+> **安装入口是 `./runtime/opencode/install.sh`。**
+> 仓库根目录的 `install.sh` / `update.sh` / `uninstall.sh`（及 `.ps1`）是 **codex 面**的
+> 遗留入口，由 `scripts/global_installer.py` 驱动、安装到 `~/.codex`。它们为保留的
+> codex 交付面服务，**不是** OpenCode 版的入口。OpenCode 客户端的完整表面文档见
+> [runtime/opencode/README.md](runtime/opencode/README.md)。
 
 ## 使用指南
 
-以真实开发任务讲解完整使用流程（初始化工程 → 业务逻辑澄清 → 技术选型 → 代码落地 → 归档留痕），见 [docs/USAGE.md](docs/USAGE.md)。
+以真实开发任务讲解完整使用流程（初始化工程 → 业务逻辑澄清 → 技术选型 → 代码落地 →
+归档留痕），见 [docs/USAGE.md](docs/USAGE.md)。
 
-本版本的默认格式切换、format 1 只读兼容与退役关口见 [docs/RELEASE-NOTES.md](docs/RELEASE-NOTES.md)。
+本版本的默认格式切换、format 1 只读兼容与退役关口见
+[docs/RELEASE-NOTES.md](docs/RELEASE-NOTES.md)。
 
 ## 核心能力
 
-- 在用户级 `AGENTS.md` 中注入可增量更新的 Vibe 主 Agent 规则。
-- 安装全部内置 Skills，包括双域业务澄清、Loop Control 和动态 Subagent 编排。
-- 提供宿主无关的 `.project-log/`：业务事实、需求基线、技术研究、架构、任务、验证、对齐和长期恢复状态。
-- 在 `business-clarification` 内分别维护功能业务逻辑、技术业务逻辑和双向对齐，不增加新的生命周期阶段。
-- 使用 Codex 原生 `/goal` 作为唯一线程运行和 continuation 控制器。
-- 使用 `loopctl` 管理 Project Goal、证据有效性、失败归因、Retry Contract、有限循环和 Handoff。
-- 安装三个低风险 command Hooks：`SessionStart`、`PostToolUse`、`PreCompact`。
+- 在用户级 `~/.config/opencode/AGENTS.md` 注入可增量更新的 Vibe 主 Agent 规则。
+- 安装全部内置 Skills（36 个），包括双域业务澄清、Loop Control 与动态 Subagent 编排。
+- 提供宿主无关的 `.project-log/`：format 2/3 的业务事实、需求基线、技术研究、架构、任务、
+  验证、对齐与长期恢复状态。
+- 一个 primary agent（`vibe-main`）+ 八个受限 subagent（`business-analyst`、
+  `codebase-onboarder`、`solution-researcher`、`implementation-builder`、
+  `verification-reviewer`、`alignment-reviewer`、`paper-reader`、`workflow-distiller`），
+  通过 OpenCode 原生 `task` 工具编排，权限按角色边界收窄。
+- 会话 Goal 控制面由固定版本 `@prevalentware/opencode-goal-plugin@0.1.51` 承担
+  （`/goal`、`/pause_goal`、`/resume_goal`）；**Project Goal 仍是唯一完成契约**，
+  插件状态永不作为完成依据。
+- 七个生命周期命令：`/vibe-start`、`/vibe-resume`、`/vibe-plan`、`/vibe-implement`、
+  `/vibe-verify`、`/vibe-status`、`/vibe-retro`。
 - 逐文件三方升级，保护用户本地修改；升级冲突在写入前停止。
-- 通过声明式 catalog 管理可选 MCP；新安装默认只安装核心，不强制安装任何 MCP。
-
-## 工作流
-
-```text
-业务逻辑澄清
-  ├── 功能业务逻辑
-  ├── 技术业务逻辑
-  └── 双向对齐
-→ 技术选型
-→ 任务拆解
-→ 需求描述
-→ 验证落地
-```
-
-外层 Loop：
-
-```text
-恢复 → 有限工作单元 → 执行 → 证据 → 失败归因
-→ 继续 / 差异化返工 / 回退 / 完成 / Handoff
-```
+- `vibe` CLI 与同一套 `.project-log` 事实源，不创建第二套业务记录。
 
 ## 环境要求
 
-- 安装时最新稳定版 Codex。
+- OpenCode CLI（本版在 `1.18.31` 上验证）。
 - Python 3.11 或更高版本。
-- Windows 使用 `py -3`，不要假设 `python` 指向 Python 3。
-- 代理：部分功能（如拉取可选 MCP、GitHub 远端同步等）需要访问外网，本机需运行代理客户端，默认监听 `127.0.0.1:10808`；可通过 `HTTP_PROXY`/`HTTPS_PROXY` 环境变量调整。
-- Python 依赖：
-
-```powershell
-py -3 -m pip install -r runtime\scripts\requirements.txt
-```
+- 代理：部分功能需要访问外网，本机默认代理监听 `127.0.0.1:10808`；
+  可通过 `HTTP_PROXY`/`HTTPS_PROXY` 调整。
 
 ### 全局 Vibe Python
 
-安装器会优先复用 `$CODEX_HOME/vibe-python`；如果不存在，会寻找 Conda/Miniforge/Miniconda，并自动创建名为 `vibe-coding` 的 Python 3.11 环境，安装 `runtime/scripts/requirements.txt`，然后将该环境写入全局配置。
-
-Linux/macOS 推荐直接运行（默认不安装可选 MCP）：
-
-```bash
-./install.sh
-```
-
-如果机器没有 Conda/Miniforge/Miniconda，安装器不会静默下载大型发行版，而是给出明确错误；可以先安装 Miniforge，或显式设置 `VIBE_PYTHON`。也可以手动指定环境：
-
-```bash
-mkdir -p "${CODEX_HOME:-$HOME/.codex}"
-printf '%s\n' '/absolute/path/to/miniforge3/envs/vibe-coding/bin/python' \
-  > "${CODEX_HOME:-$HOME/.codex}/vibe-python"
-```
-
-也可以临时用环境变量覆盖：
-
-```bash
-export VIBE_PYTHON='/absolute/path/to/miniforge3/envs/vibe-coding/bin/python'
-```
-
-配置文件优先用于跨项目和新 Codex 会话；环境变量优先级更高。该解释器必须是 Python 3.11+，并安装 `PyYAML` 和 `jsonschema`。
-
-Linux/macOS：
-
-```bash
-python3 -m pip install -r runtime/scripts/requirements.txt
-```
+安装器会优先复用 `${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/vibe-python`；如果不存在，
+会寻找 Conda/Miniforge/Miniconda，自动创建名为 `vibe-coding` 的 Python 3.11 环境并安装
+[`runtime/scripts/requirements.txt`](runtime/scripts/requirements.txt)，然后把该解释器路径
+写入全局配置。没有 Conda 时安装器会明确报错，不会静默下载大型发行版，也不会静默切换到
+系统 Python。
 
 ## 安装
 
-建议由 AI 按 [AI_INSTALL.md](AI_INSTALL.md) 执行。
-
-Windows：
-
-```powershell
-.\install.ps1
-```
-
-Windows 部署完成后，如启动 Codex 报 Hook 失败，按 [AI_INSTALL.md](AI_INSTALL.md) 中“Windows Hook 命令适配（Codex 0.147.0+）”一节处理；Linux/macOS 无需适配。
-
-Linux/macOS：
+建议由 AI 按 [AI_INSTALL.md](AI_INSTALL.md) 执行，或直接运行：
 
 ```bash
-chmod +x install.sh update.sh uninstall.sh
-./install.sh
+chmod +x runtime/opencode/install.sh
+./runtime/opencode/install.sh install     # 无参数时默认 install
+./runtime/opencode/install.sh verify
+./runtime/opencode/install.sh update
+./runtime/opencode/install.sh uninstall
 ```
+
+常用选项：
+
+| 选项 | 作用 |
+|---|---|
+| `--opencode-home <dir>` | 目标配置目录，默认 `${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}` |
+| `--skip-plugin-install` | 不运行包管理器安装 `@opencode-ai/plugin` |
+| `--skip-preflight` | 跳过工具探测，仅用于隔离的包测试 |
 
 默认行为：
 
-- 保留现有 Codex 权限配置。
-- 启用三个低风险 Hooks。
-- 自动备份到 `<CODEX_HOME>/backups/`。
-- 新安装默认不启用可选 MCP；用 `--mcp NAME` 显式选择。
-- `--without-mcp` 保留为兼容参数，显式跳过所有可选 MCP，适合公司受限网络。
-
-可选访问配置：
-
-```powershell
-.\install.ps1 --access-profile workspace
-.\install.ps1 --access-profile full
-```
-
-只有显式指定时才修改访问配置；若用户已有权限设置，安装器拒绝覆盖。
-
-## cc-switch 通用配置
-
-使用 cc-switch 切换 Codex 供应商时，需要把本框架生成的 TOML 段覆盖到 cc-switch 的“通用配置”中：
-
-1. 按当前宿主机生成配置（生成结果含本机绝对路径，**不要跨机器复制**）：
-
-   ```bash
-   python scripts/generate_cc_switch_config.py --output cc-switch-common-config-codex.txt
-   ```
-
-2. 打开 cc-switch 的通用配置，用生成文件的内容（`# VIBE-CODEX-GLOBAL:CONFIG:BEGIN` 到 `# VIBE-CODEX-GLOBAL:CONFIG:END` 之间的 TOML 段）覆盖原对应段。
-3. 切换供应商后，重新启动 Codex 会话，使 Hooks、marketplace 与插件配置生效。
-
-生成内容包含：
-
-- `model_reasoning_effort` 与 `disable_response_storage`。
-- 三个 Hooks：`SessionStart`、`PostToolUse`、`PreCompact`（路径按宿主机解析）。
-- 本地 `vibe-global-toolbox` marketplace 与 `vibe-toolbelt` 插件启用配置。
-
-仓库内 `cc-switch-common-config-codex.txt` 仅为当前宿主机的生成结果快照，换机器后请重新生成。
+- `AGENTS.md` 以标记块（`<!-- VIBE-OPENCODE-GLOBAL:BEGIN -->` … `END`）合并，用户已有规则被保留。
+- `opencode.json` 采用合并而非覆盖：设置 `default_agent`、注册插件与权限规则，同时保留用户
+  自己的 `plugin`、`mcp`、`model`、`permission` 等键。
+- 备份到 `<home>/backups/<action>-<stamp>/`。
+- 安装、升级、卸载对其触及的文件是事务性的；失败会回滚。
 
 ## 升级
 
 老版本升级见 [AI_UPGRADE.md](AI_UPGRADE.md)。
 
-Windows：
-
-```powershell
-.\update.ps1
-```
-
-Linux/macOS：
-
 ```bash
-./update.sh
+./runtime/opencode/install.sh update
 ```
 
-0.3.0 旧安装状态会在整树 hash 未变化时自动迁移为逐文件状态。规则：
+逐文件三方规则：
 
 - 用户未修改、新包有变化：升级。
 - 用户已修改、新包未变化：保留用户修改并报告。
@@ -185,17 +95,27 @@ Linux/macOS：
 
 ## 验证
 
-```powershell
-py -3 scripts\global_installer.py verify
-py -3 runtime\scripts\validate_package.py --root .
-py -3 -m unittest discover -s tests -v
+```bash
+# 安装面自检
+./runtime/opencode/install.sh verify
+
+# 包结构与 Skills 契约
+"$(cat ~/.config/opencode/vibe-python)" runtime/scripts/validate_package.py --root .
+
+# 回归套件
+"$(cat ~/.config/opencode/vibe-python)" -m unittest discover -s tests
+
+# 真实 OpenCode 端到端验收（S1–S6）
+"$(cat ~/.config/opencode/vibe-python)" .project-log/docs/opencode-acceptance-probe.py \
+  --phases s1,s2,s3,s4,s5,s6 --model opencode-go/glm-5.3-flash --seconds 150
 ```
 
-项目初始化与验证：
+项目初始化与校验：
 
-```powershell
-py -3 "$env:CODEX_HOME\vibe-workflow\scripts\vibe.py" init --root C:\path\to\project
-py -3 "$env:CODEX_HOME\vibe-workflow\scripts\vibe.py" --root C:\path\to\project validate
+```bash
+"$(cat ~/.config/opencode/vibe-python)" \
+  "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/vibe-workflow/scripts/vibe.py" init \
+  --root /path/to/project
 ```
 
 ## Vibe CLI
@@ -214,41 +134,31 @@ vibe goal update|complete --id GOAL-ID
 vibe migrate preview|apply|resume|rollback
 ```
 
-`loopctl.py` 保留为底层兼容入口；日常操作与文档示例统一走 `vibe`。原生 `/goal` 显示完成后，仍需通过 `vibe goal complete` 的验收门禁才能完成 Project Goal。
+`loopctl.py` 保留为旧格式项目的底层兼容入口；日常操作与文档示例统一走 `vibe`。
+会话 Goal 显示完成后，仍需通过 `vibe goal complete` 的证据门禁才能完成 Project Goal。
 
 ## 卸载
 
-```powershell
-.\uninstall.ps1
-```
-
-卸载仅移除包拥有且未被用户修改的文件、受管 `AGENTS.md` 块和 Hook 配置块。项目中的 `.project-log/` 永不删除。
-
-## 可选 MCP
-
-可选 MCP 声明在 `runtime/mcp/optional-mcps.json`，安装器不会默认强制安装。当前 catalog 包含：
-
-- `codegraph`：为工程建立代码图谱、符号关系和调用/影响分析；优先使用 PATH 中的 `codegraph`，否则回退到 `npx`。
-- `vibe-toolbelt`：Vibe Coding 的文档、浏览器、文档处理和 Web 研究工具集。
-
-按需选择一个或多个 MCP（`--mcp` 可重复）：
-
 ```bash
-./install.sh --mcp codegraph
-./update.sh --mcp codegraph --mcp vibe-toolbelt
+./runtime/opencode/install.sh uninstall
 ```
 
-Windows：
+卸载仅移除包拥有且未被用户修改的文件、受管 `AGENTS.md` 块、插件注册与受管权限规则。
+项目中的 `.project-log/` 永不删除。
 
-```powershell
-.\install.ps1 --mcp codegraph
-```
+## 平台范围
 
-检查可选 MCP：
+- **支持**：Linux / WSL。
+- **延期**：Windows（PowerShell 5.1/7 实机矩阵未验证，见
+  [.project-log/docs/task-043-cross-platform-acceptance.md](.project-log/docs/task-043-cross-platform-acceptance.md)）。
 
-```bash
-codex mcp list
-codex mcp get codegraph
-```
+## 客户端差异与保留的 codex 面
 
-`--without-mcp` 只表示本次安装/升级不处理可选 MCP，不会阻塞核心安装。包不存储 API key 或 token。
+- OpenCode 与 codex 的行为差异、能力对齐矩阵见
+  [runtime/opencode/README.md](runtime/opencode/README.md) 与
+  [`.project-log/docs/opencode-parity-matrix.md`](.project-log/docs/opencode-parity-matrix.md)。
+- 仓库仍保留 codex 交付面（`runtime/agents/`、`runtime/hooks/`、`prompts/vibe-global-agent.md`、
+  `scripts/global_installer.py`、根目录的 `install.*`/`update.*`/`uninstall.*`、
+  `runtime/mcp/optional-mcps.json`）。`validate_package.py` 的 `REQUIRED_*` 契约要求它们存在，
+  它们服务 codex 客户端，与 OpenCode 面**互不污染**。
+- 两个版本共享的业务规则变更必须**显式同步**，不自动合并。

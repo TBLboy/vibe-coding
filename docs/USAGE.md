@@ -34,7 +34,7 @@ Vibe Coding 是一套面向 Codex CLI、VS Code 插件、桌面端和 ACP 外部
 全局安装层位于用户目录，负责让多个项目共享同一套 Agent 规则、Skills、Hooks 和 Loop 运行时，典型内容包括：
 
 - 用户级 `AGENTS.md` 中的 Vibe 主 Agent 规则。
-- `CODEX_HOME` 下的 Hooks、配置和备份。
+- `OPENCODE_CONFIG_DIR` 下的 Agent、Commands、Skills、插件、配置和备份。
 - 用户级 Skills 目录。
 - 全局 `vibe-coding` Python 环境及其路径记录。
 - 可选 MCP 和本地插件配置。
@@ -105,7 +105,7 @@ export HTTPS_PROXY=http://127.0.0.1:10808
 安装器、Hooks、`loopctl`、项目校验和包校验使用统一的用户级 Python。安装器会优先使用：
 
 ```text
-${CODEX_HOME:-$HOME/.codex}/vibe-python
+${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/vibe-python
 ```
 
 如果该文件不存在，包装脚本会尝试寻找 Conda/Miniforge/Miniconda，创建或修复名为 `vibe-coding` 的 Python 3.11 环境，并安装：
@@ -161,7 +161,7 @@ Windows PowerShell：
 安装完成后建议验证：
 
 ```bash
-${CODEX_HOME:-$HOME/.codex}/vibe-workflow/scripts/loopctl.py --help
+${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/vibe-workflow/scripts/loopctl.py --help
 python scripts/global_installer.py verify
 ```
 
@@ -170,14 +170,14 @@ python scripts/global_installer.py verify
 Windows PowerShell：
 
 ```powershell
-$CodexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $HOME '.codex' }
+$CodexHome = if ($env:OPENCODE_CONFIG_DIR) { $env:OPENCODE_CONFIG_DIR } else { Join-Path $HOME '.config/opencode' }
 & (Join-Path $CodexHome 'vibe-workflow\vibe.ps1') --root (Get-Location).Path status
 ```
 
 Linux/macOS Bash：
 
 ```bash
-bash "${CODEX_HOME:-$HOME/.codex}/vibe-workflow/vibe.sh" --root "$PWD" status
+bash "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/vibe-workflow/vibe.sh" --root "$PWD" status
 ```
 
 入口也支持 `--codex-home <目录>` 或 `--codex-home=<目录>`。通过 `pwsh -File` 从外部程序启动时，请使用分开的 `--codex-home "D:\配置目录"`：已测试的 PowerShell 7.4.6 宿主会在脚本收到参数前拆开 `--codex-home=D:\配置目录` 中的盘符冒号。入口对这种歧义报错并提示分开传参，不猜测重组路径。直接在 PowerShell 内调用脚本的等号形式不受此限制。
@@ -189,7 +189,7 @@ bash "${CODEX_HOME:-$HOME/.codex}/vibe-workflow/vibe.sh" --root "$PWD" status
 直接调用校验脚本时，仍应使用 `vibe-python` 指向的解释器，例如：
 
 ```bash
-PY="$(cat "${CODEX_HOME:-$HOME/.codex}/vibe-python")"
+PY="$(cat "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/vibe-python")"
 "$PY" runtime/scripts/validate_package.py --root .
 ```
 
@@ -242,10 +242,10 @@ Agent 应完成以下检查：
 也可以手动运行：
 
 ```bash
-PY="$(cat "${CODEX_HOME:-$HOME/.codex}/vibe-python")"
+PY="$(cat "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/vibe-python")"
 "$PY" runtime/scripts/validate_project.py --root .
-"$PY" "$HOME/.codex/vibe-workflow/scripts/loopctl.py" --root . --json restore
-"$PY" "$HOME/.codex/vibe-workflow/scripts/loopctl.py" --root . validate
+"$PY" "$HOME/.config/opencode/vibe-workflow/scripts/loopctl.py" --root . --json restore
+"$PY" "$HOME/.config/opencode/vibe-workflow/scripts/loopctl.py" --root . validate
 ```
 
 新项目的预期结果是：Project Log schema 通过，Loop 状态可读取，且没有错误的 active task。
@@ -478,8 +478,8 @@ Loop Core 记录阶段、任务、失败计数、证据有效性和 handoff。�
 常用命令：
 
 ```bash
-PY="$(cat "${CODEX_HOME:-$HOME/.codex}/vibe-python")"
-LOOP="$HOME/.codex/vibe-workflow/scripts/loopctl.py"
+PY="$(cat "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/vibe-python")"
+LOOP="$HOME/.config/opencode/vibe-workflow/scripts/loopctl.py"
 
 "$PY" "$LOOP" --root . --json restore
 "$PY" "$LOOP" --root . --json status
@@ -558,7 +558,7 @@ Vibe Coding 的规则和项目日志与接入端无关，以下客户端共享�
 
 1. 使用同一个项目根目录。
 2. 不要删除或手工覆盖 `.project-log/`。
-3. 保持全局 `CODEX_HOME` 和 `vibe-python` 指向一致。
+3. 保持全局 `OPENCODE_CONFIG_DIR` 和 `vibe-python` 指向一致。
 4. 切换客户端后先让 Agent 执行恢复或状态检查。
 5. 不要同时让多个 Agent 修改同一个公共文件或同一个任务的写入范围。
 
@@ -700,8 +700,8 @@ vibe 恢复当前项目，先读取 current-session、任务、证据和 Loop �
 ### 导出与校验 Format 3 账本
 
 ```bash
-PY="$(cat "${CODEX_HOME:-$HOME/.codex}/vibe-python")"
-VIBE="$HOME/.codex/vibe-workflow/scripts/vibe.py"
+PY="$(cat "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/vibe-python")"
+VIBE="$HOME/.config/opencode/vibe-workflow/scripts/vibe.py"
 "$PY" "$VIBE" --root . ledger verify
 ```
 
@@ -752,9 +752,9 @@ VIBE="$HOME/.codex/vibe-workflow/scripts/vibe.py"
 先运行：
 
 ```bash
-PY="$(cat "${CODEX_HOME:-$HOME/.codex}/vibe-python")"
-"$PY" "$HOME/.codex/vibe-workflow/scripts/loopctl.py" --root . --json restore
-"$PY" "$HOME/.codex/vibe-workflow/scripts/loopctl.py" --root . validate
+PY="$(cat "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/vibe-python")"
+"$PY" "$HOME/.config/opencode/vibe-workflow/scripts/loopctl.py" --root . --json restore
+"$PY" "$HOME/.config/opencode/vibe-workflow/scripts/loopctl.py" --root . validate
 ```
 
 检查 `.project-log/loop/active-run.yaml`、`events.jsonl` 和 `handoff.md` 是否一致。不要直接删除事件；应保留清理或完成事件，使状态变化可追溯。
@@ -771,9 +771,9 @@ PY="$(cat "${CODEX_HOME:-$HOME/.codex}/vibe-python")"
 运行：
 
 ```bash
-PY="$(cat "${CODEX_HOME:-$HOME/.codex}/vibe-python")"
+PY="$(cat "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/vibe-python")"
 "$PY" runtime/scripts/validate_project.py --root .
-"$PY" "$HOME/.codex/vibe-workflow/scripts/loopctl.py" --root . validate
+"$PY" "$HOME/.config/opencode/vibe-workflow/scripts/loopctl.py" --root . validate
 ```
 
 ### 10.4 Windows Hook 失败

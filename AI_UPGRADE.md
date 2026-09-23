@@ -1,121 +1,80 @@
-# AI 升级指南
+# AI 升级指南（OpenCode）
 
-适用于已经安装旧版 Vibe Coding Codex Global Core，需要升级到 0.5.0 的电脑。
+适用于已经安装旧版 **Vibe Coding — OpenCode Global Core**，需要升级到 **0.6.0** 的电脑。
+
+> 仓库根目录的 `update.sh` / `update.ps1` 与 `scripts/global_installer.py` 是 codex 面的遗留
+> 入口。OpenCode 版的升级入口是 `runtime/opencode/install.sh update`。
 
 本版本把新项目默认格式切到 format 2，并把 format 1 的退役分为“停止写入 / 停止读取 /
-停止支持”三个需要用户单独确认的关口。升级前先阅读 [docs/RELEASE-NOTES.md](docs/RELEASE-NOTES.md)。
+停止支持”三个需要用户单独确认的关口。升级前先阅读
+[docs/RELEASE-NOTES.md](docs/RELEASE-NOTES.md)。
 
 ## 升级保证
 
-- 安装前自动创建时间戳备份。
-- 支持读取旧版 `vibe-workflow/installation-state.json`。
-- 旧 runtime 和 Skill 整树未修改时，可自动迁移到逐文件升级状态。
-- 用户本地修改不会被静默覆盖。
-- 项目 `.project-log/` 不参与全局升级和卸载。
-- format 1 项目升级后仍可读写，只读命令会给出 `migrate with vibe migrate` 指引；
-  迁移必须由项目自己显式授权，升级本身不迁移任何项目日志。
+- 安装前自动创建时间戳备份到 `<home>/backups/<action>-<stamp>/`。
+- 支持读取旧版安装状态文件。
+- 旧 runtime 与 Skill 整树未被用户修改时，可自动迁移到逐文件升级状态。
+- 升级对其触及的文件是事务性的：任一步失败会恢复先前的字节，并移除本次新建的目录。
+
+## 逐文件三方规则
+
+- 用户未修改、新包有变化：升级。
+- 用户已修改、新包未变化：保留用户修改并报告（`PRESERVED local modification`）。
+- 用户和新包都修改同一文件：**写入前停止**并报告冲突。
+- 新包删除、用户修改过：保留并报告。
+
+冲突中止不会改写 `opencode.json`、`AGENTS.md` 或受管资源；但它**会**在
+`<home>/backups/` 留下本次的预升级快照（该快照正是回滚要用的）。
 
 ## 推荐给 AI 的指令
 
 ```text
-请把当前电脑上的旧版 Vibe Coding Codex Global Core 升级到这个安装包版本。
+请阅读本仓库的 AI_UPGRADE.md，把 ${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode} 上的
+Vibe Coding OpenCode Global Core 升级到本包版本。
 
 要求：
-1. 阅读 README.md、AI_UPGRADE.md 和新的 v0.11 执行基线。
-2. 检查 CODEX_HOME、现有 AGENTS.md、config.toml、vibe-workflow 和 Skill 根目录。
-3. 运行 codex update（仅当公司策略允许），然后运行 codex --version、codex doctor、codex features list。
-4. 复用或修复 `vibe-coding` Python 3.11 环境（见 `AI_INSTALL.md` 的“Vibe Python 环境与安装流程”），在该环境中安装 Python 依赖；Windows 不要使用可能指向 Python 2 的 `python`。
-5. 先运行 global_installer.py preflight，再运行 update。
-6. 默认 --access-profile keep-existing。
-7. 默认保留此前已启用的可选 MCP；如需新增 CodeGraph，使用 `--mcp codegraph`；公司网络受限时使用 --without-mcp。
-8. 如果安装器报告冲突，停止并逐文件比较：旧包基线、用户当前文件、新包文件。未经确认不得覆盖用户修改。
-9. 升级后运行 verify、全部单元测试和临时项目 smoke test。
-10. 报告备份路径、升级文件、保留文件、冲突、验证结果和回滚命令。
+1. 升级前运行 preflight，并阅读现有的 AGENTS.md 与 opencode.json。
+2. 复用或修复 vibe-coding Python 3.11 环境（见 AI_INSTALL.md 的“Vibe Python 环境与安装流程”）。
+3. 保留用户对 AGENTS.md、opencode.json、skills/**、vibe-workflow/** 的本地修改。
+4. 遇到同名文件冲突必须停止并报告，不要强制覆盖。
+5. 升级后运行 verify，并报告保留的本地修改与冲突。
 ```
 
-## Windows 升级
-
-在新安装包目录运行：
-
-```powershell
-conda activate vibe-coding
-python -m pip install -r runtime\scripts\requirements.txt
-python scripts\global_installer.py preflight
-.\update.ps1
-python scripts\global_installer.py verify
-```
-
-升级后若在 Windows 上启动 Codex 报 `SessionStart hook (failed) / hook exited with code 1`，原因是 Codex 0.147.0+ 在 Windows 上不再通过 shell 解析 Hook 命令中的引号。按 `AI_INSTALL.md` 中“Windows Hook 命令适配（Codex 0.147.0+）”一节，将 `config.toml` 三个 Hook 的 `commandWindows` 改为不带引号的路径形式即可；`command` 字段保持不变，Linux/macOS 无需任何修改。
-
-## Linux/macOS 升级
+## Linux / WSL 升级
 
 ```bash
-conda activate vibe-coding
-python -m pip install -r runtime/scripts/requirements.txt
-python scripts/global_installer.py preflight
-./update.sh
-python scripts/global_installer.py verify
+"$(cat "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/vibe-python")" \
+  scripts/opencode_installer.py preflight
+./runtime/opencode/install.sh update
+./runtime/opencode/install.sh verify
 ```
 
-`update.sh` / `update.ps1` 会先通过 `bootstrap_vibe_python.py` 复用或修复 `vibe-coding` 环境，再用该环境的 Python 执行升级器；若已激活环境或已配置 `VIBE_PYTHON`，可跳过手动安装依赖步骤。
+`runtime/opencode/install.sh` 会先解析 Python 3.11+ 解释器（`VIBE_PYTHON` →
+`${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/vibe-python` → `CODEX_HOME/vibe-python` →
+`python3` → `python`），再用它执行 `scripts/opencode_installer.py`。
 
-## 冲突含义
+## 旧格式退役
 
-### 自动升级
+format 1（`workflow.yaml` 等文件式日志）只保留只读访问；三个退役关口各自需要用户显式确认：
 
 ```text
-当前文件 = 上次安装版本
-新包文件发生变化
+stop-writing    停止写入 format 1（读与迁移仍可用）
+stop-reading    停止读取 format 1
+stop-support    停止支持 format 1
 ```
 
-安装器更新文件。
+迁移与回退：
 
-### 保留本地修改
-
-```text
-当前文件被用户修改
-新包文件与上次版本相同
+```bash
+"$(cat "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/vibe-python")" \
+  "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/vibe-workflow/scripts/vibe.py" \
+  --root <项目根> migrate preview
 ```
 
-安装器保留当前文件，在验证输出中标记 `PRESERVED local modification`。
+`migrate apply` / `resume` / `rollback` 均为显式操作，不会自动执行。
 
-### 必须人工合并
+## 平台范围
 
-```text
-当前文件被用户修改
-新包文件也发生变化
-```
-
-安装器在任何文件写入前停止，并报告 `Upgrade conflicts detected before writing`。
-
-AI 应：
-
-1. 找到安装器输出中的冲突文件。
-2. 从备份或旧发布包取得旧基线。
-3. 比较旧基线、用户当前文件和新包文件。
-4. 保留用户有效修改，合并新规则。
-5. 重新运行 update。
-
-## 升级后检查
-
-确认：
-
-- 全局 `AGENTS.md` 中只有一个 Vibe managed block。
-- `config.toml` 中只有一个 Vibe config block。
-- `a-loop-control` 可发现。
-- `roles.json` 的 8 个角色都能渲染。
-- `.opencode` command/agent 校验已不存在。
-- `loopctl validate` 通过。
-- 原生 `/goal` 是唯一 continuation 控制器。
-- Stop Hook 未安装。
-
-## 回滚
-
-每次安装或升级都会输出备份目录。可选 MCP 配置也应先确认 `codex mcp list`，若升级后需要回到升级前状态，优先让 AI：
-
-1. 记录当前冲突和修改。
-2. 运行卸载器移除当前版本受管资产。
-3. 从升级命令输出的备份目录恢复旧 runtime、Skills、`AGENTS.md` 和 `config.toml`。
-4. 运行旧版 verify。
-
-不要通过删除真实项目 `.project-log` 回滚全局安装。
+- **支持**：Linux / WSL。
+- **延期**：Windows（PowerShell 5.1/7 实机矩阵未验证）。旧版文档中的 Windows Hook 适配章节
+  属于 codex 面，与 OpenCode 版无关。
