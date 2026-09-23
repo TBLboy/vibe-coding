@@ -487,16 +487,19 @@ class GateStoreTests(unittest.TestCase):
         self.assert_error("invalid_input", "goal.update", {"id": "GOAL-001", "risk_level": "high"})
         self.assert_error("invalid_input", "goal.update", {"id": "GOAL-001"})
 
-    def test_audit_reports_multiple_active_goals_without_changing_the_default(self) -> None:
+    def test_multiple_active_goals_fail_closed_instead_of_picking_the_earliest(self) -> None:
         self.apply("goal.create", {"id": "GOAL-001", "title": "Earlier"})
         self.apply("goal.create", {"id": "GOAL-002", "title": "Later"})
         problems = [item for item in self.store.audit_gates() if "multiple active goals" in item]
         self.assertEqual(len(problems), 1, self.store.audit_gates())
         self.assertIn("GOAL-001", problems[0])
         self.assertIn("GOAL-002", problems[0])
-        # The runtime default is deliberately unchanged: it still answers with the
-        # earliest goal, so the audit is where the ambiguity becomes visible.
-        self.assertEqual(self.store.active_goal_id(), "GOAL-001")
+        self.assertEqual(self.store.active_goal_ids(), ["GOAL-001", "GOAL-002"])
+        # The default target refuses to guess: the ambiguity is a hard error rather
+        # than a silent answer with the earliest goal.
+        with self.assertRaises(StateError) as caught:
+            self.store.active_goal_id()
+        self.assertEqual(caught.exception.code, "state_conflict")
 
     def test_audit_stays_quiet_with_a_single_active_goal(self) -> None:
         self.apply("goal.create", {"id": "GOAL-001", "title": "Only"})
@@ -504,6 +507,41 @@ class GateStoreTests(unittest.TestCase):
             [item for item in self.store.audit_gates() if "multiple active goals" in item],
             [],
         )
+
+    def test_active_goal_id_without_any_goal_reports_not_found(self) -> None:
+        self.assertEqual(self.store.active_goal_ids(), [])
+        with self.assertRaises(StateError) as caught:
+            self.store.active_goal_id()
+        self.assertEqual(caught.exception.code, "not_found")
+
+    def _project_with_goals(self, project: Path, goal_ids: tuple[str, ...]) -> None:
+        store = initialize_project(project)
+        for goal_id in goal_ids:
+            store.apply({
+                "schema_version": 1, "command_id": uuid.uuid4().hex,
+                "expected_revision": store.status()["revision"],
+                "action": "goal.create",
+                "payload": {"id": goal_id, "title": goal_id},
+            })
+
+    def test_compact_context_marks_the_goal_ambiguous_instead_of_guessing(self) -> None:
+        from state_context import compact_context
+
+        with tempfile.TemporaryDirectory() as temporary:
+            project = Path(temporary)
+            self._project_with_goals(project, ("GOAL-001", "GOAL-002"))
+            context = compact_context(project)
+            self.assertIn("Project goal: ambiguous (GOAL-001, GOAL-002)", context)
+
+    def test_compact_context_names_the_single_active_goal(self) -> None:
+        from state_context import compact_context
+
+        with tempfile.TemporaryDirectory() as temporary:
+            project = Path(temporary)
+            self._project_with_goals(project, ("GOAL-001",))
+            context = compact_context(project)
+            self.assertIn("Project goal: GOAL-001", context)
+            self.assertNotIn("ambiguous", context)
 
 
 if __name__ == "__main__":

@@ -707,16 +707,32 @@ class Store:
             self._metadata(connection)
             return self._task(connection, task_id)
 
-    def active_goal_id(self) -> str:
+    def active_goal_ids(self) -> list[str]:
+        """Every active goal, earliest first — the order active_goal_id() relies on."""
         with self._connection() as connection:
             connection.execute("BEGIN")
             self._metadata(connection)
-            row = connection.execute(
-                "SELECT id FROM goals WHERE status = 'active' ORDER BY created_sequence LIMIT 1"
-            ).fetchone()
-            if row is None:
-                raise StateError("not_found", "No active goal")
-            return row["id"]
+            return [
+                row["id"] for row in connection.execute(
+                    "SELECT id FROM goals WHERE status = 'active' ORDER BY created_sequence"
+                )
+            ]
+
+    def active_goal_id(self) -> str:
+        # Answering with the earliest active goal is how a second active goal
+        # silently misdirects every default target (vibe goal, loopctl evaluate
+        # goal, compact_context). Fail closed so the caller must name the goal
+        # instead of having the framework guess which one is current.
+        active = self.active_goal_ids()
+        if not active:
+            raise StateError("not_found", "No active goal")
+        if len(active) > 1:
+            raise StateError(
+                "state_conflict",
+                "Multiple active goals: " + ", ".join(active)
+                + "; pass an explicit goal id instead of relying on the default",
+            )
+        return active[0]
 
     def get_goal(self, goal_id: str) -> dict:
         _text(goal_id, "goal_id", 256)
@@ -960,10 +976,10 @@ class Store:
         with self._connection() as connection:
             connection.execute("BEGIN")
             self._metadata(connection)
-            # ``active_goal_id()`` answers with the earliest active goal only, so a
-            # second active goal is silently ignored by every default target
-            # (``vibe goal`` / ``loopctl evaluate goal``). Audit it instead of
-            # letting the default quietly point at the wrong goal.
+            # ``active_goal_id()`` fails closed on more than one active goal, so
+            # every default target (``vibe goal`` / ``loopctl evaluate goal`` /
+            # ``compact_context``) refuses to answer until exactly one remains.
+            # Report the conflicting set here too, so a static audit names them.
             active_goals = [
                 row["id"] for row in connection.execute(
                     "SELECT id FROM goals WHERE status = 'active' "
@@ -973,8 +989,7 @@ class Store:
             if len(active_goals) > 1:
                 errors.append(
                     "multiple active goals: " + ", ".join(active_goals)
-                    + f"; the earliest ({active_goals[0]}) is what active_goal_id() "
-                    "silently selects as the default target"
+                    + "; active_goal_id() fails closed until exactly one remains"
                 )
             for row in connection.execute(
                 "SELECT * FROM tasks WHERE status = 'implemented-unverified' ORDER BY id"

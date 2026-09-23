@@ -330,8 +330,16 @@ def compact_context(root: Path) -> str:
     task = state.get("current_task") or state.get("latest_task")
     try:
         goal = store.get_goal(store.active_goal_id())
+        goal_label = goal["id"]
     except StateError:
         goal = None
+        active = store.active_goal_ids()
+        # A second active goal turns the default target into a guess; surface the
+        # ambiguity here instead of letting the session believe one of them.
+        goal_label = (
+            f"ambiguous ({', '.join(active)}); pass an explicit goal id"
+            if len(active) > 1 else "-"
+        )
     evidence = store.list_evidence()
     counts = {
         name: sum(item["status"] == name for item in evidence)
@@ -341,7 +349,7 @@ def compact_context(root: Path) -> str:
         "Vibe transactional context (read-only restore).",
         f"Project: {state['project_id']}",
         f"Revision: {state['revision']}",
-        f"Project goal: {goal['id'] if goal else '-'}",
+        f"Project goal: {goal_label}",
         f"Run status: {(state.get('current_run') or state.get('latest_run') or {}).get('status', '-')}",
         f"Task: {task['id'] if task else '-'} [{task['status'] if task else '-'}]",
         f"Next action: {task.get('next_action') if task and task.get('next_action') else '-'}",

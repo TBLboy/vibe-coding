@@ -421,7 +421,7 @@ PY="$(cat "${CODEX_HOME:-$HOME/.codex}/vibe-python")"
 
 `validate_project.py` 比 `vibe validate` 严格；`vibe validate` 通过**不代表**门禁已经满足。
 
-当存在多个 active Goal 时，`active_goal_id()` 只会返回最早创建的那一个，因此 `vibe goal` 与 `loopctl evaluate goal` 的默认目标可能并不是你正在推进的 Goal。`validate_project.py` 会把这个歧义作为诊断报出，而不是让它静默生效。
+当存在多个 active Goal 时，`active_goal_id()` 会**直接失败**（`state_conflict`）而不是猜测：`vibe goal`、`loopctl evaluate goal` 与 `compact_context` 都会给出显式歧义提示，而不是把默认目标指向其中某一个。`validate_project.py` 也会把这个歧义作为诊断报出。需要显式传入 goal id，或者先把 active Goal 收敛到一个。
 
 ### 4.7 对齐、复盘和沉淀
 
