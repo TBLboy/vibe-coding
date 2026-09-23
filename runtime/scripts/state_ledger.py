@@ -293,11 +293,23 @@ def _ensure_ledger_ignore(path: Path) -> None:
 
     The rewrite writes a sibling temporary file and renames it into place; a
     SIGKILL between those two steps cannot run the cleanup, so the ledger
-    directory carries an ignore rule for whatever is left behind.
+    directory carries an ignore rule for whatever is left behind. The rule is
+    appended when absent rather than only created with the file, so a ledger
+    directory that already had a ``.gitignore`` still gets it.
     """
     ignore = path.parent / ".gitignore"
-    if not ignore.exists():
-        ignore.write_text(f"*{LEDGER_TEMP_SUFFIX}*\n", encoding="utf-8")
+    rule = f"*{LEDGER_TEMP_SUFFIX}*"
+    try:
+        existing = ignore.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        existing = ""
+    if rule in existing.splitlines():
+        return
+    separator = "" if not existing or existing.endswith("\n") else "\n"
+    with ignore.open("a", encoding="utf-8") as stream:
+        stream.write(f"{separator}{rule}\n")
+        stream.flush()
+        os.fsync(stream.fileno())
 
 
 def export_ledger(store, path: Path | None = None, rows=None) -> dict:

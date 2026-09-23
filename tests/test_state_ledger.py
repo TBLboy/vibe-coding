@@ -20,8 +20,8 @@ if str(SCRIPTS) not in sys.path:
 
 from state_context import attach, initialize  # noqa: E402
 from state_ledger import (  # noqa: E402
-    LEDGER_RELATIVE, export_ledger, ledger_path, portability_status, read_ledger,
-    render_ledger, verify_ledger,
+    LEDGER_RELATIVE, LEDGER_TEMP_SUFFIX, export_ledger, ledger_path, portability_status,
+    read_ledger, render_ledger, verify_ledger,
 )
 from state_replay import logical_state_hash, reduce_ledger  # noqa: E402
 from state_store import StateError  # noqa: E402
@@ -126,7 +126,7 @@ class LedgerExportTests(unittest.TestCase):
         self.assertIn(".tmp-", ignore.read_text(encoding="utf-8"))
 
         # The rule must actually cover a leftover orphan, not merely exist.
-        orphan = ledger_directory / f"{path.name}.tmp-deadbeef"
+        orphan = ledger_directory / f"{path.name}{LEDGER_TEMP_SUFFIX}deadbeef"
         orphan.write_text("orphan\n", encoding="utf-8")
         subprocess.run(["git", "init", "-q", str(self.root)], check=True)
         checked = subprocess.run(
@@ -135,6 +135,29 @@ class LedgerExportTests(unittest.TestCase):
             capture_output=True,
         )
         self.assertEqual(checked.returncode, 0, "git does not ignore the leftover temporary file")
+
+    def test_ledger_ignore_rule_is_appended_to_an_existing_gitignore(self) -> None:
+        """A ledger directory that already carries a .gitignore still gets the rule."""
+        self.build()
+        path = self.root / LEDGER_RELATIVE
+        ledger_directory = path.parent
+        ledger_directory.mkdir(parents=True, exist_ok=True)
+        ignore = ledger_directory / ".gitignore"
+        ignore.write_text("# user rule\n*.bak\n", encoding="utf-8")
+        path.unlink()
+
+        export_ledger(self.store)
+
+        contents = ignore.read_text(encoding="utf-8")
+        self.assertIn("*.bak", contents, "the existing rule was lost")
+        self.assertIn(f"*{LEDGER_TEMP_SUFFIX}*", contents, "the ignore rule was not appended")
+        # Running again must not duplicate the rule.
+        path.unlink()
+        export_ledger(self.store)
+        self.assertEqual(
+            ignore.read_text(encoding="utf-8").count(f"*{LEDGER_TEMP_SUFFIX}*"), 1,
+            "the ignore rule was appended twice",
+        )
 
     def test_interrupted_ledger_rewrite_leaves_no_temporary_behind(self) -> None:
         self.build()
