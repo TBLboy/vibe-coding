@@ -364,40 +364,6 @@ class LedgerExportTests(unittest.TestCase):
         self.assertFalse(report["portable"])
         self.assertEqual(report["unexported_commands"], 1)
 
-    def test_portability_status_reports_git_tracking_and_unpushed(self) -> None:
-        git = shutil.which("git")
-        if git is None:
-            self.skipTest("git is unavailable")
-        root = Path(tempfile.mkdtemp())
-        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
-        for arguments in (
-            ("init", "-q"),
-            ("config", "user.email", "vibe@example.com"),
-            ("config", "user.name", "Vibe"),
-        ):
-            subprocess.run([git, "-C", str(root), *arguments], check=True, capture_output=True)
-        store = initialize(root)
-        store.apply({
-            "schema_version": 1, "command_id": uuid.uuid4().hex,
-            "expected_revision": 0, "action": "goal.create",
-            "payload": {"id": "GOAL-001", "title": "Goal"},
-        })
-        export_ledger(store)
-
-        untracked = portability_status(root)
-        self.assertFalse(untracked["git"]["ledger_tracked"])
-        self.assertFalse(untracked["portable"])
-
-        subprocess.run([git, "-C", str(root), "add", ".project-log/ledger"],
-                       check=True, capture_output=True)
-        subprocess.run([git, "-C", str(root), "commit", "-q", "-m", "ledger"],
-                       check=True, capture_output=True)
-        committed = portability_status(root)
-        self.assertTrue(committed["git"]["ledger_tracked"])
-        self.assertFalse(committed["git"]["uncommitted_ledger_changes"])
-        self.assertFalse(committed["git"]["upstream_known"])
-        self.assertFalse(committed["portable"])
-
 
 if __name__ == "__main__":
     unittest.main()

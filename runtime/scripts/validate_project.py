@@ -192,9 +192,33 @@ def clarification_gate_errors(loaded: dict[str, Any]) -> list[str]:
     return errors
 
 
+def layout_errors(root: Path) -> list[str]:
+    """A Project Log must live in a plain work folder (BL-LAYOUT-001 / BL-LAYOUT-002).
+
+    ``init`` already refuses an unsupported layout, but ``validate`` is what catches a
+    log that later drifted there — a directory copy, a manual move, or a work tree
+    that was turned into a Git repository after the fact.
+    """
+    from state_context import detect_layout
+
+    if not (root / ".project-log").exists():
+        return []  # not a Project Log root here; the caller reports that separately
+    layout = detect_layout(root)
+    if layout == "plain_work_folder":
+        return []
+    return [
+        f"unsupported work layout ({layout}): the Project Log must live in a plain work "
+        "folder that is neither a Git worktree root nor inside one; see docs/TERMINOLOGY.md"
+    ]
+
+
 def validate(root: Path) -> list[str]:
     from state_context import is_transactional, open_store
     from state_store import StateError
+
+    layout = layout_errors(root)
+    if layout:
+        return layout
 
     if is_transactional(root):
         try:

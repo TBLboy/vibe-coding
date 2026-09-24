@@ -18,7 +18,6 @@ VIBE_SH = RUNTIME / "vibe.sh"
 if str(RUNTIME / "scripts") not in sys.path:
     sys.path.insert(0, str(RUNTIME / "scripts"))
 
-from state_context import git_context, open_store  # noqa: E402
 
 
 def run_git(root: Path, *arguments: str) -> str:
@@ -35,31 +34,6 @@ def run_vibe(root: Path, *arguments: str) -> subprocess.CompletedProcess:
         [sys.executable, str(RUNTIME / "scripts/vibe.py"), "--root", str(root), *arguments],
         capture_output=True, text=True,
     )
-
-
-def apply_envelope(store, action: str, payload: dict) -> dict:
-    return store.apply({
-        "schema_version": 1,
-        "command_id": uuid.uuid4().hex,
-        "expected_revision": store.status()["revision"],
-        "action": action,
-        "payload": payload,
-    })
-
-
-def init_repository(base: Path) -> Path:
-    repo = base / "repo"
-    repo.mkdir()
-    run_git(repo, "init", "-q")
-    run_git(repo, "config", "user.email", "test@example.invalid")
-    run_git(repo, "config", "user.name", "Test")
-    (repo / "README.md").write_text("seed\n", encoding="utf-8")
-    run_git(repo, "add", "README.md")
-    run_git(repo, "commit", "-qm", "initial")
-    result = run_vibe(repo, "init")
-    if result.returncode:
-        raise AssertionError(result.stderr or result.stdout)
-    return repo
 
 
 def usable_posix_bash() -> str | None:
@@ -153,132 +127,72 @@ class CrossPlatformSurfaceTests(unittest.TestCase):
         self.assertTrue((RUNTIME / "scripts/vibe_python.ps1").is_file())
 
     @unittest.skipUnless(shutil.which("git"), "git is required")
-    def test_git_branch_switch_keeps_the_project_log_visible(self) -> None:
-        """TASK-060: one Project Log covers every branch, so switching never hides it."""
+    def test_init_rejects_a_git_worktree_root(self) -> None:
+        """A plain work folder is the only supported layout (BL-LAYOUT-001/002).
+
+        Before TASK-090 the Git-root branch silently created a second kind of Project
+        Log (state under .git/vibe-state). It now fails closed before any write.
+        """
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary)
-            subprocess.run(["git", "init", "-q", str(repo)], check=True)
-            subprocess.run(["git", "-C", str(repo), "config", "user.email", "test@example.invalid"], check=True)
-            subprocess.run(["git", "-C", str(repo), "config", "user.name", "Test"], check=True)
-            (repo / "README.md").write_text("test\n", encoding="utf-8")
-            subprocess.run(["git", "-C", str(repo), "add", "README.md"], check=True)
-            subprocess.run(["git", "-C", str(repo), "commit", "-qm", "initial"], check=True)
-            initialized = subprocess.run(
-                [sys.executable, str(RUNTIME / "scripts/vibe.py"), "--root", str(repo), "init"],
-                text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False,
-            )
-            self.assertEqual(initialized.returncode, 0, initialized.stdout)
-            store = open_store(repo)
-            context_id = store.context_id
-            store.apply({
-                "schema_version": 1, "command_id": uuid.uuid4().hex,
-                "expected_revision": 0, "action": "goal.create",
-                "payload": {"id": "GOAL-001", "title": "Goal"},
-            })
-            self.assertEqual(open_store(repo).active_goal_id(), "GOAL-001")
-
-            subprocess.run(["git", "-C", str(repo), "checkout", "-qb", "other"], check=True)
-            # The identity no longer depends on the branch, so the same store is found.
-            self.assertEqual(open_store(repo).context_id, context_id)
-            switched = subprocess.run(
-                [sys.executable, str(RUNTIME / "scripts/vibe.py"), "--root", str(repo), "status"],
-                text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False,
-            )
-            self.assertEqual(switched.returncode, 0, switched.stdout)
-            self.assertEqual(open_store(repo).active_goal_id(), "GOAL-001")
-
-            subprocess.run(["git", "-C", str(repo), "checkout", "-q", "-"], check=True)
-            restored = subprocess.run(
-                [sys.executable, str(RUNTIME / "scripts/vibe.py"), "--root", str(repo), "status"],
-                text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False,
-            )
-            self.assertEqual(restored.returncode, 0, restored.stdout)
+            run_git(repo, "init", "-q")
+            result = run_vibe(repo, "init")
+            self.assertEqual(result.returncode, 2, result.stdout)
+            payload = json.loads(result.stderr)
+            self.assertEqual(payload["error"]["code"], "unsupported_work_layout")
+            # The message states the expected layout, so the failure corrects the caller.
+            self.assertIn("plain work folder", payload["error"]["message"])
+            self.assertIn("repo-a/.git/", payload["error"]["message"])
+            # Nothing was written before the refusal.
+            self.assertFalse((repo / ".project-log").exists())
 
     @unittest.skipUnless(shutil.which("git"), "git is required")
-    def test_linked_worktree_shares_the_project_log_and_committed_entities(self) -> None:
+    def test_init_rejects_a_directory_inside_a_git_worktree(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            repo = init_repository(Path(temporary))
-            apply_envelope(open_store(repo), "goal.create", {"id": "GOAL-001", "title": "Goal"})
-            run_git(repo, "add", "-A")
-            run_git(repo, "commit", "-qm", "project log")
-
-            worktree = Path(temporary) / "linked"
-            run_git(repo, "worktree", "add", "-q", "-b", "feature", str(worktree))
-
-            # The format marker is tracked, so both worktrees resolve one Project Log.
-            main_marker = json.loads(
-                (repo / ".project-log" / "state-format.json").read_text(encoding="utf-8")
-            )
-            linked_marker = json.loads(
-                (worktree / ".project-log" / "state-format.json").read_text(encoding="utf-8")
-            )
-            self.assertEqual(linked_marker["project_id"], main_marker["project_id"])
-
-            # A linked worktree has no local SQLite until it attaches.
-            before = run_vibe(worktree, "status")
-            self.assertEqual(before.returncode, 2, before.stdout)
-            self.assertEqual(json.loads(before.stderr)["error"]["code"], "missing_store")
-            attached = run_vibe(worktree, "state-attach")
-            self.assertEqual(attached.returncode, 0, attached.stderr or attached.stdout)
-            self.assertEqual(open_store(worktree).active_goal_id(), "GOAL-001")
+            repo = Path(temporary)
+            run_git(repo, "init", "-q")
+            nested = repo / "work"
+            nested.mkdir()
+            result = run_vibe(nested, "init")
+            self.assertEqual(result.returncode, 2, result.stdout)
+            self.assertEqual(json.loads(result.stderr)["error"]["code"], "unsupported_work_layout")
+            self.assertFalse((nested / ".project-log").exists())
 
     @unittest.skipUnless(shutil.which("git"), "git is required")
-    def test_linked_worktree_context_and_writes_are_isolated(self) -> None:
+    def test_nested_repositories_below_a_plain_work_folder_are_allowed(self) -> None:
+        """Code repositories live *below* the work folder; that is the supported shape."""
         with tempfile.TemporaryDirectory() as temporary:
-            repo = init_repository(Path(temporary))
-            apply_envelope(open_store(repo), "goal.create", {"id": "GOAL-001", "title": "Goal"})
-            run_git(repo, "add", "-A")
-            run_git(repo, "commit", "-qm", "project log")
-
-            worktree = Path(temporary) / "linked"
-            run_git(repo, "worktree", "add", "-q", "-b", "feature", str(worktree))
-            self.assertEqual(run_vibe(worktree, "state-attach").returncode, 0)
-
-            # TASK-043 expected one shared context_id. The cache is keyed by
-            # `git rev-parse --absolute-git-dir`, which is per-worktree, so the two
-            # worktrees hold distinct contexts. Recorded as an acceptance finding.
-            self.assertNotEqual(git_context(repo)[0], git_context(worktree)[0])
-
-            # A write in one worktree is not visible from the other before a reconcile.
-            apply_envelope(open_store(repo), "goal.create", {"id": "GOAL-002", "title": "main"})
-            self.assertEqual(open_store(repo).status()["revision"], 2)
-            self.assertEqual(open_store(worktree).status()["revision"], 1)
-
-            apply_envelope(open_store(worktree), "goal.create", {"id": "GOAL-003", "title": "linked"})
-            self.assertEqual(open_store(worktree).status()["revision"], 2)
-            self.assertEqual(open_store(repo).status()["revision"], 2)
-
-            # Each worktree appended to its own copy of the ledger. Grafting one over
-            # the other (a resolved merge) must fail closed, never silently drop history.
-            linked_ledger = worktree / ".project-log" / "ledger" / "v1" / "ledger.jsonl"
-            (repo / ".project-log" / "ledger" / "v1" / "ledger.jsonl").write_text(
-                linked_ledger.read_text(encoding="utf-8"), encoding="utf-8",
-            )
-            diverged = run_vibe(repo, "status")
-            self.assertEqual(diverged.returncode, 2, diverged.stdout)
-            self.assertEqual(json.loads(diverged.stderr)["error"]["code"], "ledger_diverged")
+            work = Path(temporary) / "work"
+            work.mkdir()
+            for name in ("repo-a", "repo-b"):
+                child = work / name
+                child.mkdir()
+                run_git(child, "init", "-q")
+            result = run_vibe(work, "init")
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertTrue((work / ".project-log" / "state-format.json").is_file())
+            # The nested repositories are untouched and carry no Project Log of their own.
+            for name in ("repo-a", "repo-b"):
+                self.assertTrue((work / name / ".git").exists())
+                self.assertFalse((work / name / ".project-log").exists())
 
     @unittest.skipUnless(shutil.which("git"), "git is required")
-    def test_linked_worktree_exports_are_independent(self) -> None:
+    def test_validate_reports_a_log_that_drifted_into_a_git_root(self) -> None:
+        """validate catches a log that ended up under an unsupported layout."""
         with tempfile.TemporaryDirectory() as temporary:
-            repo = init_repository(Path(temporary))
-            apply_envelope(open_store(repo), "goal.create", {"id": "GOAL-001", "title": "Goal"})
-            run_git(repo, "add", "-A")
-            run_git(repo, "commit", "-qm", "project log")
-
-            worktree = Path(temporary) / "linked"
-            run_git(repo, "worktree", "add", "-q", "-b", "feature", str(worktree))
-            self.assertEqual(run_vibe(worktree, "state-attach").returncode, 0)
-
-            # Git's index lock is per-worktree, so the two explicit exports do not
-            # serialize and publish different pointers in their own exchange dirs.
-            first = run_vibe(repo, "exchange", "export")
-            second = run_vibe(worktree, "exchange", "export")
-            self.assertEqual(first.returncode, 0, first.stderr or first.stdout)
-            self.assertEqual(second.returncode, 0, second.stderr or second.stdout)
-            main_pointer = (repo / ".project-log" / "exchange" / "current.json").read_text(encoding="utf-8")
-            linked_pointer = (worktree / ".project-log" / "exchange" / "current.json").read_text(encoding="utf-8")
-            self.assertNotEqual(main_pointer, linked_pointer)
+            repo = Path(temporary)
+            run_git(repo, "init", "-q")
+            log = repo / ".project-log"
+            log.mkdir()
+            (log / "state-format.json").write_text(
+                json.dumps({"format": 2, "project_id": uuid.uuid4().hex}), encoding="utf-8",
+            )
+            result = subprocess.run(
+                [sys.executable, str(RUNTIME / "scripts" / "validate_project.py"), "--root", str(repo)],
+                text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False,
+            )
+            self.assertNotEqual(result.returncode, 0, result.stdout)
+            self.assertIn("unsupported work layout", result.stdout)
 
 
 if __name__ == "__main__":

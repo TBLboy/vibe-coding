@@ -78,21 +78,32 @@ def _git_marker(path: Path) -> Path | None:
     return None
 
 
-def git_context(root: Path) -> tuple[str, Path]:
-    """Return the project-scoped state identity and the local state directory.
+WORK_LAYOUT_CONTRACT = (
+    "Project Log must live in a plain work folder: the work folder itself must not be a "
+    "Git worktree root, and it must not sit inside another Git worktree.\n"
+    "\n"
+    "Expected:\n"
+    "\n"
+    "  work/                 a plain directory (no .git here)\n"
+    "    .project-log/       a plain directory\n"
+    "    repo-a/.git/        code repositories live below it\n"
+    "    repo-b/.git/\n"
+    "\n"
+    "Remote durability comes from the knowledge-base archive, not from the work folder "
+    "being a Git repository."
+)
 
-    The identity is deliberately branch-independent: one Project Log covers every
-    branch of a worktree, so switching branches never hides or forks the log. In a
-    Git worktree the SQLite cache lives under the repository's Git directory, so it
-    is never tracked or archived; a plain work directory keeps it in
-    ``.project-log/.state``.
 
-    A plain work directory is the supported layout for a Project Log that owns
-    several nested repositories: the log sits beside them and reaches Git through
-    the knowledge-base archive. Detection looks for a real ``.git`` marker rather
-    than any directory named ``.git``, so an empty stray ``.git`` in an ancestor
-    (a common accident in a home directory) does not turn the work directory into
-    a false repository and abort every command.
+def detect_layout(root: Path) -> str:
+    """Classify the work directory's layout.
+
+    The only supported layout for a Project Log is a plain work folder: a directory
+    that is neither a Git worktree root nor inside one. Code repositories live
+    *below* it, and remote durability comes from the knowledge-base archive.
+
+    Detection looks for a real ``.git`` marker rather than any directory named
+    ``.git``, so an empty stray ``.git`` in an ancestor (a common accident in a home
+    directory) does not turn the work directory into a false repository.
     """
     root = root.resolve()
     marker = next(
@@ -100,31 +111,30 @@ def git_context(root: Path) -> tuple[str, Path]:
         None,
     )
     if marker is None:
-        identity = {"root": str(root), "branch": "local"}
-        directory = root / ".project-log" / ".state"
-    else:
-        environment = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+        return "plain_work_folder"
+    if marker == root:
+        return "git_worktree_root"
+    return "nested_in_git_worktree"
 
-        def git(*arguments: str, optional: bool = False) -> bytes:
-            try:
-                result = subprocess.run(
-                    ["git", "-C", str(root), *arguments], env=environment,
-                    capture_output=True, timeout=10,
-                )
-            except (OSError, subprocess.TimeoutExpired) as exc:
-                raise StateError("git_context_error", str(exc)) from exc
-            if result.returncode and not (optional and result.returncode == 1):
-                raise StateError("git_context_error", result.stderr.decode("utf-8", errors="replace"))
-            return result.stdout.rstrip(b"\r\n")
 
-        try:
-            top = Path(os.fsdecode(git("rev-parse", "--show-toplevel"))).resolve()
-            if top != root:
-                raise StateError("git_context_error", "format 2 state requires the Git worktree root")
-            directory = Path(os.fsdecode(git("rev-parse", "--absolute-git-dir"))).resolve() / "vibe-state"
-            identity = {"root": str(root), "git_dir": str(directory)}
-        except UnicodeError as exc:
-            raise StateError("git_context_error", "Git path encoding cannot be represented") from exc
+def git_context(root: Path) -> tuple[str, Path]:
+    """Return the project-scoped state identity and the local state directory.
+
+    A plain work folder is the only supported layout: the Project Log sits beside the
+    code repositories and reaches Git through the knowledge-base archive. A Git
+    worktree root, or a directory inside one, is rejected *before any write*, so
+    ``vibe init`` cannot silently create a Project Log under an unsupported layout.
+
+    The identity is deliberately branch-independent and path-only, so switching
+    branches never hides or forks the log and moving a log between branches of the
+    same work folder keeps the same store.
+    """
+    root = root.resolve()
+    layout = detect_layout(root)
+    if layout != "plain_work_folder":
+        raise StateError("unsupported_work_layout", WORK_LAYOUT_CONTRACT)
+    identity = {"root": str(root), "branch": "local"}
+    directory = root / ".project-log" / ".state"
     context_id = hashlib.sha256(json.dumps(identity, sort_keys=True).encode("utf-8")).hexdigest()
     return context_id, directory
 
