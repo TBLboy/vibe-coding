@@ -29,6 +29,7 @@ from urllib.parse import unquote, urlsplit
 
 SKILL_DIR = Path(__file__).resolve().parent.parent
 CONFIG = SKILL_DIR / "scripts" / "kb_path.conf"
+PROXY_CONFIG = SKILL_DIR / "scripts" / "git_proxy.conf"
 PLACEHOLDER = "__UNSET__"
 LEDGER_RELATIVE = Path("ledger") / "v1" / "ledger.jsonl"
 MARKER = "state-format.json"
@@ -57,6 +58,55 @@ def get_kb_base() -> Path:
             "the absolute path to their My_knowledge_base."
         )
     return Path(raw).expanduser()
+
+
+def configured_proxy(config: Path | None = None) -> str:
+    """The Git transport proxy for this machine, or an empty string when unset.
+
+    ``VIBE_GIT_PROXY`` wins so a one-off run can override the persisted value; the
+    ``git_proxy.conf`` file beside ``kb_path.conf`` keeps it for every later run. The
+    file may carry ``#`` comments and blank lines, so copying the shipped example does
+    not turn the whole comment block into a proxy URL; the first remaining line is it.
+    """
+    value = os.environ.get("VIBE_GIT_PROXY", "").strip()
+    if value:
+        return value
+    path = PROXY_CONFIG if config is None else Path(config)
+    if not path.is_file():
+        return ""
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as error:
+        raise ArchiveError(f"cannot read the Git proxy config {path}: {error}") from error
+    for line in raw.splitlines():
+        candidate = line.strip()
+        if not candidate or candidate.startswith("#"):
+            continue
+        return "" if candidate == PLACEHOLDER else candidate
+    return ""
+
+
+def git_environment() -> dict[str, str]:
+    """Environment for every Git subprocess, carrying the configured proxy.
+
+    Git already honours ``http_proxy``/``https_proxy`` from the caller, so this only
+    fills them in from the persisted configuration. An inherited value always wins,
+    because the caller's own environment is the more specific choice.
+    """
+    environment = dict(os.environ)
+    proxy = configured_proxy()
+    if proxy:
+        for name in (
+            "http_proxy", "https_proxy", "all_proxy",
+            "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY",
+        ):
+            environment.setdefault(name, proxy)
+    return environment
+
+
+def _run_git(arguments: list[str], **options):
+    """Run one Git command with the environment that carries the configured proxy."""
+    return subprocess.run(arguments, env=git_environment(), **options)
 
 
 def read_project_id(log: Path) -> str | None:
@@ -171,13 +221,15 @@ def copy_project_log(src: Path, dst: Path) -> dict:
 
 
 def ignored_rule(kb_root: Path, relative: str) -> str | None:
-    """Return the .gitignore rule that excludes ``relative``, or None when it is tracked.
+    """Return the .gitignore rule that excludes ``relative``, or None when it is reachable.
 
-    ``git check-ignore`` reports a path as ignored even when it is already tracked, so
-    tracking status is checked first: a tracked file reaches the remote regardless of
-    ignore rules, and only genuinely unreachable paths are reported.
+    A tracked file reaches the remote regardless of ignore rules, so tracking status is
+    checked first. The verdict for an untracked path comes from ``check-ignore -q``:
+    ``check-ignore -v`` exits 0 whenever *any* rule matches, including a ``!`` negation
+    that re-includes the path, so its exit status alone would report a correctly negated
+    path as excluded. ``-v`` is consulted afterwards only to name the matching rule.
     """
-    tracked = subprocess.run(
+    tracked = _run_git(
         ["git", "-C", str(kb_root), "ls-files", "--error-unmatch", "--", relative],
         capture_output=True, text=True, check=False,
     )
@@ -190,19 +242,23 @@ def ignored_rule(kb_root: Path, relative: str) -> str | None:
             f"cannot inspect the knowledge base repository at {kb_root}: "
             f"{tracked.stderr.strip() or 'git ls-files failed'}"
         )
-    probe = subprocess.run(
-        ["git", "-C", str(kb_root), "check-ignore", "-v", "--", relative],
+    verdict = _run_git(
+        ["git", "-C", str(kb_root), "check-ignore", "-q", "--", relative],
         capture_output=True, text=True, check=False,
     )
-    if probe.returncode == 1:
+    if verdict.returncode == 1:
         return None
-    if probe.returncode != 0:
+    if verdict.returncode != 0:
         # 0 means "ignored", 1 means "not ignored"; any other status means the probe
         # failed, so fail closed instead of assuming the ledger is reachable.
         raise ArchiveError(
             f"cannot determine whether {relative} is ignored by {kb_root}: "
-            f"{probe.stderr.strip() or 'git check-ignore failed'}"
+            f"{verdict.stderr.strip() or 'git check-ignore failed'}"
         )
+    probe = _run_git(
+        ["git", "-C", str(kb_root), "check-ignore", "-v", "--", relative],
+        capture_output=True, text=True, check=False,
+    )
     return probe.stdout.strip() or "(matched an ignore rule)"
 
 
@@ -212,7 +268,7 @@ def blob_bytes(kb_root: Path, revision: str) -> bytes | None:
     ``git cat-file blob`` returns what Git actually stores, after any clean filter or
     end-of-line conversion, which is exactly what the remote would receive.
     """
-    probe = subprocess.run(
+    probe = _run_git(
         ["git", "-C", str(kb_root), "cat-file", "blob", revision],
         capture_output=True, check=False,
     )
@@ -223,7 +279,7 @@ def blob_bytes(kb_root: Path, revision: str) -> bytes | None:
 
 def revision(kb_root: Path, name: str) -> str | None:
     """Resolve a revision to a full object name, or None when Git cannot."""
-    probe = subprocess.run(
+    probe = _run_git(
         ["git", "-C", str(kb_root), "rev-parse", name],
         capture_output=True, text=True, check=False,
     )
@@ -233,7 +289,7 @@ def revision(kb_root: Path, name: str) -> str | None:
 
 
 def config_value(kb_root: Path, key: str) -> str:
-    probe = subprocess.run(
+    probe = _run_git(
         ["git", "-C", str(kb_root), "config", "--get", key],
         capture_output=True, text=True, check=False,
     )
@@ -253,7 +309,7 @@ def repository_identity(path: Path) -> str | None:
         # worktree's own git dir and would make the same repository look different.
         ("rev-parse", "--git-common-dir"),
     ):
-        probe = subprocess.run(
+        probe = _run_git(
             ["git", "-C", str(path), *arguments],
             capture_output=True, text=True, check=False,
         )
@@ -351,7 +407,7 @@ def reject_self_reference(kb_root: Path, target: str) -> None:
 
 def push_urls(kb_root: Path, remote: str) -> list[str]:
     """Every URL ``git push <remote>`` would contact, in order."""
-    probe = subprocess.run(
+    probe = _run_git(
         ["git", "-C", str(kb_root), "remote", "get-url", "--push", "--all", remote],
         capture_output=True, text=True, check=False,
     )
@@ -377,7 +433,7 @@ def push_target(kb_root: Path) -> tuple[str, str, list[str]]:
     checked-out branch is the only target, and it is resolved before anything is
     committed so a missing upstream cannot leave a stray commit behind.
     """
-    branch = subprocess.run(
+    branch = _run_git(
         ["git", "-C", str(kb_root), "symbolic-ref", "--short", "HEAD"],
         capture_output=True, text=True, check=False,
     )
@@ -405,7 +461,7 @@ def remote_revision(kb_root: Path, remote: str, ref: str, attempts: int = 3) -> 
     failure, which must not be mistaken for "the remote does not have the commit".
     """
     for attempt in range(attempts):
-        probe = subprocess.run(
+        probe = _run_git(
             ["git", "-C", str(kb_root), "ls-remote", "--exit-code", remote, ref],
             capture_output=True, text=True, check=False,
         )
@@ -421,14 +477,16 @@ def push_and_verify(
     kb_root: Path, remote: str, remote_ref: str, commit: str, urls: list[str]
 ) -> None:
     """Push ``commit`` to the upstream ref and verify every URL it lands on."""
-    pushed = subprocess.run(
+    pushed = _run_git(
         ["git", "-C", str(kb_root), "push", "--porcelain", remote, f"{commit}:{remote_ref}"],
         capture_output=True, text=True, check=False,
     )
     if pushed.returncode:
         detail = pushed.stderr.strip() or pushed.stdout.strip()
         raise ArchiveError(
-            f"git push {remote} {commit[:12]}:{remote_ref} failed: {detail}"
+            f"git push {remote} {commit[:12]}:{remote_ref} failed: {detail}\n"
+            "if this is a network timeout, give the archive a Git transport proxy in "
+            f"{PROXY_CONFIG} (a single URL) or in VIBE_GIT_PROXY, then re-run"
         )
     for url in urls:
         probed, reported = remote_revision(kb_root, url, remote_ref)
@@ -476,7 +534,7 @@ def git_push(
             f"  !{Path('工程记录') / project_name}/.project-log/**\n"
             "then re-run the archive"
         )
-    completed = subprocess.run(
+    completed = _run_git(
         ["git", "-C", str(kb_root), "add", "-A", "--", relative],
         capture_output=True, text=True, check=False,
     )
@@ -506,7 +564,7 @@ def git_push(
             f"  # a clean filter or text/eol conversion on {ledger_relative} must be removed"
         )
 
-    pending = subprocess.run(
+    pending = _run_git(
         ["git", "-C", str(kb_root), "diff", "--cached", "--quiet", "--", relative],
         check=False,
     )
@@ -532,7 +590,7 @@ def git_push(
             f"Re-run: git -C {kb_root} diff --cached -- {relative}"
         )
     parent = revision(kb_root, "HEAD")
-    committed = subprocess.run(
+    committed = _run_git(
         [
             "git", "-C", str(kb_root), "commit", "--only", "-m",
             f"archive: {project_name}", "--", relative,

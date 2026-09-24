@@ -26,6 +26,18 @@ Before the first archive, the knowledge base path must be configured. The script
 
 Only the `工程记录/` subdirectory within the knowledge base will be affected by archiving.
 
+## Git Transport Proxy (optional)
+
+When the machine can only reach the KB remote through a proxy, configure it once so every
+Git command the archive runs (`ls-remote`, `push`) uses it. Resolution order:
+
+1. `VIBE_GIT_PROXY` environment variable — a one-off override.
+2. `<skill-dir>/scripts/git_proxy.conf` — a single URL on one line, kept for later runs.
+
+An `http_proxy`/`https_proxy` already present in the environment always wins, because the
+caller's own environment is the more specific choice. With neither set, Git behaves as
+before and uses its own configuration plus the inherited environment.
+
 ## What It Does
 
 1. Load the KB path from config.
@@ -64,9 +76,13 @@ python3 "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/skills/a-project-log-arc
   align-project-progress skill first so the two histories are merged.
 - Refuses when the KB `project_id` differs from the local one, so two unrelated
   projects that share a folder name can never overwrite each other.
-- Refuses when the KB `.gitignore` excludes the archived ledger, and prints the matching
-  rule plus the negation lines to add, so a globally ignored `.project-log/` can never
-  turn into a silent no-op.
+- Refuses when the KB `.gitignore` actually excludes the archived ledger, and prints the
+  matching rule plus the negation lines to add, so a globally ignored `.project-log/` can
+  never turn into a silent no-op. A rule re-included by a later `!` negation counts as
+  reachable: `git check-ignore -v` exits 0 whenever any rule matches, including a
+  negation, so the verdict is taken from `git check-ignore -q` instead. Re-including the
+  excluded directory itself — not only its contents — is what lets `git add -A` descend
+  into it.
 - Refuses to commit or push unless the ledger blob in the knowledge base index and in the
   new commit is byte-identical to the local ledger, so an ignored, skipped, filtered, or
   otherwise rewritten ledger can never be reported as archived.

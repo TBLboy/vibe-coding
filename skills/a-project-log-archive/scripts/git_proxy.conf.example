@@ -1,0 +1,6 @@
+# Optional: Git transport proxy for this skill's archive pushes.
+# One URL on one line, for example:
+#   http://127.0.0.1:10808
+# Leave as __UNSET__ (or remove the file) to use Git's own configuration and the
+# inherited environment unchanged. VIBE_GIT_PROXY overrides this file for one run.
+__UNSET__
