@@ -82,7 +82,7 @@ def ensure_project(payload: dict[str, Any]) -> Path:
     if not project_log(root).is_dir():
         initialize_project(root)
     if is_transactional(root):
-        # Format 2 is the default now: legacy loop files must not be created beside it.
+        # Project Log format 2 is the default now: legacy loop files must not be created beside it.
         return root
     initialize_loop(root)
     return root

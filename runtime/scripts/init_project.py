@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Initialize a project's Project Log without overwriting existing records.
 
-Format 2 (the transactional format) is the default. ``--format 1`` still writes the
+Project Log format 2 (the transactional format) is the default. ``--format 1`` still writes the
 legacy template for the migration window and for compatibility tests; it is not the
 default and is retired through the stages described in
 ``.project-log/specs/framework-landing-contract.md``.

@@ -237,7 +237,7 @@ def main() -> int:
     exchange_sub.add_parser("finish")
     exchange_abandon = exchange_sub.add_parser("abandon")
     exchange_abandon.add_argument("--reason", required=True)
-    ledger = sub.add_parser("ledger", help="manage the Git-tracked Format 3 ledger")
+    ledger = sub.add_parser("ledger", help="manage the Git-tracked Project Log ledger")
     ledger_sub = ledger.add_subparsers(dest="ledger_action", required=True)
     ledger_sub.add_parser("export")
     ledger_sub.add_parser("verify")

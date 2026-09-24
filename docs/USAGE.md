@@ -705,7 +705,7 @@ vibe 恢复当前项目，先读取 current-session、任务、证据和 Loop �
 只补齐本地缺失的 `docs/` 文件（不覆盖本地文档），最后自动执行 `state-attach` 与 `validate`
 重建并校验本机 SQLite。知识库里没有本项目副本、或两边 `project_id` 不一致时会明确报错。
 
-### 导出与校验 Format 3 账本
+### 导出与校验 Git 账本
 
 ```bash
 PY="$(cat "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/vibe-python")"

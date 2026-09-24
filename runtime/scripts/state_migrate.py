@@ -832,7 +832,7 @@ def rollback(root, destination=None) -> dict:
         path = base / ".project-log" / relative
         if path.is_file() and path.read_text(encoding="utf-8") == content:
             path.unlink()
-    # The Git ledger is a format 3 layout entry created by the migration; a legacy
+    # The Git ledger is a 0.6 ledger architecture entry created by the migration; a legacy
     # project never owned it, so restore means removing it (the new-writes bundle
     # written above already preserves every migrated command).
     ledger_directory = base / ".project-log/ledger"

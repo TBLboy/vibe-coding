@@ -1,4 +1,4 @@
-"""TASK-049: export the command history to a Git-tracked Format 3 ledger."""
+"""TASK-049: export the command history to the Git-tracked Project Log ledger."""
 from __future__ import annotations
 
 import json

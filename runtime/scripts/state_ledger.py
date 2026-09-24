@@ -1,4 +1,4 @@
-"""Format 3 ledger: an append-only, Git-tracked, single linear event stream.
+"""Git-tracked Project Log ledger: append-only, single linear event stream.
 
 The ledger is the durable fact source for a project; the SQLite store is a
 projection that can be deleted and rebuilt by replaying it. Every event carries

@@ -1,6 +1,6 @@
 """TASK-048: the ledger must deterministically rebuild the SQLite projection.
 
-The golden test is the migration safety net: whatever a future Format 3 writer
+The golden test is the migration safety net: whatever a future ledger writer
 emits, replaying it from an empty store has to reproduce the same entities the
 live store holds, and a single tampered command has to break that equality.
 """
@@ -50,7 +50,7 @@ class GoldenReplayTests(unittest.TestCase):
     def build_ledger(self) -> None:
         """Exercise every ledger action so replay covers the whole surface."""
         self.apply("goal.create", {
-            "id": "GOAL-001", "title": "Ship format 3",
+            "id": "GOAL-001", "title": "Ship the ledger",
             "extensions": {"risk_level": "normal"},
         })
         self.apply("goal.update", {

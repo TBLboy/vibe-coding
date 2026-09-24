@@ -59,6 +59,32 @@ class DocumentationConsistencyTests(unittest.TestCase):
                 f"{relative} still directs the reader at the codex-surface root installer",
             )
 
+    def test_no_bare_format_number_naming(self) -> None:
+        """Bare `Format N` must not reappear anywhere in the shipped surface.
+
+        docs/TERMINOLOGY.md forbids it: "Format N" conflates an architecture
+        generation name with the persisted `format` field, which is what led an
+        agent to read `format 2` as a storage/layout mode. A cleanup round removed
+        the nine remaining uses; this keeps them from coming back.
+        """
+        pattern = re.compile(r"\bFormat\s+[0-9]+\b")
+        allowed = {"docs/TERMINOLOGY.md"}  # the contract itself quotes the banned form
+        suffixes = {".py", ".md", ".json", ".ts", ".yaml", ".yml"}
+        offenders = []
+        for path in sorted(ROOT.rglob("*")):
+            if not path.is_file() or path.suffix not in suffixes:
+                continue
+            relative = path.relative_to(ROOT).as_posix()
+            if relative in allowed or relative.startswith((".git/", ".opencode/", "node_modules/")):
+                continue
+            try:
+                text = path.read_text(encoding="utf-8")
+            except (OSError, UnicodeError):
+                continue
+            for match in pattern.finditer(text):
+                offenders.append(f"{relative}: {match.group(0)!r}")
+        self.assertEqual(offenders, [], f"bare Format N naming reappeared: {offenders}")
+
     def test_readme_and_install_guide_use_the_formal_entry(self) -> None:
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         install = (ROOT / "AI_INSTALL.md").read_text(encoding="utf-8")

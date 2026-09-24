@@ -33,7 +33,7 @@ from loop_state import (
 
 from framework_info import LEGACY_GUIDANCE, LEGACY_WRITE_WARNING
 
-# Format 1 stays writable only during the migration window; every write has to
+# Project Log format 1 stays writable only during the migration window; every write has to
 # announce the deprecation (contract section 6.2). Read-only commands do not.
 LEGACY_WRITE_COMMANDS = {
     "init",

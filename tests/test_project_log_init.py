@@ -1,4 +1,4 @@
-"""Format 2 default initialization: BL-FRAMELAND-001 (AC-FL-001, AC-FL-002)."""
+"""Project Log format 2 default initialization: BL-FRAMELAND-001 (AC-FL-001, AC-FL-002)."""
 from __future__ import annotations
 
 import json

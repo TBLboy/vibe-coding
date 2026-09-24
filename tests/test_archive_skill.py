@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 import uuid
 
 
@@ -175,7 +176,7 @@ class ArchiveSkillTests(unittest.TestCase):
     # -- TASK-079: a silent archive must fail loudly ---------------------------------
 
     def ignore_project_logs(self) -> None:
-        """Reproduce the knowledge base rule that hid every format 3 archive."""
+        """Reproduce the knowledge base rule that hid every ledger archive."""
         (self.kb / ".gitignore").write_text(".project-log/\n", encoding="utf-8")
         subprocess.run(["git", "-C", str(self.kb), "add", "-A"], check=True)
         subprocess.run(
@@ -234,6 +235,114 @@ class ArchiveSkillTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("no-changes", result.stdout)
+
+    def ignore_project_logs_with_negations(self) -> None:
+        """The corrected rule: the excluded directory itself is re-included."""
+        (self.kb / ".gitignore").write_text(
+            ".project-log/\n"
+            "!工程记录/work/.project-log/\n"
+            "!工程记录/work/.project-log/**\n",
+            encoding="utf-8",
+        )
+        subprocess.run(["git", "-C", str(self.kb), "add", "-A"], check=True)
+        subprocess.run(
+            ["git", "-C", str(self.kb), "commit", "-qm", "ignore project logs with negations"],
+            check=True,
+        )
+
+    def test_archive_accepts_a_negated_untracked_ledger(self) -> None:
+        """A negation re-includes the ledger; check-ignore -v alone misreads it as excluded."""
+        self.ignore_project_logs_with_negations()
+        relative = "工程记录/work/.project-log/ledger/v1/ledger.jsonl"
+        self.assertIsNone(archive_module.ignored_rule(self.kb, relative))
+
+        result = self.archive()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.remote_ledger(), self.events)
+
+    def test_ignored_rule_reports_a_real_exclusion(self) -> None:
+        self.ignore_project_logs()
+        relative = "工程记录/work/.project-log/ledger/v1/ledger.jsonl"
+
+        rule = archive_module.ignored_rule(self.kb, relative)
+
+        self.assertIsNotNone(rule)
+        self.assertIn(".project-log/", rule)
+
+    def test_run_git_passes_the_proxy_environment(self) -> None:
+        with mock.patch.dict(
+            os.environ, {"VIBE_GIT_PROXY": "http://127.0.0.1:10808"}, clear=True
+        ):
+            with mock.patch.object(archive_module.subprocess, "run") as run:
+                run.return_value = subprocess.CompletedProcess([], 0, "", "")
+                archive_module._run_git(["git", "--version"], capture_output=True)
+
+        environment = run.call_args.kwargs["env"]
+        self.assertEqual(environment["https_proxy"], "http://127.0.0.1:10808")
+        self.assertEqual(environment["HTTP_PROXY"], "http://127.0.0.1:10808")
+
+    def test_git_environment_keeps_an_inherited_proxy(self) -> None:
+        with mock.patch.dict(
+            os.environ,
+            {
+                "VIBE_GIT_PROXY": "http://configured.invalid",
+                "http_proxy": "http://inherited.invalid",
+            },
+            clear=True,
+        ):
+            environment = archive_module.git_environment()
+
+        self.assertEqual(environment["http_proxy"], "http://inherited.invalid")
+        self.assertEqual(environment["https_proxy"], "http://configured.invalid")
+
+    def test_configured_proxy_reads_a_config_file(self) -> None:
+        config = self.base / "git_proxy.conf"
+        config.write_text("http://127.0.0.1:10808\n", encoding="utf-8")
+
+        with mock.patch.dict(os.environ, {"VIBE_GIT_PROXY": ""}, clear=True):
+            self.assertEqual(
+                archive_module.configured_proxy(config), "http://127.0.0.1:10808"
+            )
+
+    def test_configured_proxy_ignores_the_placeholder(self) -> None:
+        config = self.base / "git_proxy.conf"
+        config.write_text("__UNSET__\n", encoding="utf-8")
+
+        with mock.patch.dict(os.environ, {"VIBE_GIT_PROXY": ""}, clear=True):
+            self.assertEqual(archive_module.configured_proxy(config), "")
+
+    def test_configured_proxy_skips_comments_and_blank_lines(self) -> None:
+        config = self.base / "git_proxy.conf"
+        config.write_text(
+            "# a comment\n\n   \nhttp://127.0.0.1:10808\n", encoding="utf-8"
+        )
+
+        with mock.patch.dict(os.environ, {"VIBE_GIT_PROXY": ""}, clear=True):
+            self.assertEqual(
+                archive_module.configured_proxy(config), "http://127.0.0.1:10808"
+            )
+
+    def test_configured_proxy_lets_the_environment_override_the_file(self) -> None:
+        config = self.base / "git_proxy.conf"
+        config.write_text("http://from-file.invalid\n", encoding="utf-8")
+
+        with mock.patch.dict(
+            os.environ, {"VIBE_GIT_PROXY": "http://from-env.invalid"}, clear=True
+        ):
+            self.assertEqual(
+                archive_module.configured_proxy(config), "http://from-env.invalid"
+            )
+
+    def test_shipped_proxy_example_is_copy_safe(self) -> None:
+        """`cp git_proxy.conf.example git_proxy.conf` must not inject the comment block."""
+        example = (
+            ROOT / "skills" / "a-project-log-archive" / "scripts" / "git_proxy.conf.example"
+        )
+        self.assertTrue(example.is_file(), "the shipped proxy example is missing")
+
+        with mock.patch.dict(os.environ, {"VIBE_GIT_PROXY": ""}, clear=True):
+            self.assertEqual(archive_module.configured_proxy(example), "")
 
     def test_archive_refuses_when_the_index_ledger_is_stale(self) -> None:
         # A skip-worktree entry keeps the index ledger at the old revision while other

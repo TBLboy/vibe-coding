@@ -1,6 +1,6 @@
 # 发布说明
 
-## 0.6.0 —— Format 3：Git 账本为唯一事实源
+## 0.6.0 —— 0.6 ledger architecture：Git 账本为唯一事实源
 
 ### 一句话
 
