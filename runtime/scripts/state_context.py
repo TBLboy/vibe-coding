@@ -162,9 +162,6 @@ def initialize(root: Path) -> Store:
         stream.flush()
         os.fsync(stream.fileno())
     (log / ".gitignore").write_text(".state/\n", encoding="utf-8")
-    exchange_directory = log / "exchange"
-    exchange_directory.mkdir()
-    (exchange_directory / ".gitattributes").write_text("* -text\n", encoding="utf-8")
     store = Store(
         directory / marker["project_id"] / context_id / "state.sqlite3",
         marker["project_id"],
@@ -207,7 +204,7 @@ def attach_with_report(root: Path) -> tuple[Store, dict]:
 def apply_command(root: Path, envelope: dict) -> dict:
     store = open_store(root)
     receipt = store.apply(envelope)
-    result = {"receipt": receipt, "projection": "pending", "exchange": "not-implemented"}
+    result = {"receipt": receipt, "projection": "pending"}
     try:
         from state_views import publish
 
@@ -277,48 +274,6 @@ def refresh_evidence(root: Path, reason: str | None = None, changed_paths=None) 
                 "message": str(exc),
             }
     return result
-
-
-def publish_snapshot(root: Path) -> dict:
-    from state_exchange import publish
-
-    store = open_store(root)
-    result = publish(store, root)
-    try:
-        result["view"] = refresh_views(root)
-        result["projection"] = "published"
-    except Exception as exc:
-        result["projection_error"] = {"code": getattr(exc, "code", "projection_failed"), "message": str(exc)}
-    return result
-
-
-def import_snapshot(root: Path) -> dict:
-    from state_exchange import import_snapshot as apply_snapshot
-
-    store = open_store(root)
-    result = apply_snapshot(store, root)
-    try:
-        result["view"] = refresh_views(root)
-        result["projection"] = "published"
-    except Exception as exc:
-        result["projection_error"] = {"code": getattr(exc, "code", "projection_failed"), "message": str(exc)}
-    return result
-
-
-def exchange_status(root: Path) -> dict:
-    from state_exchange import status
-
-    return status(open_store(root), root)
-
-
-def acknowledge_export(root: Path) -> dict:
-    from state_exchange import acknowledge_export as confirm
-
-    return confirm(open_store(root), root)
-
-
-def abandon_export(root: Path, reason: str) -> dict:
-    return {"status": "abandoned", "exchange": open_store(root).abandon_export(reason)}
 
 
 def compact_context(root: Path) -> str:

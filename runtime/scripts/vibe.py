@@ -71,12 +71,6 @@ def main() -> int:
     state_task.add_argument("task_id")
     sub.add_parser("state-views")
     sub.add_parser("state-attach")
-    sub.add_parser("state-export")
-    sub.add_parser("state-import")
-    sub.add_parser("state-exchange")
-    sub.add_parser("state-exchange-finish")
-    state_abandon = sub.add_parser("state-exchange-abandon")
-    state_abandon.add_argument("--reason", required=True)
     state_route = sub.add_parser("state-route")
     state_route.add_argument("--path", action="append", default=[])
     state_route.add_argument("--signal", action="append", default=[])
@@ -134,14 +128,6 @@ def main() -> int:
     context = sub.add_parser("context", help="read bounded task context")
     context.add_argument("task_id")
     context.add_argument("--budget-bytes", type=int, default=4096)
-    exchange = sub.add_parser("exchange", help="manage Git snapshot exchange")
-    exchange_sub = exchange.add_subparsers(dest="exchange_action", required=True)
-    exchange_sub.add_parser("status")
-    exchange_sub.add_parser("export")
-    exchange_sub.add_parser("import")
-    exchange_sub.add_parser("finish")
-    exchange_abandon = exchange_sub.add_parser("abandon")
-    exchange_abandon.add_argument("--reason", required=True)
     ledger = sub.add_parser("ledger", help="manage the Git-tracked Project Log ledger")
     ledger_sub = ledger.add_subparsers(dest="ledger_action", required=True)
     ledger_sub.add_parser("export")
@@ -206,13 +192,8 @@ def main() -> int:
     from state_context import (
         apply_command,
         attach_with_report,
-        exchange_status,
-        acknowledge_export,
-        abandon_export,
-        import_snapshot,
         is_transactional,
         open_store,
-        publish_snapshot,
         refresh_views,
     )
     from state_routing import context as task_context
@@ -252,16 +233,6 @@ def main() -> int:
         elif args.command == "state-attach":
             store, report = attach_with_report(root)
             result = {"attach": report, "status": store.status()}
-        elif args.command == "state-export":
-            result = publish_snapshot(root)
-        elif args.command == "state-import":
-            result = import_snapshot(root)
-        elif args.command == "state-exchange":
-            result = exchange_status(root)
-        elif args.command == "state-exchange-finish":
-            result = acknowledge_export(root)
-        elif args.command == "state-exchange-abandon":
-            result = abandon_export(root, args.reason)
         elif args.command == "state-route":
             result = route(args.path, args.signal or None, args.files_touched, not args.irreversible)
         elif args.command == "state-context":
@@ -318,17 +289,6 @@ def main() -> int:
             result = route(args.path, args.signal or None, args.files_touched, not args.irreversible)
         elif args.command == "context":
             result = task_context(open_store(root, heal=True), args.task_id, args.budget_bytes)
-        elif args.command == "exchange":
-            if args.exchange_action == "status":
-                result = exchange_status(root)
-            elif args.exchange_action == "export":
-                result = publish_snapshot(root)
-            elif args.exchange_action == "import":
-                result = import_snapshot(root)
-            elif args.exchange_action == "finish":
-                result = acknowledge_export(root)
-            else:
-                result = abandon_export(root, args.reason)
         elif args.command == "ledger":
             from state_ledger import export_ledger, verify_ledger
 

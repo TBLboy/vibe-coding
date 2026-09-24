@@ -27,7 +27,6 @@ REQUIRED_RUNTIME = {
     "scripts/state_ledger.py",
     "scripts/state_views.py",
     "scripts/state_context.py",
-    "scripts/state_exchange.py",
     "scripts/state_routing.py",
     "scripts/state_evidence.py",
     "scripts/state_gate.py",
