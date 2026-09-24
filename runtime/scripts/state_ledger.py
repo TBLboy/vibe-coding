@@ -464,13 +464,44 @@ def _git(root: Path, *arguments: str) -> tuple[bool, str]:
     return completed.returncode == 0, completed.stdout.strip()
 
 
-def portability_status(root: Path) -> dict:
-    """Report whether local history is durably captured by the Git-tracked ledger.
+def archive_status(kb_path: str | None = None) -> dict:
+    """Whether a knowledge-base archive is configured for this machine.
 
-    "Tracked by Git" is not the same as "safe": the ledger can be stale (the store
-    holds commands it never exported), modified but uncommitted, or committed but
-    unpushed. This reports each of those so a finishing session can refuse to call
-    the work portable while history is still only on this machine.
+    A plain work folder carries no remote of its own, so the knowledge-base archive is
+    the transport that makes a log durable beyond this machine. Local ledger freshness
+    says nothing about that: without a configured archive the remote durability is
+    *unknown*, not satisfied. This reports the configuration so a finishing session
+    cannot quietly call the work portable while the only copy is on this machine.
+    """
+    configured = (kb_path if kb_path is not None else os.environ.get("VIBE_KB_PATH", "")).strip()
+    if not configured:
+        return {
+            "configured": False,
+            "status": "archive_not_configured",
+            "detail": "no knowledge-base path is configured; set VIBE_KB_PATH or configure "
+                      "the a-project-log-archive skill",
+        }
+    candidate = Path(configured).expanduser()
+    if not candidate.is_dir():
+        return {
+            "configured": True,
+            "status": "archive_not_configured",
+            "detail": f"configured knowledge base is not a directory: {candidate}",
+            "kb_path": str(candidate),
+        }
+    return {"configured": True, "status": "configured", "kb_path": str(candidate)}
+
+
+def portability_status(root: Path) -> dict:
+    """Report local consistency and remote durability as two separate things.
+
+    A fresh local ledger is not portable on its own: ``plain`` is the only supported
+    layout, and a plain work folder carries no remote of its own, so the knowledge-base
+    archive is the transport. This reports (a) whether the on-disk ledger is a faithful,
+    current capture of this machine's store, and (b) whether an archive is even
+    configured. There is deliberately no single ``portable`` boolean — it conflated
+    "locally consistent" with "durable beyond this machine", which reported ``true``
+    while the only copy was on one disk.
     """
     root = Path(root).resolve()
     path = ledger_path(root)
@@ -504,27 +535,25 @@ def portability_status(root: Path) -> dict:
         "store_revision": revision,
         "unexported_commands": unexported,
         "history_rewritten": rewritten,
-        "in_sync": in_sync,
-        "git": None,
+        # Local consistency: is the on-disk ledger a faithful, current capture of this
+        # machine's store? It says nothing about whether another machine can get it.
+        "local_consistency": {
+            "in_sync": in_sync,
+            "unexported_commands": unexported,
+            "history_rewritten": rewritten,
+            "status": (
+                "unknown" if in_sync is None
+                else "consistent" if in_sync
+                else "out_of_sync"
+            ),
+        },
+        # Remote durability: has that ledger been archived somewhere another machine can
+        # fetch? The knowledge-base archive is the transport, so a fresh local ledger is
+        # NOT portable on its own.
+        "archive_status": archive_status(),
     }
-    inside, _ = _git(root, "rev-parse", "--show-toplevel")
-    if inside:
-        relative = path.relative_to(root).as_posix()
-        tracked, _ = _git(root, "ls-files", "--error-unmatch", "--", relative)
-        _, changes = _git(root, "status", "--porcelain", "--", relative)
-        known, ahead = _git(root, "rev-list", "--count", "@{upstream}..HEAD")
-        report["git"] = {
-            "ledger_tracked": tracked,
-            "uncommitted_ledger_changes": bool(changes),
-            "upstream_known": known,
-            "unpushed_commits": int(ahead) if known and ahead.isdigit() else 0,
-        }
-        report["portable"] = bool(
-            report["in_sync"] and tracked and not changes and known
-            and report["git"]["unpushed_commits"] == 0
-        )
-    else:
-        # A plain work directory carries no remote of its own; the KB is the
-        # transport, so the only signal available here is ledger freshness.
-        report["portable"] = report["in_sync"]
+    report["remote_durability"] = {
+        "archive_not_configured": "unknown",
+        "configured": "unverified",
+    }.get(report["archive_status"]["status"], "unknown")
     return report

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import shutil
 import sqlite3
@@ -343,12 +344,27 @@ class LedgerExportTests(unittest.TestCase):
         self.build()
         export_ledger(self.store)
 
-        report = portability_status(self.root)
+        with mock.patch.dict(os.environ, {"VIBE_KB_PATH": ""}, clear=False):
+            report = portability_status(self.root)
 
-        self.assertTrue(report["in_sync"])
-        self.assertTrue(report["portable"])
+        self.assertTrue(report["local_consistency"]["in_sync"])
+        self.assertEqual(report["local_consistency"]["status"], "consistent")
         self.assertEqual(report["unexported_commands"], 0)
-        self.assertIsNone(report["git"])
+        # Local consistency does not imply remote durability: with no archive
+        # configured the remote side is unknown, not satisfied.
+        self.assertEqual(report["archive_status"]["status"], "archive_not_configured")
+        self.assertEqual(report["remote_durability"], "unknown")
+        self.assertNotIn("portable", report)
+
+    def test_archive_status_reports_a_configured_knowledge_base(self) -> None:
+        self.build()
+        export_ledger(self.store)
+        with tempfile.TemporaryDirectory() as kb:
+            with mock.patch.dict(os.environ, {"VIBE_KB_PATH": kb}, clear=False):
+                report = portability_status(self.root)
+        self.assertEqual(report["archive_status"]["status"], "configured")
+        self.assertTrue(report["archive_status"]["configured"])
+        self.assertEqual(report["remote_durability"], "unverified")
 
     def test_portability_status_reports_a_ledger_that_lags_the_store(self) -> None:
         self.build()
@@ -360,8 +376,8 @@ class LedgerExportTests(unittest.TestCase):
 
         report = portability_status(self.root)
 
-        self.assertFalse(report["in_sync"])
-        self.assertFalse(report["portable"])
+        self.assertFalse(report["local_consistency"]["in_sync"])
+        self.assertEqual(report["local_consistency"]["status"], "out_of_sync")
         self.assertEqual(report["unexported_commands"], 1)
 
 

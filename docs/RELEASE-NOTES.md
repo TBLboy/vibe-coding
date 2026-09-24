@@ -26,8 +26,9 @@
 - 账本领先时只回放缺失尾部、不重写历史；SQLite 领先账本（例如账本被回滚或从未导出）时
   重新导出，且共享命令必须逐字节一致，否则 fail closed 报 `ledger_diverged`。
 - `state-attach` 双向追平：干净克隆从账本重建，账本为空/落后的工作目录从 SQLite 重新导出。
-- `portability-status` 与生成视图的账本新鲜度按命令身份判定，不再只看 revision/事件数；
-  同 revision 的异源账本不会被报告为 portable。
+- `portability-status` 把本地一致性与远端耐久性分开报告：本地新鲜度按命令身份判定（同 revision
+  的异源账本不会被判为一致），远端耐久性由知识库归档配置决定，未配置时报告
+  `archive_not_configured`，而不是继续给出 `portable=true`。
 
 ### 项目级日志
 

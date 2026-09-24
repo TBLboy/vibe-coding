@@ -731,17 +731,24 @@ VIBE="$HOME/.config/opencode/vibe-workflow/scripts/vibe.py"
 或 `empty`（尚无账本）。如果本机 SQLite 里有账本尚未包含的命令，对账会以 `ledger_behind`
 拒绝重建，避免丢掉未归档的本地进度。
 
-### 检查日志是否可移植
+### 检查本地一致性与远端耐久性
 
 ```bash
 "$PY" "$VIBE" --root . portability-status
 ```
 
-`portable=false` 表示本机历史还没有安全落到 Git 账本里。输出区分几种情况：
-`unexported_commands>0` 表示账本落后于 SQLite（正常情况下不会出现，写入是账本优先）；
-`git.ledger_tracked=false` 表示账本还没被 Git 跟踪；`git.uncommitted_ledger_changes=true`
-表示账本改动尚未提交；`git.unpushed_commits>0` 表示已提交但未推送。handoff 视图也会在
-账本落后时显示 `NOT PORTABLE` 提示。
+输出把两件事**分开**报告：
+
+- `local_consistency.status`：本机账本是否是当前 store 的忠实、最新副本。
+  `consistent` 表示一致；`out_of_sync` 表示账本落后（`unexported_commands>0`，正常情况下
+  不会出现，因为写入是账本优先）；`unknown` 表示无法读取本地 store。
+- `archive_status`：本机是否配置了知识库归档；未配置时报告 `archive_not_configured`。
+- `remote_durability`：两者的实际结论。`archive_not_configured` 时为 `unknown`，已配置但
+  尚未验证归档同步时为 `unverified`。
+
+**本地一致不等于可移植。** plain 工作目录自身没有远端，跨机耐久性由知识库归档提供，所以不再
+有单一的 `portable` 布尔值——它会把"本机账本新鲜"误报成"历史已安全落盘"。要让历史真正耐久，
+运行 `a-project-log-archive` 把 `.project-log` 归档并推送到知识库。
 
 ---
 
