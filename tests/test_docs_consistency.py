@@ -87,6 +87,24 @@ class DocumentationConsistencyTests(unittest.TestCase):
                 offenders.append(f"{relative}: {match.group(0)!r}")
         self.assertEqual(offenders, [], f"bare Format N naming reappeared: {offenders}")
 
+    def test_docs_do_not_advertise_retired_commands(self) -> None:
+        """A retired command must not stay in the user guide.
+
+        TASK-093 removed exchange; USAGE.md kept teaching the full command surface,
+        which the final review flagged as a blocking alignment conflict. Naming the
+        command in a "retired" explanation is fine; a usable invocation is not.
+        """
+        text = (ROOT / "docs/USAGE.md").read_text(encoding="utf-8")
+        for retired in ("state-export", "state-import", "state-exchange"):
+            self.assertIsNone(
+                re.search(rf"--root <[^>]+>\s+{retired}", text),
+                f"USAGE.md still shows a usable {retired} invocation",
+            )
+        self.assertIsNone(
+            re.search(r"^\s*--root <[^>]+> exchange\b", text, re.M),
+            "USAGE.md still shows a usable exchange invocation",
+        )
+
     def test_readme_and_install_guide_use_the_formal_entry(self) -> None:
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         install = (ROOT / "AI_INSTALL.md").read_text(encoding="utf-8")

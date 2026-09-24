@@ -895,7 +895,6 @@ format 2 是框架**唯一支持**的格式：新建项目直接生成新格式�
 --root <project> route --path <file> --signal <signal>
 --root <project> context TASK-001 --budget-bytes 4096
 --root <project> render
---root <project> exchange status|export|import|finish|abandon
 ```
 
 需要脚本化或批量写入时，仍可使用底层统一信封。`command.json` 是 UTF-8 JSON，而不是需要跨 Shell 转义的内联字符串：
@@ -922,49 +921,25 @@ format 2 是框架**唯一支持**的格式：新建项目直接生成新格式�
 
 长文档正文只放在 `.project-log/docs/**`，结构化记录只保存 `doc_ref`（路径与内容哈希）。`task.finish` 要求至少一条 `valid` 且覆盖该任务的证据；这里的“覆盖”指证据的 `covers.tasks` 列出该任务 ID，只用 `--task-id` 归属不足以通过 `vibe gate`。高风险任务还要求独立 `go` 复核。`goal.complete` 会逐条检查 `success_conditions`、`required_evidence` 与显式 `not-applicable` 理由。`evidence refresh` 会在覆盖文件字节变化后把证据写成 `stale`，旧证据不会被删除。
 
-新格式标记为 `.project-log/state-format.json`。Git 项目数据库位于该 worktree 的 Git 管理目录下，按项目 ID 和分支上下文隔离；非 Git 测试项目位于 `.project-log/.state/`。不会把 SQLite 文件加入 Git。初次切换到没有本地状态的分支会明确失败，而不是沿用另一分支的状态。跨副本同步只在显式执行 `state-export`/`state-import` 时发生，见下文“显式快照交换”；日常任务命令不会触发同步。普通操作不占用或清理 `index.lock`。
+新格式标记为 `.project-log/state-format.json`。Git 项目数据库位于该 worktree 的 Git 管理目录下，按项目 ID 和分支上下文隔离；非 Git 测试项目位于 `.project-log/.state/`。不会把 SQLite 文件加入 Git。初次切换到没有本地状态的分支会明确失败，而不是沿用另一分支的状态。跨副本同步由知识库归档承担（见“快照交换已退役”）。普通操作不占用或清理 `index.lock`。
 
-自动摘要保存在数据库旁的 `generated` 目录。以 `CURRENT.json` 指向的同一版本为一组读取，校验项目、上下文、revision 和内容哈希；不逐文件猜测哪个版本更新。`current-session.md`、`progress.md` 和 `handoff.md` 是派生视图，不是另外三份事实源，也不覆盖项目中的同名用户笔记。投影失败时业务提交仍成立，返回 `projection: pending`，可用 `state-views` 修复，不需要再次登记业务操作。生成内容由 revision 唯一决定，因此生成目录里缺失的文件（含 `manifest.json`）会在下次 `state-views` 或 `state-export` 时原地补写，结果中的 `repaired` 列出补写的文件名；已存在但字节不同的文件属于篡改，仍然失败关闭（`projection_incomplete`），不会被静默覆盖。
+自动摘要保存在数据库旁的 `generated` 目录。以 `CURRENT.json` 指向的同一版本为一组读取，校验项目、上下文、revision 和内容哈希；不逐文件猜测哪个版本更新。`current-session.md`、`progress.md` 和 `handoff.md` 是派生视图，不是另外三份事实源，也不覆盖项目中的同名用户笔记。投影失败时业务提交仍成立，返回 `projection: pending`，可用 `state-views` 修复，不需要再次登记业务操作。生成内容由 revision 唯一决定，因此生成目录里缺失的文件（含 `manifest.json`）会在下次 `state-views` 时原地补写，结果中的 `repaired` 列出补写的文件名；已存在但字节不同的文件属于篡改，仍然失败关闭（`projection_incomplete`），不会被静默覆盖。
 
 新格式下，启动 Hook 与会话恢复从状态库读回目标、任务、阻塞、证据有效性与精确下一步；`PostToolUse` 只按记录哈希精确失效证据，不创建旧 YAML。已退役的 format 1 写入口不再存在，日常操作统一走正式 `vibe` 入口。初始化中断、缺失数据库或无法识别的标记均需保留现场并调查；不要删除标记或数据库来让旧入口接管。
 
-`.project-log/.state/` 是格式 2 保留的本机所有权目录。目录仍在而标记缺失时（包括切换到不含标记的旧分支），入口保守拒绝恢复，不自动补写旧 YAML；需要通过显式 `state-attach`/`state-export` 恢复，不能通过删除目录绕过。Hook 从子目录启动时会识别上层格式 2 项目，路径别名也不能绕过该保护。
+`.project-log/.state/` 是格式 2 保留的本机所有权目录。目录仍在而标记缺失时（包括切换到不含标记的旧分支），入口保守拒绝恢复，不自动补写旧 YAML；需要通过显式 `state-attach` 恢复，不能通过删除目录绕过。Hook 从子目录启动时会识别上层格式 2 项目，路径别名也不能绕过该保护。
 
-### 显式快照交换
+### 快照交换已退役
 
-跨副本同步只在显式执行时发生，日常任务命令永远不占用 Git index 锁。快照对象写入 `.project-log/exchange/`，随 Git 提交分发；它们按内容寻址、不可变，且标记为不转换行尾，因此在不同平台克隆之间字节稳定。
+Git 快照交换（`state-export` / `state-import` / `state-exchange*` / `exchange`）**已退役**。
+它硬依赖 Git worktree 根，而本框架的布局契约是一个普通工作目录（见 `docs/TERMINOLOGY.md`），
+因此它在受支持布局下无法工作。
 
-```text
---root <test-project> state-attach                      # 新克隆：为当前 worktree 建立本机状态库
---root <test-project> state-export                      # 发布本机状态为不可变快照
---root <test-project> state-import                      # 校验并导入当前 worktree 已发布的快照
---root <test-project> state-exchange                    # 只读查看本机/已发布版本、共同基线与待恢复状态
---root <test-project> state-exchange-finish             # 崩溃后确认待发布快照就是已写入的指针
---root <test-project> state-exchange-abandon --reason "..."   # 确认未发布后放弃待发布意图
-```
+跨机耐久性现在由**知识库归档**承担：`a-project-log-archive` 把 `.project-log` 归档并推送到
+知识库，`a-project-log-align` 从知识库合并回本地。`vibe portability-status` 会分开报告本地
+一致性与归档状态（未配置归档时是 `archive_not_configured`，不是 `portable=true`）。
 
-典型流程：克隆 A 建立状态并 `state-export`，提交推送；克隆 B `state-attach` 后 `state-import` 取得 A 的状态；B 继续工作并 `state-export`；A 拉取后 `state-import` 取得 B 的新命令。两端各自的 `revision` 是本机提交序号，导入的历史命令保留原始分支上下文和原始 revision，因此本机序号与来源坐标不会互相污染。
-
-导入只在下列条件全部成立时接受，否则明确拒绝且不改动任何状态：
-
-- 快照摘要、指针与载荷哈希一致，且清单字段完整；
-- 项目身份相同，快照确实从本机记录的共同基线派生（否则 `snapshot_diverged`）；
-- 本机没有尚未发布的命令（否则 `unexported_changes`，两端版本都保留，不做覆盖式合并）；
-- 双方共享命令的请求与回执字节完全一致（否则 `history_rewritten`）；
-- 快照的实体表与其账本互相一致，不存在没有对应命令的实体行（否则 `invalid_snapshot`）；
-- 快照新增命令的回执与请求、运行和实体语义一致（否则 `invalid_snapshot`）。
-
-后两条在写入前重放整个账本，因此“能通过导入”与“能通过 `validate`”不会分离：被拒绝的快照不会改动本机任何字节，也不会把损坏状态再传播给下一个副本。
-
-普通命令只做本机事务，不读写快照，也不改变交换记录。发布窗口只在写入指针前后短暂持有 Git index 锁：
-
-- 锁被别人占用时报 `git_busy`，并保留对方的锁文件；
-- 进程被强杀可能遗留 `index.lock`，同时保留 `pending_kind=export` 与已写入的指针；
-- 恢复步骤是先确认没有其他 Git/Vibe 写入者，再处理遗留锁，然后用 `state-exchange-finish`（指针与待发布快照一致）或 `state-exchange-abandon`（确认未发布）结束待发布状态。Vibe 不会自动删除任何锁或自动清除待发布状态。
-
-待发布期间仍可接受新的本机命令：`pending_revision` 记录的是发布意图指向的 revision，可以落后于当前 `local_revision`，`state-exchange` 的 `unexported_commands` 会如实显示这些尚未发布的新命令。此时 `validate` 仍然干净，不需要任何修复动作。
-
-`state-export` 只有在快照真正发布并确认后才报告成功；如果交换已经完成、只是随后生成派生视图失败，命令返回 `projection_error`（而不是失败退出），指针与 `exported_local_revision` 已经更新，调用方不应据此重试导出。
+日常命令只做本机事务，不读写任何快照，也不占用 Git index 锁。
 
 ### format 1 退役与历史存档
 
