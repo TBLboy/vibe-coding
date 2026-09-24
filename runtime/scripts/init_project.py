@@ -22,7 +22,6 @@ FORMAT_TWO_ENTRIES = (
     Path("state-format.json"),
     Path(".gitignore"),
     Path(".state"),
-    Path("exchange/.gitattributes"),
 )
 
 
