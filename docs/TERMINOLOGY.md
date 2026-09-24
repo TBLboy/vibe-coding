@@ -69,9 +69,16 @@
 
 | code | 含义 |
 |---|---|
-| `unsupported_work_layout` | 工作目录位于 Git worktree 内 |
-| `legacy_layout_requires_migration` | 旧 Git-root 项目（如仍保留识别能力） |
+| `unsupported_work_layout` | 工作目录是 Git worktree 根，或位于某个 Git worktree 内 |
 | `archive_not_configured` | 知识库归档不可用 |
 | `archive_out_of_sync` | 本地账本新于归档副本 |
 | `ledger_projection_mismatch` | SQLite 与账本 head 不一致 |
 | `archive_snapshot_inconsistent` | 归档复制期间 head 发生变化 |
+
+布局检测 `detect_layout(root)` 的三个返回值为：
+
+| 返回值 | 含义 | 处理 |
+|---|---|---|
+| `plain_work_folder` | 工作目录是普通目录，且不在任何 Git worktree 内 | **唯一受支持**，正常读写 |
+| `git_worktree_root` | 工作目录本身就是 Git worktree 根 | 拒绝（`unsupported_work_layout`） |
+| `nested_in_git_worktree` | 工作目录位于某个 Git worktree 内 | 拒绝（`unsupported_work_layout`） |
