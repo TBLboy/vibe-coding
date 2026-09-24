@@ -20,7 +20,7 @@ PROGRESS_REQUIRED = (
     "docs/archive",
     "50-100 KB",
     "单一事实源",
-    "loop/handoff.md",
+    "handoff.md",
     "机器文件不手工重排",
 )
 
@@ -30,7 +30,7 @@ CURRENT_SESSION_REQUIRED = (
     "docs/archive",
     "50-100 KB",
     "单一事实源",
-    "loop/active-run.yaml",
+    "handoff.md",
     "机器文件不手工重排",
 )
 

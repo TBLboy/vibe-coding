@@ -1,4 +1,4 @@
-"""TASK-044: release identity, legacy guidance and install/upgrade/remove safety."""
+"""TASK-044: release identity and install/upgrade/remove safety."""
 from __future__ import annotations
 
 import hashlib
@@ -13,13 +13,11 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "runtime" / "scripts"
 VIBE = SCRIPTS / "vibe.py"
-LOOPCTL = SCRIPTS / "loopctl.py"
-INIT = SCRIPTS / "init_project.py"
 INSTALLER = ROOT / "scripts" / "global_installer.py"
 if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
-from framework_info import RETIREMENT_STAGES, VERSION  # noqa: E402
+from framework_info import VERSION  # noqa: E402
 
 
 def run(*arguments: str) -> subprocess.CompletedProcess[str]:
@@ -34,10 +32,6 @@ def run(*arguments: str) -> subprocess.CompletedProcess[str]:
 
 def run_vibe(root: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
     return run(str(VIBE), "--root", str(root), *arguments)
-
-
-def run_loopctl(root: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
-    return run(str(LOOPCTL), "--root", str(root), *arguments)
 
 
 def tree_digest(root: Path) -> dict[str, str]:
@@ -56,26 +50,16 @@ class ReleaseSurfaceTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.temporary.cleanup()
 
-    def legacy_project(self) -> Path:
-        project = self.root / "legacy-project"
-        project.mkdir()
-        created = run(str(INIT), "--target", str(project), "--format", "1")
-        self.assertEqual(created.returncode, 0, created.stdout + created.stderr)
-        return project
-
-    def test_vibe_version_reports_release_identity_and_retirement_gates(self) -> None:
+    def test_vibe_version_reports_release_identity_and_the_single_format(self) -> None:
         result = run_vibe(self.root, "version")
         self.assertEqual(result.returncode, 0, result.stderr)
         payload = json.loads(result.stdout)
         self.assertEqual(payload["framework_version"], VERSION)
         self.assertEqual(payload["default_format"], 2)
         self.assertEqual(payload["store_schema"], 3)
-        self.assertEqual(payload["supported_formats"], [1, 2])
-        stages = {stage["id"]: stage for stage in payload["retirement_stages"]}
-        self.assertEqual(set(stages), {"stop-writing", "stop-reading", "stop-support"})
-        for stage in stages.values():
-            self.assertEqual(stage["gate"], "user-approval")
-            self.assertEqual(stage["status"], "pending")
+        self.assertEqual(payload["supported_formats"], [2])
+        self.assertNotIn("retirement_stages", payload)
+        self.assertNotIn("legacy_guidance", payload)
 
     def test_version_flag_matches_the_version_command(self) -> None:
         flag = run_vibe(self.root, "--version")
@@ -84,52 +68,19 @@ class ReleaseSurfaceTests(unittest.TestCase):
         command = run_vibe(self.root, "version")
         self.assertEqual(json.loads(command.stdout)["framework_version"], VERSION)
 
-    def test_release_notes_and_usage_document_the_retirement_gates(self) -> None:
+    def test_release_notes_document_the_single_supported_format(self) -> None:
         notes = (ROOT / "docs/RELEASE-NOTES.md").read_text(encoding="utf-8")
         usage = (ROOT / "docs/USAGE.md").read_text(encoding="utf-8")
         self.assertIn(VERSION, notes)
-        for stage in RETIREMENT_STAGES:
-            self.assertIn(stage["id"], notes)
-            self.assertIn(stage["id"], usage)
-        self.assertIn("用户确认", notes)
-        self.assertIn("不会改写任何项目的 `.project-log/`", notes)
-        self.assertIn("legacy format: migrate with vibe migrate", usage)
-
-    def test_legacy_project_reads_stay_available_with_migration_guidance(self) -> None:
-        project = self.legacy_project()
-        status = run_loopctl(project, "--json", "status")
-        self.assertEqual(status.returncode, 0, status.stderr)
-        payload = json.loads(status.stdout)
-        self.assertEqual(payload["format"], 1)
-        self.assertTrue(payload["legacy"])
-        self.assertIn("migrate with vibe migrate", payload["guidance"])
-
-        validate = run_loopctl(project, "--json", "validate")
-        self.assertIn(validate.returncode, (0, 1), validate.stderr)
-        validated = json.loads(validate.stdout)
-        self.assertEqual(validated["format"], 1)
-        self.assertIn("migrate with vibe migrate", validated["guidance"])
-
-        vibe_status = run_vibe(project, "status")
-        self.assertEqual(vibe_status.returncode, 0, vibe_status.stderr)
-        self.assertIn("Format:      1 (legacy)", vibe_status.stdout)
-        self.assertIn("migrate with vibe migrate", vibe_status.stdout)
-
-    def test_legacy_writes_warn_without_becoming_silent(self) -> None:
-        project = self.legacy_project()
-        active_run = project / ".project-log/loop/active-run.yaml"
-        before = active_run.read_text(encoding="utf-8")
-        result = run_loopctl(
-            project, "--json", "start-run", "--phase", "implementation", "--task-id", "TASK-001"
-        )
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("deprecated", result.stderr)
-        self.assertIn("vibe migrate preview", result.stderr)
-        self.assertNotEqual(before, active_run.read_text(encoding="utf-8"))
-        self.assertFalse((project / ".project-log/state-format.json").exists())
+        self.assertIn("format 2", notes)
+        self.assertIn("format 2", usage)
+        self.assertNotIn("migrate preview|apply|resume|rollback", usage)
 
     def test_install_update_uninstall_never_touch_project_logs(self) -> None:
-        project = self.legacy_project()
+        project = self.root / "work"
+        project.mkdir()
+        created = run_vibe(project, "init")
+        self.assertEqual(created.returncode, 0, created.stdout + created.stderr)
         before = tree_digest(project)
         home = self.root / "codex-home"
         outputs: dict[str, str] = {}
@@ -146,7 +97,7 @@ class ReleaseSurfaceTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, outputs[action])
             self.assertEqual(tree_digest(project), before, action)
         self.assertIn("format 2", outputs["install"])
-        self.assertIn("migrate with vibe migrate", outputs["update"])
+        self.assertIn("format 2", outputs["update"])
         self.assertIn("not touched", outputs["uninstall"])
 
     def test_installer_is_repeatable_and_keeps_the_state_file_consistent(self) -> None:

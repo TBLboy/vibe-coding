@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class DocumentationConsistencyTests(unittest.TestCase):
-    def test_usage_describes_formal_surface_and_explicit_migration(self) -> None:
+    def test_usage_describes_the_formal_surface(self) -> None:
         text = (ROOT / "docs/USAGE.md").read_text(encoding="utf-8")
         for command in (
             "task begin|update|wait|resume|handoff|finish|cancel",
@@ -18,11 +18,13 @@ class DocumentationConsistencyTests(unittest.TestCase):
             "evidence record|invalidate|refresh",
             "review record",
             "goal update|complete",
-            "migrate preview|apply|resume|rollback",
         ):
             self.assertIn(command, text)
         self.assertNotIn("尚未接入", text)
         self.assertNotIn("自动 apply 按迁移状态机实施", text)
+        # The migration tool and the retired compatibility entry are gone.
+        self.assertNotIn("migrate preview|apply|resume|rollback", text)
+        self.assertNotIn("loopctl", text)
 
     def test_global_prompt_initializes_format_two_through_vibe(self) -> None:
         text = (ROOT / "prompts/vibe-global-agent.md").read_text(encoding="utf-8")
@@ -38,7 +40,7 @@ class DocumentationConsistencyTests(unittest.TestCase):
         self.assertIn("format 2", init_skill)
         self.assertIn("scripts/vibe.py", log_skill)
         self.assertIn("format 2", reference)
-        self.assertIn("migration window", reference)
+        self.assertNotIn("migration window", reference)
 
     def test_user_docs_point_at_the_opencode_entry(self) -> None:
         """The OpenCode entry must not be displaced by the retained codex surface.

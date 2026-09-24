@@ -19,7 +19,7 @@ RUNTIME_SCRIPTS = Path(__file__).resolve().parents[1] / "runtime" / "scripts"
 if str(RUNTIME_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(RUNTIME_SCRIPTS))
 
-from framework_info import LEGACY_GUIDANCE, VERSION  # noqa: E402
+from framework_info import VERSION  # noqa: E402
 
 
 TITLE = "Vibe Coding - Codex Global Core"
@@ -784,7 +784,7 @@ def install_or_update(
     print(f"[+] Skills: {skills}")
     print(f"[+] Backup: {backup_dir}")
     print("[*] New projects default to project-log format 2.")
-    print(f"[*] Existing format 1 projects stay readable and writable for now; {LEGACY_GUIDANCE}")
+    print("[*] Project Log format 2 is the only supported format; format 1 was retired.")
 
 
 def verify(root: Path, home: Path, skills: Path, *, check_plugin: bool = False) -> None:

@@ -218,7 +218,7 @@ class InstallerTests(unittest.TestCase):
                 "--skip-preflight",
             )
             self.assertEqual(install.returncode, 0, install.stdout)
-            self.assertTrue((home / "vibe-workflow/scripts/loopctl.py").is_file())
+            self.assertTrue((home / "vibe-workflow/scripts/state_store.py").is_file())
             self.assertIn("VIBE-CODEX-GLOBAL:CONFIG:BEGIN", (home / "config.toml").read_text(encoding="utf-8"))
 
             verify = run_installer("verify", "--codex-home", str(home), "--without-mcp")
@@ -227,7 +227,7 @@ class InstallerTests(unittest.TestCase):
             uninstall = run_installer("uninstall", "--codex-home", str(home), "--without-mcp")
             self.assertEqual(uninstall.returncode, 0, uninstall.stdout)
             self.assertFalse((home / ".vibe-codex-installation-state.json").exists())
-            self.assertFalse((home / "vibe-workflow/scripts/loopctl.py").exists())
+            self.assertFalse((home / "vibe-workflow/scripts/state_store.py").exists())
 
     def test_bootstrap_creates_missing_conda_environment(self) -> None:
         if sys.version_info < (3, 11):
@@ -589,7 +589,7 @@ class InstallerTests(unittest.TestCase):
             self.assertEqual(update.returncode, 0, update.stdout)
             state = json.loads((home / ".vibe-codex-installation-state.json").read_text(encoding="utf-8"))
             self.assertEqual(state["package_version"], VERSION)
-            self.assertTrue((home / "vibe-workflow/scripts/loopctl.py").is_file())
+            self.assertTrue((home / "vibe-workflow/scripts/state_store.py").is_file())
 
     def test_without_hooks_can_still_set_access_profile(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
