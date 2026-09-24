@@ -21,10 +21,13 @@ This skill absorbs the useful part of `grill-me`: ask one high-value question at
 Read, when available:
 
 1. User statements in the current session.
-2. `.project-log/requirements.md` and `.project-log/requirements/baseline.yaml`.
-3. `.project-log/business-logic/atoms.yaml` and `open-questions.yaml`.
+2. The transactional store's records: `vibe status` for the current goal/task, or
+   `vibe context <task-id>` for a bounded read of the task you are clarifying.
+3. Business atoms and open questions (record kinds `business-atom` / `open-question`).
 4. Existing code, tests, config, product documents, tickets, screenshots, and historical decisions.
-5. `.project-log/docs/decision-authority.md`.
+5. Archived long-form docs under `.project-log/docs/` — including the decision-authority
+   matrix. Pre-format-2 material under `.project-log/legacy/` is reference-only and is
+   never parsed by the tools.
 
 Never ask the user for information that can be reliably obtained from the project.
 

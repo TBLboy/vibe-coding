@@ -73,4 +73,4 @@ VIBE_PYTHON="${VIBE_PYTHON:-$(cat "$VIBE_CONFIG/vibe-python")}"
    - 不手工重排或改写状态库、Git 账本与生成视图。
    - 这些文件由运行时脚本与 Hooks 维护；整理长文档时只调整两个 md 的位置、做归档和改写为更清晰的结构。
 
-详细规范见 `REFERENCE.md`、`.project-log/docs/`、模板和 schemas。
+详细规范见 `REFERENCE.md` 与 `.project-log/docs/`。
