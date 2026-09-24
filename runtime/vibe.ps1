@@ -1,7 +1,10 @@
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'scripts\vibe_python.ps1')
 Assert-VibeLauncherArguments -Arguments $args
-$ConfigHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $HOME '.codex' }
+$ConfigHome = if ($env:OPENCODE_CONFIG_DIR) { $env:OPENCODE_CONFIG_DIR }
+    elseif ($env:CODEX_HOME) { $env:CODEX_HOME }
+    elseif (Test-Path (Join-Path (Split-Path $PSScriptRoot -Parent) 'vibe-python')) { Split-Path $PSScriptRoot -Parent }
+    else { Join-Path $HOME '.codex' }
 $Forward = @()
 for ($Index = 0; $Index -lt $args.Count; $Index++) {
     if ($args[$Index] -eq '--codex-home') {

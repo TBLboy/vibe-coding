@@ -2,7 +2,20 @@
 set -euo pipefail
 runtime="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 source "$runtime/scripts/vibe_python.sh"
-config_home="${CODEX_HOME:-$HOME/.codex}"
+# Resolve the config home. An explicit environment variable wins; otherwise infer it
+# from where this wrapper is installed — the installer places it at
+# <config-home>/vibe-workflow/vibe.sh, so the parent directory holds vibe-python.
+# Only a source-tree checkout falls back to the codex default. Pinning this to
+# ~/.codex made an OpenCode-only install look for an interpreter that is not there.
+if [[ -n "${OPENCODE_CONFIG_DIR:-}" ]]; then
+  config_home="$OPENCODE_CONFIG_DIR"
+elif [[ -n "${CODEX_HOME:-}" ]]; then
+  config_home="$CODEX_HOME"
+elif [[ -f "$runtime/../vibe-python" ]]; then
+  config_home="$(cd -- "$runtime/.." && pwd)"
+else
+  config_home="$HOME/.codex"
+fi
 forward=()
 while (( $# )); do
   case "$1" in

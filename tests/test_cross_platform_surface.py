@@ -111,6 +111,41 @@ class CrossPlatformSurfaceTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stdout.decode("utf-8", "replace"))
             self.assertTrue((target / ".project-log/state-format.json").is_file())
 
+    def test_launcher_resolves_an_opencode_only_install(self) -> None:
+        """The wrapper must find the interpreter beside its own install location.
+
+        The installer copies the runtime tree to <config-home>/vibe-workflow/, so a
+        user who only ever installed the OpenCode client has no ~/.codex at all.
+        Pinning the config home to ~/.codex made that launcher look for an
+        interpreter that does not exist; it now infers the home from its own path.
+        """
+        bash = usable_posix_bash()
+        if bash is None:
+            self.skipTest("no POSIX bash that can consume native paths")
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            home = root / "opencode-config"
+            shutil.copytree(RUNTIME, home / "vibe-workflow")
+            (home / "vibe-python").write_text(sys.executable + "\n", encoding="utf-8")
+            target = root / "project"
+            target.mkdir()
+            environment = {
+                key: value for key, value in os.environ.items()
+                if not key.startswith(("CODEX_HOME", "OPENCODE_CONFIG_DIR", "VIBE_PYTHON"))
+            }
+            # Point HOME at an empty directory: on a machine that also has the codex
+            # client installed, ~/.codex/vibe-python exists, and a launcher that still
+            # fell back to it would pass this test for the wrong reason.
+            empty_home = root / "empty-home"
+            empty_home.mkdir()
+            environment["HOME"] = str(empty_home)
+            result = subprocess.run(
+                [bash, str(home / "vibe-workflow" / "vibe.sh"), "--root", str(target), "init"],
+                env=environment, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout.decode("utf-8", "replace"))
+            self.assertTrue((target / ".project-log/state-format.json").is_file())
+
     def test_powershell_launcher_is_present_and_targets_the_same_python_entry(self) -> None:
         text = (RUNTIME / "vibe.ps1").read_text(encoding="utf-8")
         self.assertIn("scripts\\vibe.py", text)
