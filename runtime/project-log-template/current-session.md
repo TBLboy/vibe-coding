@@ -4,8 +4,8 @@
 > - **头部快照**：顶部“当前状态”区块是稳定入口，每次更新时覆盖，不追加旧版本。
 > - **最新在最上**：最新一次会话写在文件最上面的会话区块，旧会话依次向下。
 > - **超限归档**：文件超过约 50-100 KB 或会话区块达到约 10 条时，把旧会话区块移动到 `.project-log/docs/archive/`，主文档只保留最近内容。
-> - **单一事实源**：精确当前状态与下一步以 `.project-log/loop/handoff.md`、`.project-log/loop/active-run.yaml` 为准；不要在多份长文档里维护互相矛盾的“下一步”。
-> - **机器文件不手工重排**：`loop/events.jsonl`、`loop/active-run.yaml`、`loop/handoff.md`、`verification/evidence.yaml` 由运行时维护，不做手工重排或改写。
+> - **单一事实源**：精确当前状态与下一步以 Project Log format 2 状态库、Git 账本与生成的 `handoff.md` 为准；不要在多份长文档里维护互相矛盾的“下一步”。
+> - **机器文件不手工重排**：状态库、Git 账本与生成视图由运行时维护，不做手工重排或改写。
 
 ## 当前状态
 

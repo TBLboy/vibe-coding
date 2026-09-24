@@ -40,15 +40,11 @@
    VIBE_PYTHON="${VIBE_PYTHON:-$(cat "$VIBE_CONFIG/vibe-python")}"
    "$VIBE_PYTHON" "$VIBE_RUNTIME/scripts/vibe.py" --root <project-root> init
    ```
-3. 读取相关业务原子、需求基线、决策和现有验证证据。format 2 的精确事实源是状态库，用 `vibe status`、`vibe render`、`vibe context` 读取；`current-session.md`、`progress.md` 与 `workflow.yaml` 只在旧格式项目里是文件，format 2 由状态库生成只读视图。
+3. 读取相关业务原子、需求基线、决策和现有验证证据。format 2 的精确事实源是状态库，用 `vibe status`、`vibe render`、`vibe context` 读取；`current-session.md`、`progress.md` 由状态库生成只读视图。
 4. format 2 调用：
    ```bash
    "$VIBE_PYTHON" "$VIBE_RUNTIME/scripts/vibe.py" --root <project-root> status
    "$VIBE_PYTHON" "$VIBE_RUNTIME/scripts/vibe.py" --root <project-root> context <task-id>
-   ```
-   旧格式调用：
-   ```bash
-   "$VIBE_PYTHON" "$VIBE_RUNTIME/scripts/loopctl.py" --root <project-root> --json restore
    ```
    恢复 Project Goal、任务、阻塞、证据有效性、活动 Run 和精确下一步。
 5. 会话 Goal 与自动续跑由 `@prevalentware/opencode-goal-plugin`（固定版本 `0.1.51`）承担，由 OpenCode 安装器写入客户端配置；真实运行时已验证该插件被加载注册，且 idle 自动续跑会自行驱动后续回合。插件状态是会话控制面而非业务事实源：宣告完成前必须运行 `vibe goal` 的证据门禁。插件未安装或被禁用时，会话续跑退回显式用户指令，并标注 `serial-role-fallback`。
@@ -57,8 +53,8 @@
 ## Project Log 长文档组织
 
 - `current-session.md` 与 `progress.md` 是面向人的快速摘要：最新在最上，顶部“当前状态”快照每次覆盖更新，超限时旧段落归档到 `.project-log/docs/archive/`。
-- format 2 的精确当前状态与下一步以状态库和生成的 `handoff.md` 为单一事实源；旧格式以 `loop/active-run.yaml`、`loop/handoff.md` 为单一事实源。不要在多份长文档里维护互相矛盾的“下一步”。
-- 机器维护的结构化状态（format 2 状态库；旧格式的 `loop/events.jsonl`、`loop/active-run.yaml`、`loop/handoff.md`、`verification/evidence.yaml`）不手工重排或改写。
+- format 2 的精确当前状态与下一步以状态库、Git 账本和生成的 `handoff.md` 为单一事实源。不要在多份长文档里维护互相矛盾的“下一步”。
+- 机器维护的结构化状态（状态库、账本与生成视图）不手工重排或改写。
 
 ## 标准生命周期
 

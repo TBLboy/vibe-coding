@@ -71,6 +71,6 @@ If hardware, credentials, production data, external services, or environment acc
 
 Update task verification, acceptance evidence in business atoms, and current session. Do not modify business rules to make failing implementation appear correct.
 
-Register durable evidence in `.project-log/loop/evidence-index.yaml` through `loopctl record-evidence`. Bind it to the current Git commit/diff or covered file hashes. Later changes to covered files, requirements, dependencies, or the verification harness must mark the evidence `stale`.
+Register durable evidence in the Project Log format 2 store through `vibe evidence record`. Bind it to the current Git commit/diff or covered file hashes. Later changes to covered files, requirements, dependencies, or the verification harness must mark the evidence `stale`.
 
 When verification fails, classify the origin before selecting the next action. A failed test is not sufficient evidence that the origin is `implementation`.

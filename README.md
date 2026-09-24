@@ -14,7 +14,7 @@
 以真实开发任务讲解完整使用流程（初始化工程 → 业务逻辑澄清 → 技术选型 → 代码落地 →
 归档留痕），见 [docs/USAGE.md](docs/USAGE.md)。
 
-本版本的默认格式切换、format 1 只读兼容与退役关口见
+format 2 是唯一受支持的 Project Log 格式，format 1 的退役与历史存档见
 [docs/RELEASE-NOTES.md](docs/RELEASE-NOTES.md)。
 
 ## 核心能力
@@ -133,10 +133,9 @@ vibe evidence record|invalidate|refresh
 vibe review record
 vibe gate --task TASK-ID
 vibe goal update|complete --id GOAL-ID
-vibe migrate preview|apply|resume|rollback
 ```
 
-`loopctl.py` 保留为旧格式项目的底层兼容入口；日常操作与文档示例统一走 `vibe`。
+Project Log format 2 是唯一受支持的格式；日常操作与文档示例统一走 `vibe`。
 会话 Goal 显示完成后，仍需通过 `vibe goal complete` 的证据门禁才能完成 Project Goal。
 
 ## 卸载

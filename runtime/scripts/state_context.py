@@ -20,19 +20,6 @@ def is_transactional(root: Path) -> bool:
     return path.exists() or path.is_symlink() or private.exists() or private.is_symlink()
 
 
-def reject_legacy(root: Path) -> None:
-    if is_transactional(root):
-        raise ValueError("state_format_conflict: legacy writes are disabled; use the formal vibe command surface")
-
-
-def reject_legacy_path(path: Path) -> None:
-    for candidate in (path.absolute(), path.resolve()):
-        for parent in candidate.parents:
-            if os.path.normcase(parent.name) == os.path.normcase(".project-log"):
-                reject_legacy(parent.parent)
-                break
-
-
 def read_marker(root: Path) -> dict:
     path = root / ".project-log" / MARKER
     try:
@@ -166,7 +153,7 @@ def initialize(root: Path) -> Store:
     try:
         log.mkdir()
     except FileExistsError as exc:
-        raise StateError("migration_required", "refusing existing Project Log; migration is not available") from exc
+        raise StateError("existing_project_log", "refusing to overwrite an existing Project Log") from exc
     (log / ".state").mkdir()
     marker = {"format": 2, "project_id": uuid.uuid4().hex}
     with (log / MARKER).open("x", encoding="utf-8", newline="\n") as stream:
@@ -372,6 +359,6 @@ def compact_context(root: Path) -> str:
         )
     lines.append(
         "Completion requires valid evidence; high-risk work also requires an independent go review. "
-        "Use the formal vibe command surface; do not initialize or write legacy YAML."
+        "Use the formal vibe command surface; the Project Log is the transactional format 2 store."
     )
     return "\n".join(lines) + "\n"

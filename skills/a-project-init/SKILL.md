@@ -55,4 +55,4 @@ metadata:
 ## Maintenance
 
 - 通用开发规则唯一来源：`templates/general-rules.md`。用户新增或修改通用规则时，直接修改该模板；不要在每个项目的 `AGENTS.md` 里分别改。
-- 本 skill 不修改 `.project-log` 创建逻辑，只编排与调用；新建项目默认生成 format 2，存量旧格式通过 `vibe migrate` 显式迁移。
+- 本 skill 不修改 `.project-log` 创建逻辑，只编排与调用；新建项目生成 format 2，format 2 是唯一受支持的格式。

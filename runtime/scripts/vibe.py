@@ -5,105 +5,11 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
-import subprocess
 import sys
 import uuid
 from pathlib import Path
 
-try:
-    import yaml
-except ImportError as exc:  # pragma: no cover
-    print("Install dependencies: python -m pip install -r scripts/requirements.txt", file=sys.stderr)
-    raise SystemExit(2) from exc
-
-from framework_info import DEFAULT_FORMAT, LEGACY_GUIDANCE, VERSION, version_payload
-
-
-def load(path: Path):
-    with path.open("r", encoding="utf-8") as handle:
-        return yaml.safe_load(handle)
-
-
-def status(root: Path) -> int:
-    workflow = load(root / ".project-log/workflow.yaml")
-    tasks = load(root / ".project-log/tasks/task-list.yaml").get("tasks", [])
-    atoms = load(root / ".project-log/business-logic/atoms.yaml").get("atoms", [])
-    findings = load(root / ".project-log/alignment/findings.yaml").get("findings", [])
-    questions = load(root / ".project-log/business-logic/open-questions.yaml").get("questions", [])
-    goal = load(root / ".project-log/goals/active-goal.yaml").get("goal")
-    loop = load(root / ".project-log/loop/active-run.yaml")
-    evidence = load(root / ".project-log/loop/evidence-index.yaml").get("evidence", [])
-
-    active_tasks = [t for t in tasks if t.get("status") in {"ready", "in-progress", "blocked", "implemented-unverified"}]
-    print("Format:      1 (legacy)")
-    print(f"Phase:       {workflow.get('current_phase')}")
-    print(f"Mode:        {workflow.get('mode')}")
-    print(f"Active goal: {(goal or {}).get('id') or workflow.get('active_goal') or '-'}")
-    print(f"Run status:  {loop.get('status')}")
-    print(f"Native Goal: {loop.get('native_goal', {}).get('last_known_status') or loop.get('native_goal', {}).get('binding_status')}")
-    print(f"Atoms:       {len(atoms)} total, {sum(a.get('status') == 'active' for a in atoms)} active")
-    print(f"Tasks:       {len(tasks)} total, {len(active_tasks)} active/blocked")
-    print(f"Findings:    {sum(f.get('status') in {'open','accepted','in-progress'} for f in findings)} unresolved")
-    print(f"C questions: {sum(q.get('status') == 'open' and q.get('authority') == 'C' for q in questions)} open")
-    print(f"Evidence:    {sum(item.get('status') == 'valid' for item in evidence)} valid, {sum(item.get('status') == 'stale' for item in evidence)} stale")
-    if active_tasks:
-        print("\nCurrent tasks:")
-        for task in active_tasks:
-            print(f"- {task['id']} [{task['status']}] {task['title']}")
-    print(f"\nNote:        {LEGACY_GUIDANCE}")
-    return 0
-
-
-def render_tasks(root: Path) -> int:
-    from state_context import reject_legacy
-
-    reject_legacy(root)
-    source = root / ".project-log/tasks/task-list.yaml"
-    destination = root / ".project-log/tasks/task-list.md"
-    data = load(source)
-    tasks = data.get("tasks", [])
-    lines = ["# Task List", "", f"Active goal: {data.get('active_goal') or '-'}", ""]
-    if not tasks:
-        lines.append("No tasks.")
-    else:
-        phases: dict[str, list[dict]] = {}
-        for task in tasks:
-            phases.setdefault(task["phase"], []).append(task)
-        for phase, phase_tasks in phases.items():
-            lines.extend([f"## {phase}", "", "| ID | Status | Kind | Priority | Title |", "|---|---|---|---|---|"])
-            for task in phase_tasks:
-                lines.append(f"| {task['id']} | {task['status']} | {task['kind']} | {task.get('priority','-')} | {task['title']} |")
-            lines.append("")
-    destination.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
-    print(destination)
-    return 0
-
-
-def next_id(root: Path, kind: str) -> int:
-    mapping = {
-        "task": (".project-log/tasks/task-list.yaml", "tasks", "TASK"),
-        "logic": (".project-log/business-logic/atoms.yaml", "atoms", "BL-GEN"),
-        "decision": (".project-log/decisions/decision-log.yaml", "decisions", "DEC"),
-        "alignment": (".project-log/alignment/findings.yaml", "findings", "ALN"),
-        "knowledge": (".project-log/distillation/candidates.yaml", "candidates", "KNOW"),
-        "question": (".project-log/business-logic/open-questions.yaml", "questions", "Q"),
-    }
-    rel, key, prefix = mapping[kind]
-    items = load(root / rel).get(key, [])
-    numbers = []
-    pattern = re.compile(r"(\d+)$")
-    for item in items:
-        match = pattern.search(str(item.get("id", "")))
-        if match:
-            numbers.append(int(match.group(1)))
-    print(f"{prefix}-{max(numbers, default=0) + 1:03d}")
-    return 0
-
-
-def run_validate(root: Path) -> int:
-    script = Path(__file__).with_name("validate_project.py")
-    return subprocess.call([sys.executable, str(script), "--root", str(root)])
+from framework_info import DEFAULT_FORMAT, VERSION, version_payload
 
 
 def _json_argument(value: str | None, name: str):
@@ -150,12 +56,11 @@ def main() -> int:
         version=f"vibe-coding {VERSION} (default format {DEFAULT_FORMAT})",
     )
     sub = parser.add_subparsers(dest="command", required=True)
-    sub.add_parser("version", help="print the release identity, format policy and retirement stages")
+    sub.add_parser("version", help="print the release identity and the supported Project Log format")
     sub.add_parser("status")
     sub.add_parser("validate")
-    sub.add_parser("render-tasks")
     sub.add_parser("render")
-    init = sub.add_parser("init", help="create .project-log in format 2 (the default format)")
+    init = sub.add_parser("init", help="create .project-log in format 2 (the only supported format)")
     init.add_argument("--dry-run", action="store_true")
     state_init = sub.add_parser("state-init", help="alias of init; --experimental is accepted and ignored")
     state_init.add_argument("--dry-run", action="store_true")
@@ -242,14 +147,6 @@ def main() -> int:
     ledger_sub.add_parser("export")
     ledger_sub.add_parser("verify")
     sub.add_parser("portability-status", help="report local consistency and remote durability separately")
-    migrate = sub.add_parser("migrate", help="manage legacy format migration")
-    migrate_sub = migrate.add_subparsers(dest="migrate_action", required=True)
-    migrate_sub.add_parser("preview")
-    migrate_rollback = migrate_sub.add_parser("rollback")
-    migrate_rollback.add_argument("--destination")
-    migrate_apply = migrate_sub.add_parser("apply")
-    migrate_apply.add_argument("--confirm", required=True)
-    migrate_sub.add_parser("resume")
     record = sub.add_parser("record", help="manage lifecycle records")
     record_sub = record.add_subparsers(dest="record_action", required=True)
     record_create = record_sub.add_parser("create")
@@ -304,22 +201,15 @@ def main() -> int:
     review_record.add_argument("--verdict", required=True)
     review_record.add_argument("--scope", required=True, help="JSON object; @file reads from disk")
     review_record.add_argument("--evidence-ref", action="append", default=[])
-    sub.add_parser("state-migrate-preview")
-    state_rollback = sub.add_parser("state-migrate-rollback")
-    state_rollback.add_argument("--destination", required=True)
-    next_parser = sub.add_parser("next-id")
-    next_parser.add_argument("kind", choices=["task", "logic", "decision", "alignment", "knowledge", "question"])
     args = parser.parse_args()
     root = args.root.expanduser().resolve()
     from state_context import (
         apply_command,
-        attach,
         attach_with_report,
         exchange_status,
         acknowledge_export,
         abandon_export,
         import_snapshot,
-        initialize,
         is_transactional,
         open_store,
         publish_snapshot,
@@ -330,11 +220,6 @@ def main() -> int:
     from state_evidence import applicability, fingerprint_file
     from state_gate import gate as evidence_gate
     from state_gate import invalidate as evidence_invalidate
-    from state_migrate import preview as migration_preview
-    from state_migrate import apply as migration_apply
-    from state_migrate import resume as migration_resume
-    from state_migrate import rollback as migration_rollback
-    from state_migrate import rollback_bundle
     from state_store import StateError
 
     try:
@@ -392,10 +277,6 @@ def main() -> int:
         elif args.command == "state-gate-invalidate":
             with Path(args.file).open(encoding="utf-8") as stream:
                 result = evidence_invalidate(json.load(stream), args.changed, root)
-        elif args.command == "state-migrate-preview":
-            result = migration_preview(root)
-        elif args.command == "state-migrate-rollback":
-            result = rollback_bundle(open_store(root), root, args.destination)
         elif args.command == "task":
             if args.task_action == "begin":
                 result = apply_cli_action(root, "task.begin", {
@@ -465,15 +346,6 @@ def main() -> int:
             from state_ledger import portability_status
 
             result = portability_status(root)
-        elif args.command == "migrate":
-            if args.migrate_action == "preview":
-                result = migration_preview(root)
-            elif args.migrate_action == "apply":
-                result = migration_apply(root, args.confirm)
-            elif args.migrate_action == "resume":
-                result = migration_resume(root)
-            else:
-                result = migration_rollback(root, args.destination)
         elif args.command == "render":
             result = refresh_views(root)
         elif args.command == "record":
@@ -545,44 +417,32 @@ def main() -> int:
                 "verdict": args.verdict, "scope": _json_argument(args.scope, "scope"),
                 "evidence_refs": args.evidence_ref,
             })
-        elif is_transactional(root):
-            if args.command == "status":
-                result = open_store(root, heal=True).status()
-            elif args.command == "validate":
-                errors = open_store(root).validate()
-                print(json.dumps({"errors": errors}, ensure_ascii=True))
-                return int(bool(errors))
-            else:
-                raise StateError(
-                    "unsupported_legacy_command",
-                    "legacy writes are disabled for format 2; use the formal vibe command surface",
-                )
-        elif args.command in {"status", "validate", "render-tasks", "next-id"}:
-            # Not a format 2 project. The legacy fallback below needs a legacy
-            # Project Log; report a clean error instead of a traceback when the
-            # directory holds no Vibe project at all.
-            if not (root / ".project-log" / "workflow.yaml").exists():
+        elif args.command == "status":
+            if not is_transactional(root):
                 raise StateError(
                     "not_a_project",
-                    f"No Vibe Project Log found under {root}: expected "
-                    f"{(root / '.project-log' / 'state-format.json')} (format 2) or "
-                    f"{(root / '.project-log' / 'workflow.yaml')} (format 1). "
-                    "Run 'vibe init' to create a format 2 project.",
+                    f"No Project Log format 2 found under {root}: expected "
+                    f"{root / '.project-log' / 'state-format.json'}. "
+                    "Run 'vibe init' to create one.",
                 )
+            result = open_store(root, heal=True).status()
+        elif args.command == "validate":
+            if not is_transactional(root):
+                raise StateError(
+                    "not_a_project",
+                    f"No Project Log format 2 found under {root}: expected "
+                    f"{root / '.project-log' / 'state-format.json'}. "
+                    "Run 'vibe init' to create one.",
+                )
+            errors = open_store(root).validate()
+            print(json.dumps({"errors": errors}, ensure_ascii=True))
+            return int(bool(errors))
         if result is not None:
             print(json.dumps(result, ensure_ascii=True, indent=2))
             return 0
     except (StateError, OSError, ValueError) as exc:
         print(json.dumps({"error": {"code": getattr(exc, "code", "invalid_input"), "message": str(exc)}}, ensure_ascii=True), file=sys.stderr)
         return 2
-    if args.command == "status":
-        return status(root)
-    if args.command == "validate":
-        return run_validate(root)
-    if args.command == "render-tasks":
-        return render_tasks(root)
-    if args.command == "next-id":
-        return next_id(root, args.kind)
     return 2
 
 

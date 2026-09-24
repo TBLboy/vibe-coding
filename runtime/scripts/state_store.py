@@ -720,8 +720,8 @@ class Store:
 
     def active_goal_id(self) -> str:
         # Answering with the earliest active goal is how a second active goal
-        # silently misdirects every default target (vibe goal, loopctl evaluate
-        # goal, compact_context). Fail closed so the caller must name the goal
+        # silently misdirects every default target (vibe goal, compact_context).
+        # Fail closed so the caller must name the goal
         # instead of having the framework guess which one is current.
         active = self.active_goal_ids()
         if not active:
@@ -977,8 +977,8 @@ class Store:
             connection.execute("BEGIN")
             self._metadata(connection)
             # ``active_goal_id()`` fails closed on more than one active goal, so
-            # every default target (``vibe goal`` / ``loopctl evaluate goal`` /
-            # ``compact_context``) refuses to answer until exactly one remains.
+            # every default target (``vibe goal`` / ``compact_context``) refuses
+            # to answer until exactly one remains.
             # Report the conflicting set here too, so a static audit names them.
             active_goals = [
                 row["id"] for row in connection.execute(

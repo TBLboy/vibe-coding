@@ -41,25 +41,21 @@
    默认运行时为 `~/.codex/vibe-workflow`。
 3. 读取相关业务原子、需求基线、决策和现有验证证据。format 2 的精确事实源是状态库，
    用 `vibe status`、`vibe render`、`vibe context` 读取；`current-session.md`、`progress.md`
-   与 `workflow.yaml` 只在旧格式项目里是文件，format 2 由状态库生成只读视图。
-4. format 2 调用：
+   由状态库生成只读视图。
+4. 调用：
    ```bash
    python3 "$VIBE_RUNTIME/scripts/vibe.py" --root <project-root> status
    python3 "$VIBE_RUNTIME/scripts/vibe.py" --root <project-root> context <task-id>
    ```
-   旧格式调用：
-   ```bash
-   python3 "$VIBE_RUNTIME/scripts/loopctl.py" --root <project-root> --json restore
-   ```
    Windows 使用 `py -3`。恢复 Project Goal、任务、阻塞、证据有效性、原生 Goal 绑定和精确下一步。
-5. Project Goal 已定义但原生 Goal 未绑定时，调用 `loopctl goal-bind --json` 生成 objective，并通过 Codex 原生 `/goal` 建立当前线程 Goal。
+5. Project Goal 已定义时，用 `vibe context <task-id>` 读取 objective，并通过 Codex 原生 `/goal` 建立当前线程 Goal。
 6. 恢复事实状态后再行动。恢复状态不是交付：对实质性用户任务，必须继续执行到完成、明确阻塞或用户要求暂停；不得只输出恢复摘要后结束。无活动 Run 时，先建立新 Run，再执行当前用户请求。没有非琐碎任务时，先建立最小任务记录；不要无计划地修改项目。
 
 ## Project Log 长文档组织
 
 - `current-session.md` 与 `progress.md` 是面向人的快速摘要：最新在最上，顶部“当前状态”快照每次覆盖更新，超限时旧段落归档到 `.project-log/docs/archive/`。
-- format 2 的精确当前状态与下一步以状态库和生成的 `handoff.md` 为单一事实源；旧格式以 `loop/active-run.yaml`、`loop/handoff.md` 为单一事实源。不要在多份长文档里维护互相矛盾的“下一步”。
-- 机器维护的结构化状态（format 2 状态库；旧格式的 `loop/events.jsonl`、`loop/active-run.yaml`、`loop/handoff.md`、`verification/evidence.yaml`）不手工重排或改写。
+- format 2 的精确当前状态与下一步以状态库、Git 账本和生成的 `handoff.md` 为单一事实源。不要在多份长文档里维护互相矛盾的“下一步”。
+- 机器维护的结构化状态（状态库、账本与生成视图）不手工重排或改写。
 
 ## 标准生命周期
 
@@ -183,7 +179,7 @@ python3 "$VIBE_RUNTIME/scripts/render_subagent_prompt.py" \
 - 失败来源必须归类为 `implementation`、`specification`、`task-decomposition`、`technical-selection`、`functional-business-logic`、`technical-business-logic`、`environment`、`verification-harness` 或 `unknown`。
 - `retry-current-task` 必须记录可证伪 hypothesis、相对上次的 delta 和 expected evidence。失败签名与 delta 均未变化时禁止重试。
 - 正式 Loop Decision 只在任务开始/切换、验证完成、Reviewer 完成、阶段退出、阻塞、达到上限、用户 C 级决策、Goal 完成检查和 Handoff 时产生。
-- 原生 Goal 显示 complete 后仍需运行 `loopctl evaluate goal`。未满足 Project Goal 成功条件和必需证据时不得宣布项目完成。
+- 原生 Goal 显示 complete 后仍需运行 `vibe goal complete` 的证据门禁。未满足 Project Goal 成功条件和必需证据时不得宣布项目完成。
 
 ## 回合执行纪律（防止半途停止）
 

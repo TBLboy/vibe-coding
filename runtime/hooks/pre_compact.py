@@ -4,14 +4,13 @@ from __future__ import annotations
 
 import json
 
-from hook_common import compact_context, ensure_project, maybe_probe, read_input
+from hook_common import compact_context, ensure_project, read_input
 
 
 def main() -> int:
     try:
         payload = read_input()
         root = ensure_project(payload)
-        maybe_probe(root, "PreCompact", payload)
         context = compact_context(root, refresh_handoff=True)
     except Exception as exc:
         context = f"Vibe state unavailable: {type(exc).__name__}: {exc}"

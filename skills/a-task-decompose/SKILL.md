@@ -76,7 +76,7 @@ A task is probably too small when it is only a single mechanical edit with no in
 
 ## Output
 
-Update `.project-log/tasks/task-list.yaml`. Keep task order dependency-aware, not merely chronological.
+Create and update tasks through `vibe task` / `vibe record`. Keep task order dependency-aware, not merely chronological.
 
 ## Completion Gate
 

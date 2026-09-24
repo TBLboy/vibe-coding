@@ -32,14 +32,16 @@
 
 ## 二、`format` 的合法值域
 
-- `1` —— legacy 文件式日志（`workflow.yaml`、`task-list.yaml` 等）。**已退役**。
-- `2` —— 事务性状态库 + Git 账本。**当前唯一支持的格式**。
+- `2` —— 事务性状态库 + Git 账本。**当前唯一合法、唯一支持的取值**。
+- `1` —— legacy 文件式日志（`workflow.yaml`、`task-list.yaml` 等）。**已退役**：不再被任何
+  命令解析或写入，历史存档只保留在 `.project-log/legacy/` 与
+  `.project-log/docs/archive/legacy-format1/`，不参与状态库、校验或门禁。
 
 ## 三、命名规则（每个词只用于一个维度）
 
 | 词 | 只允许用于 |
 |---|---|
-| `format` | 顶层 Project Log 持久化契约（值 1 / 2） |
+| `format` | 顶层 Project Log 持久化契约（值 2） |
 | `schema` / `schema_version` | 某个具体数据结构的内部版本 |
 | `layout` | 磁盘目录拓扑（work-folder layout） |
 | `archive` / `transport` | 跨机、远端持久化或搬运机制 |

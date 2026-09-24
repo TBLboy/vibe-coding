@@ -4,8 +4,8 @@
 > - **最新在最上**：按日期倒序排列，最新阶段段落位于文件顶部，旧段落依次向下。
 > - **头部快照**：顶部“当前状态”区块是稳定入口，每次更新时覆盖，不追加旧版本。
 > - **超限归档**：文件超过约 50-100 KB 时，把旧段落移动到 `.project-log/docs/archive/`，主文档只保留最近内容。
-> - **单一事实源**：本文件是快速摘要；精确当前状态与下一步以 `.project-log/loop/handoff.md`、`.project-log/loop/active-run.yaml` 为准。
-> - **机器文件不手工重排**：`loop/events.jsonl`、`loop/active-run.yaml`、`loop/handoff.md`、`verification/evidence.yaml` 由运行时维护，不做手工重排或改写。
+> - **单一事实源**：本文件是快速摘要；精确当前状态与下一步以 Project Log format 2 状态库、Git 账本与生成的 `handoff.md` 为准。
+> - **机器文件不手工重排**：状态库、Git 账本与生成视图由运行时维护，不做手工重排或改写。
 
 ## 当前状态
 

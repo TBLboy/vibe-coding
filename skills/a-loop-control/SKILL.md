@@ -12,7 +12,7 @@ metadata:
 
 ## Purpose
 
-Use the installed `vibe` runtime as the deterministic controller for Project Goal state, evidence validity, failure attribution, retry limits, and Handoff. `loopctl` remains the compatibility entry for legacy-format projects.
+Use the installed `vibe` runtime as the deterministic controller for Project Goal state, evidence validity, failure attribution, retry limits, and Handoff. Project Log format 2 is the only supported format; the retired `loopctl` compatibility entry is gone.
 
 Project Goal is the only completion contract. The session-level Goal control surface is the pinned
 `@prevalentware/opencode-goal-plugin@0.1.51` (`/goal`, `/pause_goal`, `/resume_goal`); its state is a
@@ -32,8 +32,6 @@ VIBE_PYTHON="${VIBE_PYTHON:-$(cat "$VIBE_CONFIG/vibe-python")}"
 ```
 
 Read the Project Goal, active run, current task, valid/stale evidence, open C-level questions, limits, and exact next action before changing product files.
-
-For a legacy-format project, use `loopctl.py --root <project-root> --json restore` instead.
 
 ## Session Continuation
 
@@ -77,14 +75,14 @@ Never repeat the same failure signature with the same delta. When limits are rea
 
 ## Evidence
 
-Register evidence with `record-evidence`. Any covered code, config, dependency, requirement, or verification-harness change makes the evidence `stale`; never delete it to hide invalidation.
+Register evidence with `vibe evidence record`. Any covered code, config, dependency, requirement, or verification-harness change makes the evidence `stale`; never delete it to hide invalidation.
 
 ## Completion
 
 Run:
 
 ```bash
-"$VIBE_PYTHON" "$VIBE_RUNTIME/scripts/loopctl.py" --root <project-root> --json evaluate goal
+"$VIBE_PYTHON" "$VIBE_RUNTIME/scripts/vibe.py" --root <project-root> goal complete --id <GOAL-ID>
 ```
 
 Project Goal completion requires all success conditions, valid required evidence, no blocking C-level question, and independent review evidence for high/critical goals.

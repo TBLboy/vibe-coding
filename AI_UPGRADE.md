@@ -5,8 +5,7 @@
 > 仓库根目录的 `update.sh` / `update.ps1` 与 `scripts/global_installer.py` 是 codex 面的遗留
 > 入口。OpenCode 版的升级入口是 `runtime/opencode/install.sh update`。
 
-本版本把新项目默认格式切到 format 2，并把 format 1 的退役分为“停止写入 / 停止读取 /
-停止支持”三个需要用户单独确认的关口。升级前先阅读
+本版本把 Project Log format 2 确立为唯一受支持的格式，并完成 format 1 退役。升级前先阅读
 [docs/RELEASE-NOTES.md](docs/RELEASE-NOTES.md)。
 
 ## 升级保证
@@ -55,23 +54,16 @@ Vibe Coding OpenCode Global Core 升级到本包版本。
 
 ## 旧格式退役
 
-format 1（`workflow.yaml` 等文件式日志）只保留只读访问；三个退役关口各自需要用户显式确认：
+format 1（`workflow.yaml` 等文件式日志）已退役：`SUPPORTED_FORMATS` 只含 `2`，任何命令都不再
+解析或写入 format 1。旧模板、旧解析分支、迁移工具与三个分步退役关口一并移除。format 1 的
+历史文件完整保留、不被清理，只供人工查阅：
 
 ```text
-stop-writing    停止写入 format 1（读与迁移仍可用）
-stop-reading    停止读取 format 1
-stop-support    停止支持 format 1
+.project-log/legacy/                        退役时的 format 1 文件与 legacy/unmapped/
+.project-log/docs/archive/legacy-format1/   format 1 的文档归档
 ```
 
-迁移与回退：
-
-```bash
-"$(cat "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/vibe-python")" \
-  "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/vibe-workflow/scripts/vibe.py" \
-  --root <项目根> migrate preview
-```
-
-`migrate apply` / `resume` / `rollback` 均为显式操作，不会自动执行。
+退役不改写任何持久化值（`store_schema` 仍为 3、各 `schema_version` 仍为 1），也不追溯改写历史。
 
 ## 平台范围
 

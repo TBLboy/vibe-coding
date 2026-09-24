@@ -155,13 +155,11 @@ Do not research ordinary framework preferences during business clarification.
 
 ## Outputs
 
-Update:
+Update, through the formal `vibe` command surface:
 
-- `.project-log/business-logic/atoms.yaml`;
-- `.project-log/business-logic/clarification.yaml`;
-- `.project-log/business-logic/open-questions.yaml`;
+- `vibe record create|update` for business atoms, clarification state and open questions;
 - `.project-log/requirements.md` for a readable summary;
-- `.project-log/tasks/task-list.yaml` for follow-up work;
+- `vibe task create` for follow-up work;
 - `.project-log/current-session.md`.
 
 Draft or inferred atoms remain `draft` or `experimental`. Only promote to `active` when their authority and evidence satisfy the requirement baseline rules.
