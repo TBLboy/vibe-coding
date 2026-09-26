@@ -1,2 +1,5 @@
-*.sh text eol=lf
-.project-log/exchange/** -text
+# Keep every tracked text file as LF so an Ubuntu and a Windows checkout of the
+# framework hold the same bytes regardless of core.autocrlf. That includes the
+# project-log template, which init copies into a new log: a CRLF template would seed a
+# CRLF Project Log and break the archive's byte-for-byte ledger comparison.
+* text=auto eol=lf

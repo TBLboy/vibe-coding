@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-import shutil
 
 
 LOG = Path(".project-log")
@@ -21,6 +20,7 @@ SEED_FILES = (
 FORMAT_TWO_ENTRIES = (
     Path("state-format.json"),
     Path(".gitignore"),
+    Path(".gitattributes"),
     Path(".state"),
 )
 
@@ -48,7 +48,12 @@ def _initialize_format_two(target: Path, dry_run: bool) -> tuple[list[Path], lis
             raise FileNotFoundError(f"Project Log template file is missing: {origin}")
         destination = target / LOG / relative
         destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(origin, destination)
+        # Write LF regardless of how the template was checked out: a Windows checkout of
+        # the framework must not seed a Project Log with CRLF, so the log holds the same
+        # bytes on every platform and the archive's byte-for-byte ledger check holds.
+        destination.write_text(
+            origin.read_text(encoding="utf-8"), encoding="utf-8", newline="\n"
+        )
     return created, []
 
 

@@ -20,6 +20,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -91,16 +92,19 @@ def git_environment() -> dict[str, str]:
 
     Git already honours ``http_proxy``/``https_proxy`` from the caller, so this only
     fills them in from the persisted configuration. An inherited value always wins,
-    because the caller's own environment is the more specific choice.
+    because the caller's own environment is the more specific choice. Each kind is
+    written in both spellings and set to the same value: Windows environment names are
+    case-insensitive, so probing one case and setting the other would leave a second,
+    disagreeing value that a case-insensitive reader could pick up.
     """
     environment = dict(os.environ)
     proxy = configured_proxy()
     if proxy:
-        for name in (
-            "http_proxy", "https_proxy", "all_proxy",
-            "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY",
-        ):
-            environment.setdefault(name, proxy)
+        for name in ("http_proxy", "https_proxy", "all_proxy"):
+            inherited = environment.get(name) or environment.get(name.upper())
+            value = inherited if inherited is not None else proxy
+            environment[name] = value
+            environment[name.upper()] = value
     return environment
 
 
@@ -325,6 +329,54 @@ def repository_identity(path: Path) -> str | None:
     return None
 
 
+# A Windows drive path ("C:\kb", "C:/kb") is a local path, but ``urlsplit`` reads the
+# drive letter as a URL scheme, so it must be recognised before the scheme test.
+WINDOWS_DRIVE_PATH = re.compile(r"^[A-Za-z]:[\\/]")
+# A file URL carries the drive in its path component: ``file:///C:/kb`` parses to
+# ``/C:/kb``, which is not absolute on Windows until the leading slash is dropped.
+FILE_URL_DRIVE_PATH = re.compile(r"^/[A-Za-z]:")
+
+
+def _unresolvable_home(target: str) -> ArchiveError:
+    return ArchiveError(
+        f"the archive target {target!r} starts with '~' but the home directory it "
+        "names cannot be resolved, so the archive cannot prove it is not the "
+        "knowledge base itself; refusing to run. Use an absolute path instead."
+    )
+
+
+def _expand_home(target: str) -> Path:
+    """Expand a leading ``~`` the way Git will, or fail closed.
+
+    Git expands ``~`` from ``HOME`` on every platform, while Python's Windows
+    ``expanduser`` reads ``USERPROFILE`` and silently returns an unresolvable ``~user``
+    unchanged. Either difference would let a target that really names the knowledge
+    base slip past the self-reference guard, so the expansion is done here: ``~`` and
+    ``~/`` use ``HOME`` when it is set, and a ``~user`` form is refused on Windows,
+    where Git has no portable equivalent.
+    """
+    if not target.startswith("~"):
+        return Path(target)
+    if target == "~" or target.startswith("~/"):
+        home = os.environ.get("HOME")
+        if home:
+            return Path(home) / target[2:] if target.startswith("~/") else Path(home)
+        try:
+            return Path(target).expanduser()
+        except RuntimeError as error:
+            raise _unresolvable_home(target) from error
+    if os.name == "nt":
+        raise ArchiveError(
+            f"the archive target {target!r} names another user's home directory, which "
+            "Git does not resolve portably on Windows, so the archive cannot prove it is "
+            "not the knowledge base itself; refusing to run. Use an absolute path instead."
+        )
+    try:
+        return Path(target).expanduser()
+    except RuntimeError as error:
+        raise _unresolvable_home(target) from error
+
+
 def local_path_of(target: str) -> Path | None:
     """Filesystem path a push target names, or None when it is not a local path.
 
@@ -339,19 +391,15 @@ def local_path_of(target: str) -> Path | None:
     """
     parsed = urlsplit(target)
     if parsed.scheme == "file":
-        return Path(unquote(parsed.path))
-    if parsed.scheme:
+        path = unquote(parsed.path)
+        if FILE_URL_DRIVE_PATH.match(path):
+            path = path[1:]
+        return Path(path)
+    if parsed.scheme and not WINDOWS_DRIVE_PATH.match(target):
         return None
     if "@" in target.split("/", 1)[0] and ":" in target:
         return None  # scp-like ssh target, for example git@github.com:owner/repo.git
-    try:
-        return Path(target).expanduser()
-    except RuntimeError as error:
-        raise ArchiveError(
-            f"the archive target {target!r} starts with '~' but the home directory it "
-            "names cannot be resolved, so the archive cannot prove it is not the "
-            "knowledge base itself; refusing to run. Use an absolute path instead."
-        ) from error
+    return _expand_home(target)
 
 
 def reject_self_reference(kb_root: Path, target: str) -> None:
@@ -397,7 +445,13 @@ def reject_self_reference(kb_root: Path, target: str) -> None:
         return
     identity = repository_identity(path)
     own = repository_identity(kb_root)
-    if identity is not None and own is not None and identity == own:
+    # ``normcase`` is the identity on POSIX and lowercases on Windows, where two spellings
+    # of the same directory must still count as the knowledge base itself.
+    if (
+        identity is not None
+        and own is not None
+        and os.path.normcase(identity) == os.path.normcase(own)
+    ):
         raise ArchiveError(
             f"the archive target {target!r} resolves to the knowledge base itself; pushing "
             "and verifying against the same repository would prove nothing, so the archive "
@@ -521,8 +575,14 @@ def git_push(
     ``target`` is the already-validated ``push_target`` result; callers pass it so an
     unusable upstream is rejected before the knowledge base worktree is modified.
     """
-    relative = str(Path("工程记录") / project_name)
-    ledger_relative = str(Path("工程记录") / project_name / ".project-log" / LEDGER_RELATIVE)
+    # Git pathspecs and the ``:path`` / ``HEAD:path`` revision syntax take POSIX
+    # separators: a backslash from ``str(Path(...))`` on Windows is read as an escape,
+    # so the ledger lookup fails even though the file is tracked. ``as_posix`` is
+    # portable and produces the same strings as before on POSIX systems.
+    relative = (Path("工程记录") / project_name).as_posix()
+    ledger_relative = (
+        Path("工程记录") / project_name / ".project-log" / LEDGER_RELATIVE
+    ).as_posix()
     remote, remote_ref, urls = target if target is not None else push_target(kb_root)
     rule = ignored_rule(kb_root, ledger_relative)
     if rule is not None:
@@ -530,8 +590,8 @@ def git_push(
             "the knowledge base ignores the archived ledger, so the log history would "
             f"never reach the remote:\n  {rule}\n"
             "add negations for this project to the knowledge base .gitignore:\n"
-            f"  !{Path('工程记录') / project_name}/.project-log/\n"
-            f"  !{Path('工程记录') / project_name}/.project-log/**\n"
+            f"  !{relative}/.project-log/\n"
+            f"  !{relative}/.project-log/**\n"
             "then re-run the archive"
         )
     completed = _run_git(
@@ -651,9 +711,9 @@ def archive(project_root: Path, kb_base: Path) -> dict:
     kb_events = read_ledger(destination / LEDGER_RELATIVE)
     ledger = compare_ledgers(local_events, kb_events)
     kb_root = Path(kb_base).expanduser()
-    ledger_relative = str(
+    ledger_relative = (
         Path("工程记录") / project_name / ".project-log" / LEDGER_RELATIVE
-    )
+    ).as_posix()
     committed = read_committed_ledger(kb_root, ledger_relative)
     ledger["kb_committed"] = len(committed)
     ledger["appended"] = max(0, len(local_events) - len(committed))

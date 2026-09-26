@@ -169,8 +169,12 @@ def _publisher_lock(destination: Path, store: Store):
     path = destination / ".publish.lock"
     token = uuid.uuid4().hex
     content = _encoded({"token": token, "project_id": store.project_id, "context_id": store.context_id})
+    flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY
+    if hasattr(os, "O_BINARY"):
+        # Windows descriptors default to text mode; keep the lock file's bytes exact.
+        flags |= os.O_BINARY
     try:
-        descriptor = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        descriptor = os.open(path, flags, 0o600)
     except FileExistsError as error:
         raise StateError("projection_busy", f"Publisher lock exists: {path}; explicit ownership recovery required") from error
     with os.fdopen(descriptor, "wb") as stream:

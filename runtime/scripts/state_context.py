@@ -12,6 +12,16 @@ from state_store import StateError, Store
 
 
 MARKER = "state-format.json"
+# The Project Log is authoritative data. The archive compares the ledger byte-for-byte,
+# so Git must never rewrite the log through end-of-line or clean/smudge conversion.
+# `-text` stores the working-tree bytes exactly as they are, which keeps an Ubuntu and a
+# Windows checkout identical instead of drifting with core.autocrlf.
+GITATTRIBUTES = (
+    "# The Project Log is authoritative: the ledger is archived byte-for-byte, so Git\n"
+    "# must never apply end-of-line or clean/smudge conversion to it. One byte form on\n"
+    "# every platform keeps an Ubuntu and a Windows checkout identical.\n"
+    "* -text\n"
+)
 
 
 def is_transactional(root: Path) -> bool:
@@ -161,7 +171,10 @@ def initialize(root: Path) -> Store:
         stream.write("\n")
         stream.flush()
         os.fsync(stream.fileno())
-    (log / ".gitignore").write_text(".state/\n", encoding="utf-8")
+    (log / ".gitignore").write_text(".state/\n", encoding="utf-8", newline="\n")
+    # Explicit LF: the byte form of every Project Log file must be identical on Ubuntu and
+    # Windows, so no writer may inherit the platform's default newline translation.
+    (log / ".gitattributes").write_text(GITATTRIBUTES, encoding="utf-8", newline="\n")
     store = Store(
         directory / marker["project_id"] / context_id / "state.sqlite3",
         marker["project_id"],

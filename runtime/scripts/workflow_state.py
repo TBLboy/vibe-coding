@@ -26,4 +26,5 @@ def save_state(target: Path, version: str, hashes: dict[str, str]) -> None:
     (target / STATE_FILE).write_text(
         json.dumps(payload, indent=2, ensure_ascii=False) + "\n",
         encoding="utf-8",
+        newline="\n",
     )

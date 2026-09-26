@@ -221,7 +221,12 @@ def append_event(
     }
     sealed = _seal(body)
     line = (_json(sealed) + "\n").encode("utf-8")
-    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o644)
+    flags = os.O_WRONLY | os.O_CREAT | os.O_APPEND
+    if hasattr(os, "O_BINARY"):
+        # Windows opens a descriptor in text mode by default, which would turn the event's
+        # trailing LF into CRLF and break the archive's byte-for-byte ledger comparison.
+        flags |= os.O_BINARY
+    descriptor = os.open(path, flags, 0o644)
     try:
         written = os.write(descriptor, line)
         if written != len(line):
@@ -306,7 +311,7 @@ def _ensure_ledger_ignore(path: Path) -> None:
     if rule in existing.splitlines():
         return
     separator = "" if not existing or existing.endswith("\n") else "\n"
-    with ignore.open("a", encoding="utf-8") as stream:
+    with ignore.open("a", encoding="utf-8", newline="\n") as stream:
         stream.write(f"{separator}{rule}\n")
         stream.flush()
         os.fsync(stream.fileno())

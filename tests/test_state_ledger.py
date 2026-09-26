@@ -97,6 +97,17 @@ class LedgerExportTests(unittest.TestCase):
         self.assertEqual(first["sha256"], second["sha256"])
         self.assertEqual(path.read_bytes(), original)
 
+    def test_appended_events_use_lf_on_every_platform(self) -> None:
+        # Windows opens a low-level descriptor in text mode, so the append must force
+        # binary or the ledger would carry CRLF and differ byte-for-byte from the archive
+        # and from a Linux checkout.
+        self.build()
+
+        raw = (self.root / LEDGER_RELATIVE).read_bytes()
+
+        self.assertNotIn(b"\r", raw)
+        self.assertTrue(raw.endswith(b"\n"))
+
     def test_export_rebuilds_a_deleted_ledger(self) -> None:
         self.build()
         path = self.root / LEDGER_RELATIVE

@@ -65,6 +65,12 @@ class ProjectLogInitTests(unittest.TestCase):
             for relative in LEGACY_ENTRIES:
                 self.assertFalse((target / relative).exists(), relative)
             self.assertIn(".state/", (target / ".project-log/.gitignore").read_text(encoding="utf-8"))
+            # The log must be stored byte-for-byte: -text stops Git converting the ledger,
+            # and LF (never CRLF) keeps an Ubuntu and a Windows log identical.
+            attributes = (target / ".project-log/.gitattributes").read_bytes()
+            self.assertIn(b"-text", attributes)
+            self.assertNotIn(b"\r", attributes)
+            self.assertNotIn(b"\r", (target / ".project-log/.gitignore").read_bytes())
 
     def test_new_format_two_project_validates(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

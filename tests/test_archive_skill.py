@@ -41,9 +41,12 @@ def event(command_id: str, action: str = "goal.create") -> dict:
 
 def write_ledger(path: Path, events: list[dict]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    # Explicit LF: the ledger is compared byte-for-byte, so a fixture must use the same
+    # newline the framework writes on every platform instead of the platform default.
     path.write_text(
         "".join(json.dumps(item, ensure_ascii=False, sort_keys=True) + "\n" for item in events),
         encoding="utf-8",
+        newline="\n",
     )
 
 
@@ -561,8 +564,17 @@ class ArchiveSkillTests(unittest.TestCase):
             check=True,
         )
 
+    @staticmethod
+    def file_url(authority: str, path: Path) -> str:
+        """A ``file://`` URL for ``path`` that parses identically on POSIX and Windows.
+
+        On POSIX the path already starts with ``/``; on Windows the drive letter is the
+        first path segment, so exactly one separator is placed before ``path``.
+        """
+        return f"file://{authority}/{path.as_posix().lstrip('/')}"
+
     def test_archive_refuses_a_file_url_to_itself(self) -> None:
-        self.point_upstream_at(f"file://localhost{self.kb}")
+        self.point_upstream_at(self.file_url("localhost", self.kb))
         before = self.commits()
 
         result = self.archive()
@@ -585,7 +597,7 @@ class ArchiveSkillTests(unittest.TestCase):
             "%6cocalhost",
         ):
             with self.subTest(authority=authority):
-                self.point_upstream_at(f"file://{authority}{self.kb}")
+                self.point_upstream_at(self.file_url(authority, self.kb))
                 before = self.commits()
 
                 result = self.archive()
@@ -597,7 +609,7 @@ class ArchiveSkillTests(unittest.TestCase):
 
     def test_archive_leaves_the_knowledge_base_clean_when_the_target_is_rejected(self) -> None:
         # Rejecting the publish target must not leave the copied 工程记录/ tree behind.
-        self.point_upstream_at(f"file://random.invalid{self.kb}")
+        self.point_upstream_at(self.file_url("random.invalid", self.kb))
 
         result = self.archive()
 

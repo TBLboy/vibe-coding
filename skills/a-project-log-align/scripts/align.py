@@ -261,6 +261,7 @@ def align(project_root: Path, kb_base: Path, attach: bool = True, dry_run: bool 
             (local_log / MARKER).write_text(
                 _canonical({"format": 2, "project_id": archived_id}) + "\n",
                 encoding="utf-8",
+                newline="\n",
             )
         docs_report = merge_docs(archived_log, local_log)
 
