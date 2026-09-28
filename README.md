@@ -149,15 +149,18 @@ Project Log format 2 是唯一受支持的格式；日常操作与文档示例�
 
 ## 平台范围
 
-| 平台 | 回归套件实测 | 状态 |
+| 平台 | CI 实测（`.github/workflows/tests.yml`） | 状态 |
 |---|---|---|
-| Linux | `OK` | 支持 |
-| WSL | `OK` | 支持 |
-| Windows（PowerShell 5.1 + Python 3.11） | `Ran 250 tests` / `OK`（`skipped` 随宿主能力在 5–8 之间） | 支持（见下列限制） |
+| Linux（`ubuntu-latest`） | `Ran 252 tests in 27.5s` / `OK (skipped=2)` | 支持 |
+| Windows（`windows-latest` + Python 3.11） | `Ran 252 tests in 148.5s` / `OK (skipped=2)` | 支持（见下列限制） |
 
-跳过的数量取决于宿主是否具备符号链接特权、以及 `PATH` 上的 `bash` 是否可消费原生路径：
-本机（`bash` 为 WSL 存根、无符号链接特权）为 `skipped=8`；把 `C:\Program Files\Git\bin`
-前置到 `PATH` 后为 `skipped=5`。两种情形都是 `OK`，0 failures / 0 errors。
+跳过的数量取决于宿主能力，三种实测情形都是 `OK`、0 failures / 0 errors：
+
+| 宿主 | 结果 | 差异原因 |
+|---|---|---|
+| GitHub `windows-latest` | `skipped=2` | 具备符号链接特权，`bash` 可用 |
+| 本机 PowerShell 5.1（cp936 控制台，`bash` 为 WSL 存根，无符号链接特权） | `skipped=8` | 4 个 symlink 用例 + 相关 bash 用例跳过 |
+| 本机并把 `C:\Program Files\Git\bin` 前置到 `PATH` | `skipped=5` | bash 可用，symlink 仍受特权限制 |
 
 CI 在 `ubuntu-latest` 与 `windows-latest` 上运行与本地完全相同的命令
 （`.github/workflows/tests.yml`）：
@@ -176,6 +179,9 @@ python -m unittest discover -s tests -p "test_*.py"
   相关用例跳过；把 `C:\Program Files\Git\bin` 前置到 `PATH` 即可执行。
 - **POSIX 权限位**：Windows 没有 POSIX 可执行位，因此 `bin/vibe-python` 的可执行位断言
   只在 POSIX 上生效（文件存在性在所有平台都断言）。
+- **控制台编码**：所有 CLI 在入口把 `stdout`/`stderr` 固定为 **UTF-8**，与平台代码页无关，
+  因此在 cp1252 / cp936 等传统代码页的 Windows 控制台上输出中文也不会崩溃
+  （此前会抛 `UnicodeEncodeError`；该回归现由 CI 在 cp1252 环境下持续验证）。
 
 安装状态文件的键（`managed_files`、`preserved_local`、`created_dirs`）统一为 **POSIX 相对
 路径**，这是跨平台契约：早期版本写入的主机分隔符键在读取时归一化，并在下一次写入时自动迁移，
