@@ -76,6 +76,23 @@ class AlignSkillTests(unittest.TestCase):
             env=environment, check=False,
         )
 
+    def legacy_console_environment(self) -> dict:
+        """A child environment that reproduces a legacy Windows console on any platform.
+
+        ``PYTHONIOENCODING=cp1252`` forces the child's std streams to the codepage the
+        GitHub ``windows-latest`` runner uses, and ``PYTHONUTF8`` is *removed* so the
+        parent's UTF-8 mode cannot mask the defect. ``VIBE_RUNTIME``/``VIBE_PYTHON`` are
+        still provided for the SQLite rebuild step, and the report names the non-ASCII
+        knowledge-base directory ``工程记录``.
+        """
+        environment = {
+            key: value for key, value in os.environ.items() if key.upper() != "PYTHONUTF8"
+        }
+        environment["PYTHONIOENCODING"] = "cp1252"
+        environment["VIBE_RUNTIME"] = str(RUNTIME)
+        environment["VIBE_PYTHON"] = sys.executable
+        return environment
+
     def vibe(self, *arguments: str) -> subprocess.CompletedProcess:
         return subprocess.run(
             [sys.executable, str(SCRIPTS / "vibe.py"), "--root", str(self.work), *arguments],
@@ -110,6 +127,22 @@ class AlignSkillTests(unittest.TestCase):
         store = open_store(self.work)
         self.assertEqual(store.get_task("TASK-001")["status"], "implemented-unverified")
         self.assertFalse(store.validate())
+
+    def test_align_output_is_utf8_on_a_legacy_console(self) -> None:
+        """A non-UTF-8 console must not change the align report's UTF-8 contract."""
+        archive = self.build_archive(self.actions())
+        self.seed_local(archive, keep=None)
+
+        result = subprocess.run(
+            [sys.executable, str(ALIGN), "--project-root", str(self.work), "--kb", str(self.kb)],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False,
+            env=self.legacy_console_environment(),
+        )
+        stdout = result.stdout.decode("utf-8")
+        stderr = result.stderr.decode("utf-8")
+
+        self.assertEqual(result.returncode, 0, stderr)
+        self.assertIn("工程记录", stdout)
 
     def test_align_keeps_local_only_commands(self) -> None:
         archive = self.build_archive(self.actions())

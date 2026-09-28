@@ -282,6 +282,14 @@ def align(project_root: Path, kb_base: Path, attach: bool = True, dry_run: bool 
 
 
 def main() -> int:
+    # A Windows console defaults to a legacy codepage (for example cp1252); printing this
+    # CLI's non-ASCII output there raises UnicodeEncodeError. The output contract is UTF-8
+    # on every platform, so force the process streams before anything is printed. The
+    # getattr check tolerates a harness (or a replaced stream) with no reconfigure().
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(description="Align project logs from the knowledge base")
     parser.add_argument("--project-root", required=True, help="Path to the work folder")
     parser.add_argument("--kb", help="Knowledge base root; defaults to the configured path")

@@ -309,6 +309,14 @@ def ensure_python(
 
 
 def main() -> int:
+    # A Windows console defaults to a legacy codepage (for example cp1252); printing this
+    # CLI's non-ASCII output there raises UnicodeEncodeError. The output contract is UTF-8
+    # on every platform, so force the process streams before anything is printed. The
+    # getattr check tolerates a harness (or a replaced stream) with no reconfigure().
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--codex-home")
     parser.add_argument("--requirements", type=Path, required=True)
