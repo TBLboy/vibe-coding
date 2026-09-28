@@ -25,6 +25,24 @@ AI 必须完成：
 
 - 默认监听 `127.0.0.1:10808`；可通过 `HTTP_PROXY`/`HTTPS_PROXY` 调整。
 
+## 全局默认模型（必配，否则后台委派静默失败）
+
+安装器只写入 `default_agent`，**不写 `model`**。因此安装后必须在全局 `opencode.json` 顶层
+显式声明一个本机网络下可用的模型：
+
+```json
+{ "model": "opencode-go/deepseek-v4.1-flash" }
+```
+
+不配的后果：后台委派通道（`delegate` / background-agents 插件）创建子会话时不声明 agent，
+因此**不继承父会话的模型**，而是回落到这个全局默认模型。若它缺失，或指向当前地区被上游拒绝的
+模型，每次委派都会在约 1 秒内以
+`AI_APICallError: Country, region, or territory not supported` 失败，而插件仍会写入
+`status: complete` 与空结果——**表现为静默失败，极易被误判为成功**。
+原生 `task` 工具继承父会话模型，不受此影响，所以这种故障只在后台委派里出现。
+
+修改顶层 `model` 后需重启 OpenCode 才生效（配置不热加载）。
+
 ## Vibe Python 环境与安装流程
 
 安装器按以下顺序解析解释器：
