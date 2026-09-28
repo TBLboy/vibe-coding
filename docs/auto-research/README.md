@@ -1,6 +1,6 @@
 # 自动理论科研 Agent（Auto-Research）设计规格集
 
-> **分支**：`opencode-auto-research`（从 `opencode` 播种，见 `docs/OPENCODE-SEED.md` 的播种范式）  
+> **分支**：`opencode-auto-research`（从 `opencode-main` 播种，见 `docs/OPENCODE-SEED.md` 的播种范式；该主线分支原名 `opencode`，2026-09-28 改名，见 DEC-029）  
 > **状态**：设计规格 v0.1 —— **仅有设计，无实现代码**  
 > **上游任务书**：`automated_theory_research_agent_initial_design.md`（v0.1，2026-09-23）  
 > **定位**：Theory-first Autonomous Research System，聚焦 Koopman / 非线性控制 / 数据驱动控制的理论型研究。
