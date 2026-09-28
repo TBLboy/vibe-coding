@@ -1,0 +1,40 @@
+# Regression suite on the two platforms the framework claims to support.
+#
+# Both jobs run the exact command documented in README.md ("回归套件"), so a local
+# run and a CI run are the same measurement. Platform capability gaps are expected
+# to show up as *skips with a reason*, never as failures; see the "平台范围"
+# section of README.md for the known limitations.
+name: tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: ${{ matrix.os }} / Python ${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+        python-version:
+          - "3.11"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install runtime dependencies
+        run: python -m pip install -r runtime/scripts/requirements.txt
+
+      - name: Package structure and Skills contract
+        run: python runtime/scripts/validate_package.py --root .
+
+      - name: Regression suite
+        run: python -m unittest discover -s tests -p "test_*.py"

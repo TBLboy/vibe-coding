@@ -14,6 +14,13 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 INSTALLER = ROOT / "scripts/opencode_installer.py"
 INSTALL_SH = ROOT / "runtime" / "opencode" / "install.sh"
+if str(Path(__file__).resolve().parent) not in sys.path:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _platform import (  # noqa: E402
+    make_package_manager_shim,
+    skip_unless_symlink,
+    usable_posix_bash,
+)
 
 
 def load_installer_module():
@@ -213,10 +220,9 @@ class OpenCodeInstallerTests(unittest.TestCase):
             home = workspace / "opencode"
             bin_dir = workspace / "bin"
             bin_dir.mkdir()
-            fake_npm = bin_dir / "npm"
-            fake_npm.write_text(
-                "#!/usr/bin/env python3\n"
-                "import json, pathlib, sys\n"
+            make_package_manager_shim(
+                bin_dir, "npm",
+                "import json, pathlib\n"
                 "cwd = pathlib.Path.cwd()\n"
                 "package = json.loads((cwd / 'package.json').read_text())\n"
                 "assert package['dependencies']['@opencode-ai/plugin'] == '1.18.4'\n"
@@ -224,9 +230,7 @@ class OpenCodeInstallerTests(unittest.TestCase):
                 "target.mkdir(parents=True, exist_ok=True)\n"
                 "(target / 'package.json').write_text('{\"version\": \"1.18.4\"}')\n"
                 "print('installed')\n",
-                encoding="utf-8",
             )
-            fake_npm.chmod(0o700)
             environment = os.environ.copy()
             environment["PATH"] = str(bin_dir) + os.pathsep + environment["PATH"]
 
@@ -241,6 +245,81 @@ class OpenCodeInstallerTests(unittest.TestCase):
                 "verify", "--opencode-home", str(home), env=environment,
             )
             self.assertEqual(verify.returncode, 0, verify.stdout)
+
+    def test_installation_state_keys_are_posix(self) -> None:
+        """The state file is a cross-platform contract: keys never carry a host separator."""
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary) / "opencode"
+            install = self.install(home)
+            self.assertEqual(install.returncode, 0, install.stdout)
+            state = json.loads(
+                (home / ".vibe-opencode-installation-state.json").read_text(encoding="utf-8")
+            )
+            self.assertIn("vibe-workflow/scripts/vibe.py", state["managed_files"])
+            self.assertEqual(
+                [key for key in state["managed_files"] if "\\" in key], [],
+                "managed_files must record POSIX keys on every platform",
+            )
+
+    def test_legacy_backslash_state_keys_are_migrated(self) -> None:
+        """A state file written with host separators migrates instead of conflicting."""
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary) / "opencode"
+            self.assertEqual(self.install(home).returncode, 0)
+            state_file = home / ".vibe-opencode-installation-state.json"
+            state = json.loads(state_file.read_text(encoding="utf-8"))
+            expected = sorted(state["managed_files"])
+            # Reproduce the pre-fix spelling exactly: every separator is a backslash.
+            state["managed_files"] = {
+                key.replace("/", "\\"): digest for key, digest in state["managed_files"].items()
+            }
+            state_file.write_text(
+                json.dumps(state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+            )
+
+            update = run_installer(
+                "update", "--opencode-home", str(home),
+                "--skip-preflight", "--skip-plugin-install",
+            )
+            self.assertEqual(update.returncode, 0, update.stdout)
+            self.assertIn("legacy path key(s)", update.stdout)
+
+            migrated = json.loads(state_file.read_text(encoding="utf-8"))
+            self.assertEqual(sorted(migrated["managed_files"]), expected)
+            self.assertEqual([key for key in migrated["managed_files"] if "\\" in key], [])
+
+    def test_non_posix_state_key_is_refused_before_write(self) -> None:
+        """The write guard must fail loudly rather than persist host separators again."""
+        installer = load_installer_module()
+        installer.assert_canonical_state({
+            "managed_files": {"agents/alignment-reviewer.md": "h"},
+            "preserved_local": ["skills/a-loop-control/SKILL.md"],
+            "created_dirs": ["skills/a-loop-control"],
+        })
+        for malformed in (
+            {"managed_files": {"agents\\alignment-reviewer.md": "h"}},
+            {"preserved_local": ["skills\\a-loop-control\\SKILL.md"]},
+            {"created_dirs": ["skills\\a-loop-control"]},
+            {"managed_files": {"a//b": "h"}},
+            {"managed_files": {"": "h"}},
+        ):
+            with self.assertRaises(RuntimeError, msg=malformed):
+                installer.assert_canonical_state(malformed)
+
+    def test_heal_state_normalizes_legacy_keys(self) -> None:
+        installer = load_installer_module()
+        healed = installer.heal_state({
+            "managed_files": {"agents\\alignment-reviewer.md": "h", "agents/business-analyst.md": "g"},
+            "preserved_local": ["skills\\a-loop-control\\SKILL.md"],
+            "created_dirs": ["skills"],
+        })
+        self.assertEqual(
+            sorted(healed["managed_files"]),
+            ["agents/alignment-reviewer.md", "agents/business-analyst.md"],
+        )
+        self.assertEqual(healed["preserved_local"], ["skills/a-loop-control/SKILL.md"])
+        self.assertEqual(healed["created_dirs"], ["skills"])
+        self.assertEqual(healed["legacy_separator_keys"], 2)
 
     def test_uninstall_preserves_user_plugin_and_permission_keys(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -441,17 +520,14 @@ class OpenCodeInstallerTests(unittest.TestCase):
             home = workspace / "opencode"
             bin_dir = workspace / "bin"
             bin_dir.mkdir()
-            fake_npm = bin_dir / "npm"
-            fake_npm.write_text(
-                "#!/usr/bin/env python3\n"
+            make_package_manager_shim(
+                bin_dir, "npm",
                 "import pathlib\n"
                 "cwd = pathlib.Path.cwd()\n"
                 "target = cwd / 'node_modules/@opencode-ai/plugin'\n"
                 "target.mkdir(parents=True, exist_ok=True)\n"
                 "(target / 'package.json').write_text('{\"version\": \"1.18.4\"}')\n",
-                encoding="utf-8",
             )
-            fake_npm.chmod(0o700)
             environment = os.environ.copy()
             environment["PATH"] = str(bin_dir) + os.pathsep + environment["PATH"]
 
@@ -474,18 +550,15 @@ class OpenCodeInstallerTests(unittest.TestCase):
             bin_dir = workspace / "bin"
             bin_dir.mkdir()
             record = workspace / "bun-args.txt"
-            fake_bun = bin_dir / "bun"
-            fake_bun.write_text(
-                f"#!{sys.executable}\n"
+            make_package_manager_shim(
+                bin_dir, "bun",
                 "import pathlib, sys\n"
                 f"pathlib.Path({str(record)!r}).write_text(' '.join(sys.argv[1:]))\n"
                 "cwd = pathlib.Path.cwd()\n"
                 "target = cwd / 'node_modules/@opencode-ai/plugin'\n"
                 "target.mkdir(parents=True, exist_ok=True)\n"
                 "(target / 'package.json').write_text('{\"version\": \"1.18.4\"}')\n",
-                encoding="utf-8",
             )
-            fake_bun.chmod(0o700)
             environment = os.environ.copy()
             # Restrict PATH so only the fake bun is discoverable as a package manager.
             environment["PATH"] = str(bin_dir)
@@ -497,12 +570,19 @@ class OpenCodeInstallerTests(unittest.TestCase):
             self.assertEqual(record.read_text(encoding="utf-8"), "install")
 
     def test_install_sh_defaults_to_install_with_options_only(self) -> None:
+        bash = usable_posix_bash()
+        if bash is None:
+            self.skipTest(
+                "no POSIX bash that can consume native paths "
+                "(missing, unusable, or the WSL stub on PATH)"
+            )
         with tempfile.TemporaryDirectory() as temporary:
             home = Path(temporary) / "opencode"
             result = subprocess.run(
-                ["bash", str(INSTALL_SH), "--opencode-home", str(home),
+                [bash, str(INSTALL_SH), "--opencode-home", str(home),
                  "--skip-preflight", "--skip-plugin-install"],
-                text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False,
+                text=True, encoding="utf-8", stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT, check=False,
             )
             self.assertEqual(result.returncode, 0, result.stdout)
             self.assertTrue((home / "opencode.json").is_file())
@@ -582,9 +662,12 @@ class OpenCodeInstallerTests(unittest.TestCase):
             home = workspace / "opencode"
             bin_dir = workspace / "bin"
             bin_dir.mkdir()
-            fake_npm = bin_dir / "npm"
-            fake_npm.write_text("#!/bin/sh\necho 'boom' >&2\nexit 1\n", encoding="utf-8")
-            fake_npm.chmod(0o700)
+            make_package_manager_shim(
+                bin_dir, "npm",
+                "import sys\n"
+                "print('boom', file=sys.stderr)\n"
+                "sys.exit(1)\n",
+            )
             environment = os.environ.copy()
             environment["PATH"] = str(bin_dir) + os.pathsep + environment["PATH"]
 
@@ -605,17 +688,14 @@ class OpenCodeInstallerTests(unittest.TestCase):
             home = workspace / "opencode"
             bin_dir = workspace / "bin"
             bin_dir.mkdir()
-            fake_npm = bin_dir / "npm"
-            fake_npm.write_text(
-                "#!/usr/bin/env python3\n"
+            make_package_manager_shim(
+                bin_dir, "npm",
                 "import pathlib\n"
                 "cwd = pathlib.Path.cwd()\n"
                 "target = cwd / 'node_modules/@opencode-ai/plugin'\n"
                 "target.mkdir(parents=True, exist_ok=True)\n"
                 "(target / 'package.json').write_text('{\"version\": \"1.18.4\"}')\n",
-                encoding="utf-8",
             )
-            fake_npm.chmod(0o700)
             environment = os.environ.copy()
             environment["PATH"] = str(bin_dir) + os.pathsep + environment["PATH"]
             self.assertEqual(
@@ -696,18 +776,15 @@ class OpenCodeInstallerTests(unittest.TestCase):
             home = workspace / "opencode"
             bin_dir = workspace / "bin"
             bin_dir.mkdir()
-            fake_npm = bin_dir / "npm"
-            fake_npm.write_text(
-                "#!/usr/bin/env python3\n"
+            make_package_manager_shim(
+                bin_dir, "npm",
                 "import pathlib, sys\n"
                 "cwd = pathlib.Path.cwd()\n"
                 "(cwd / 'node_modules').mkdir(exist_ok=True)\n"
                 "(cwd / 'package-lock.json').write_text('{}')\n"
                 "print('boom', file=sys.stderr)\n"
                 "sys.exit(1)\n",
-                encoding="utf-8",
             )
-            fake_npm.chmod(0o700)
             environment = os.environ.copy()
             environment["PATH"] = str(bin_dir) + os.pathsep + environment["PATH"]
 
@@ -795,9 +872,8 @@ class OpenCodeInstallerTests(unittest.TestCase):
             bin_dir = workspace / "bin"
             bin_dir.mkdir()
             flag = workspace / "fail"
-            fake_npm = bin_dir / "npm"
-            fake_npm.write_text(
-                f"#!{sys.executable}\n"
+            make_package_manager_shim(
+                bin_dir, "npm",
                 "import pathlib, sys\n"
                 f"if pathlib.Path({str(flag)!r}).exists():\n"
                 "    cwd = pathlib.Path.cwd()\n"
@@ -808,9 +884,7 @@ class OpenCodeInstallerTests(unittest.TestCase):
                 "t = cwd / 'node_modules/@opencode-ai/plugin'\n"
                 "t.mkdir(parents=True, exist_ok=True)\n"
                 "(t / 'package.json').write_text('{\"version\": \"1.18.4\"}')\n",
-                encoding="utf-8",
             )
-            fake_npm.chmod(0o700)
             environment = os.environ.copy()
             environment["PATH"] = str(bin_dir) + os.pathsep + environment["PATH"]
 
@@ -858,6 +932,7 @@ class OpenCodeInstallerTests(unittest.TestCase):
                 "https://user.example/schema.json",
             )
 
+    @skip_unless_symlink
     def test_symlink_escaping_home_is_refused(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             workspace = Path(temporary)
@@ -873,6 +948,7 @@ class OpenCodeInstallerTests(unittest.TestCase):
             self.assertFalse((outside / "vibe-workflow.ts").exists())
             self.assertEqual(list(outside.iterdir()), [])
 
+    @skip_unless_symlink
     def test_symlinked_special_files_are_refused(self) -> None:
         for name, initial in (
             ("AGENTS.md", "user rules\n"),
@@ -895,6 +971,7 @@ class OpenCodeInstallerTests(unittest.TestCase):
                 self.assertIn("outside the OpenCode home", install.stdout)
                 self.assertEqual(outside.read_text(encoding="utf-8"), initial)
 
+    @skip_unless_symlink
     def test_symlinked_node_modules_is_refused_before_package_manager(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             workspace = Path(temporary)
@@ -905,17 +982,14 @@ class OpenCodeInstallerTests(unittest.TestCase):
             outside.mkdir()
             home.mkdir()
             os.symlink(outside, home / "node_modules")
-            fake_npm = bin_dir / "npm"
-            fake_npm.write_text(
-                f"#!{sys.executable}\n"
+            make_package_manager_shim(
+                bin_dir, "npm",
                 "import pathlib\n"
                 "cwd = pathlib.Path.cwd()\n"
                 "t = cwd / 'node_modules/@opencode-ai/plugin'\n"
                 "t.mkdir(parents=True, exist_ok=True)\n"
                 "(t / 'package.json').write_text('{\"version\": \"1.18.4\"}')\n",
-                encoding="utf-8",
             )
-            fake_npm.chmod(0o700)
             environment = os.environ.copy()
             environment["PATH"] = str(bin_dir) + os.pathsep + environment["PATH"]
 
@@ -927,6 +1001,7 @@ class OpenCodeInstallerTests(unittest.TestCase):
             self.assertEqual(list(outside.iterdir()), [])
             self.assertFalse((home / ".vibe-opencode-installation-state.json").exists())
 
+    @skip_unless_symlink
     def test_symlinked_backup_directory_is_refused(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             workspace = Path(temporary)

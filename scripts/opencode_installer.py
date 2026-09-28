@@ -82,7 +82,43 @@ def read_json(path: Path, default: Any = None) -> Any:
 
 def read_state(home: Path) -> dict[str, Any]:
     value = read_json(state_path(home), {})
-    return value if isinstance(value, dict) else {}
+    if not isinstance(value, dict):
+        return {}
+    return heal_state(value)
+
+
+def heal_state(state: dict[str, Any]) -> dict[str, Any]:
+    """Normalize legacy host-separator keys so an older state file keeps working.
+
+    Reading tolerates the historical spelling and the next write persists the POSIX
+    form, so an existing installation migrates instead of reporting false conflicts.
+    The number of rewritten keys is reported on ``legacy_separator_keys`` so the
+    caller can tell the user a migration happened.
+    """
+    rewritten = 0
+
+    def heal(value: Any) -> Any:
+        nonlocal rewritten
+        if not isinstance(value, str):
+            return value
+        canonical = canonical_relative(value)
+        if canonical is None or canonical == value:
+            return value
+        rewritten += 1
+        return canonical
+
+    managed = state.get("managed_files")
+    if isinstance(managed, dict):
+        state["managed_files"] = {heal(key): digest for key, digest in managed.items()}
+    preserved = state.get("preserved_local")
+    if isinstance(preserved, list):
+        state["preserved_local"] = [heal(item) for item in preserved]
+    created = state.get("created_dirs")
+    if isinstance(created, list):
+        state["created_dirs"] = [heal(item) for item in created]
+    if rewritten:
+        state["legacy_separator_keys"] = rewritten
+    return state
 
 
 def write_json(path: Path, value: Any) -> None:
@@ -101,13 +137,13 @@ def source_assets(root: Path) -> dict[str, Path]:
     for directory in ASSET_DIRECTORIES:
         for path in sorted((surface / directory).rglob("*")):
             if path.is_file() and not any(part in EXCLUDED_NAMES for part in path.parts):
-                assets[str(path.relative_to(surface))] = path
+                assets[path.relative_to(surface).as_posix()] = path
     skills = root / SKILLS_RELATIVE
     for path in sorted(skills.glob("*/SKILL.md")):
-        assets[str(path.relative_to(root))] = path
+        assets[path.relative_to(root).as_posix()] = path
         for extra in sorted(path.parent.rglob("*")):
             if extra.is_file() and not any(part in EXCLUDED_NAMES for part in extra.parts):
-                assets[str(extra.relative_to(root))] = extra
+                assets[extra.relative_to(root).as_posix()] = extra
     return assets
 
 
@@ -122,7 +158,7 @@ def runtime_assets(root: Path) -> dict[str, Path]:
             continue
         if relative.parts and relative.parts[0] == "opencode":
             continue
-        assets[str(relative)] = path
+        assets[relative.as_posix()] = path
     return assets
 
 
@@ -139,8 +175,23 @@ def safe_relative(relative: Any) -> str | None:
     return Path(*parts).as_posix()
 
 
+def canonical_relative(relative: Any) -> str | None:
+    """Return the POSIX contract form of a recorded relative path, or None.
+
+    The installation state is a cross-platform contract whose ``managed_files``,
+    ``preserved_local`` and ``created_dirs`` keys are POSIX relative paths. Older
+    builds recorded the host separator instead, which is not portable: on POSIX a
+    backslash is an ordinary file-name character, so ``agents\\x.md`` would name a
+    different file. A recorded backslash is therefore always a legacy separator and
+    is converted before the safety check, on every platform.
+    """
+    if not isinstance(relative, str):
+        return None
+    return safe_relative(relative.replace("\\", "/"))
+
+
 def destination_for(home: Path, relative: str) -> Path:
-    safe = safe_relative(relative)
+    safe = canonical_relative(relative)
     if safe is None:
         raise RuntimeError(f"unsafe installation path in installation state: {relative!r}")
     target = home / safe
@@ -326,7 +377,7 @@ def validate_state_shape(state: dict[str, Any]) -> None:
         if not isinstance(managed, dict):
             raise RuntimeError("installation state field 'managed_files' is malformed")
         for relative, digest in managed.items():
-            if safe_relative(relative) is None:
+            if canonical_relative(relative) is None:
                 raise RuntimeError(f"installation state has an unsafe managed path: {relative!r}")
             if not isinstance(digest, str):
                 raise RuntimeError(f"installation state has a non-string hash for {relative!r}")
@@ -339,8 +390,33 @@ def validate_state_shape(state: dict[str, Any]) -> None:
     ):
         raise RuntimeError("installation state field 'created_dirs' is malformed")
     for relative in created or []:
-        if safe_relative(relative) is None:
+        if canonical_relative(relative) is None:
             raise RuntimeError(f"installation state has an unsafe directory path: {relative!r}")
+
+
+def assert_canonical_state(state: dict[str, Any]) -> None:
+    """Refuse to persist a state file whose keys are not in the POSIX contract form.
+
+    Reading tolerates legacy host-separator keys because they are normalized on
+    read, but writing must never reintroduce them: a Windows-only spelling is not
+    portable and would name a different file on a POSIX host. A regression here is a
+    loud error rather than a silently malformed installation state.
+    """
+    fields: list[tuple[str, Iterable[Any]]] = []
+    for name in ("managed_files", "preserved_local", "created_dirs"):
+        value = state.get(name)
+        if isinstance(value, dict):
+            fields.append((name, value.keys()))
+        elif isinstance(value, list):
+            fields.append((name, value))
+    for name, keys in fields:
+        for key in keys:
+            canonical = canonical_relative(key)
+            if canonical is None or canonical != key:
+                raise RuntimeError(
+                    "refusing to write a non-POSIX relative path into installation "
+                    f"state field {name!r}: {key!r}"
+                )
 
 
 def plan_sync(
@@ -357,6 +433,10 @@ def plan_sync(
     conflicts: list[str] = []
     preserved: list[str] = []
     managed: dict[str, str] = {}
+    # A caller may hand us a state that predates the POSIX key contract. Compare on
+    # the contract form so legacy keys migrate instead of looking like brand-new
+    # files (which would be reported as a pre-existing conflict).
+    previous = {(canonical_relative(key) or key): digest for key, digest in previous.items()}
     for key, source in sources.items():
         destination = destination_for(home, key)
         current_hash = sha256_file(destination) if destination.is_file() else None
@@ -847,12 +927,18 @@ def install_or_update(
             "opencode_config": config_ownership,
             "package_json": package_ownership,
         }
+        assert_canonical_state(state)
         write_json(state_path(home), state)
         verify(root, home)
     except Exception:
         rollback_transaction(home, snapshot)
         raise
 
+    if old_state.get("legacy_separator_keys"):
+        print(
+            f"[!] Normalized {old_state['legacy_separator_keys']} legacy path key(s) "
+            "to the POSIX installation-state contract."
+        )
     for relative in preserved:
         print(f"[!] PRESERVED local modification: {relative}")
     for note in config_ownership.get("notes") or []:
