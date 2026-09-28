@@ -15,9 +15,14 @@ import uuid
 ROOT = Path(__file__).resolve().parents[1]
 RUNTIME = ROOT / "runtime"
 VIBE_SH = RUNTIME / "vibe.sh"
+if str(Path(__file__).resolve().parent) not in sys.path:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
 if str(RUNTIME / "scripts") not in sys.path:
     sys.path.insert(0, str(RUNTIME / "scripts"))
 
+# The single bash-capability probe lives in the shared platform helper so the
+# installer test reuses exactly the same WSL-stub rejection logic.
+from _platform import usable_posix_bash  # noqa: E402
 
 
 def run_git(root: Path, *arguments: str) -> str:
@@ -34,34 +39,6 @@ def run_vibe(root: Path, *arguments: str) -> subprocess.CompletedProcess:
         [sys.executable, str(RUNTIME / "scripts/vibe.py"), "--root", str(root), *arguments],
         capture_output=True, text=True,
     )
-
-
-def usable_posix_bash() -> str | None:
-    """Return a bash that can run the launcher with native paths, or None.
-
-    On Windows the PATH normally holds the WSL stub. It runs commands inside a
-    Linux namespace, so a native Windows path argument never resolves and the
-    launcher cannot be exercised through it without separate wslpath translation.
-    That is a host limitation, not a launcher defect, so the bash check is
-    skipped instead of reported as a failure.
-    """
-    bash = shutil.which("bash")
-    if bash is None:
-        return None
-    probe = subprocess.run(
-        [bash, "-c", "printf vibe-bash-probe"],
-        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, check=False,
-    )
-    if probe.returncode != 0 or probe.stdout != b"vibe-bash-probe":
-        return None
-    # A bash inside WSL exposes wslpath; it cannot take a native Windows path.
-    in_wsl = subprocess.run(
-        [bash, "-c", "command -v wslpath"],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False,
-    )
-    if in_wsl.returncode == 0:
-        return None
-    return bash
 
 
 class CrossPlatformSurfaceTests(unittest.TestCase):

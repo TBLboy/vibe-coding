@@ -149,9 +149,37 @@ Project Log format 2 是唯一受支持的格式；日常操作与文档示例�
 
 ## 平台范围
 
-- **支持**：Linux / WSL。
-- **延期**：Windows（PowerShell 5.1/7 实机矩阵未验证，见
-  工作目录 `.project-log/docs/task-043-cross-platform-acceptance.md`）。
+| 平台 | 回归套件实测 | 状态 |
+|---|---|---|
+| Linux | `OK` | 支持 |
+| WSL | `OK` | 支持 |
+| Windows（PowerShell 5.1 + Python 3.11） | `Ran 250 tests` / `OK`（`skipped` 随宿主能力在 5–8 之间） | 支持（见下列限制） |
+
+跳过的数量取决于宿主是否具备符号链接特权、以及 `PATH` 上的 `bash` 是否可消费原生路径：
+本机（`bash` 为 WSL 存根、无符号链接特权）为 `skipped=8`；把 `C:\Program Files\Git\bin`
+前置到 `PATH` 后为 `skipped=5`。两种情形都是 `OK`，0 failures / 0 errors。
+
+CI 在 `ubuntu-latest` 与 `windows-latest` 上运行与本地完全相同的命令
+（`.github/workflows/tests.yml`）：
+
+```bash
+python runtime/scripts/validate_package.py --root .
+python -m unittest discover -s tests -p "test_*.py"
+```
+
+已知平台限制——能力缺口一律表现为**带原因跳过的用例**，而不是失败：
+
+- **符号链接特权**：Windows 非特权会话创建 symlink 会报 `WinError 1314`，四项 symlink
+  用例跳过。开启开发者模式或以管理员会话运行即可真正执行它们。
+- **`bash` 解析**：若 `bash` 解析到 WSL 存根
+  （`%LOCALAPPDATA%\Microsoft\WindowsApps\bash.exe`），它无法接收原生 Windows 路径，
+  相关用例跳过；把 `C:\Program Files\Git\bin` 前置到 `PATH` 即可执行。
+- **POSIX 权限位**：Windows 没有 POSIX 可执行位，因此 `bin/vibe-python` 的可执行位断言
+  只在 POSIX 上生效（文件存在性在所有平台都断言）。
+
+安装状态文件的键（`managed_files`、`preserved_local`、`created_dirs`）统一为 **POSIX 相对
+路径**，这是跨平台契约：早期版本写入的主机分隔符键在读取时归一化，并在下一次写入时自动迁移，
+无需手工处理，也不会被误报为冲突。
 
 ## 客户端差异与保留的 codex 面
 

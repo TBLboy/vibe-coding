@@ -5,6 +5,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -13,9 +14,10 @@ from string import Template
 
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN = ROOT / "runtime/opencode/plugins/vibe-workflow.ts"
-GLOBAL_NODE_MODULES = Path(os.environ.get("OPENCODE_NODE_MODULES", Path.home() / ".config/opencode/node_modules"))
 NODE = shutil.which("node")
-PLUGIN_PACKAGE = GLOBAL_NODE_MODULES / "@opencode-ai/plugin/package.json"
+if str(Path(__file__).resolve().parent) not in sys.path:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _platform import make_opencode_ai_node_modules  # noqa: E402
 
 PROBE = r"""
 import { VibeWorkflowPlugin } from $plugin_url
@@ -61,7 +63,6 @@ process.stdout.write(JSON.stringify({
 
 
 @unittest.skipUnless(NODE, "Node.js is required for the OpenCode plugin test")
-@unittest.skipUnless(PLUGIN_PACKAGE.is_file(), "the global @opencode-ai/plugin package is required")
 class OpenCodePluginTests(unittest.TestCase):
     def test_plugin_declares_bounded_hooks_and_avoids_unsafe_actions(self) -> None:
         text = PLUGIN.read_text(encoding="utf-8")
@@ -90,7 +91,7 @@ class OpenCodePluginTests(unittest.TestCase):
     def test_plugin_loads_and_bridges_project_state(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            os.symlink(GLOBAL_NODE_MODULES, root / "node_modules")
+            make_opencode_ai_node_modules(root)
             runtime = root / "runtime"
             (runtime / "scripts").mkdir(parents=True)
             stub = runtime / "scripts/vibe.py"
@@ -158,7 +159,7 @@ class OpenCodePluginTests(unittest.TestCase):
     def test_plugin_degrades_safely_without_a_runtime(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            os.symlink(GLOBAL_NODE_MODULES, root / "node_modules")
+            make_opencode_ai_node_modules(root)
             project = root / "project"
             (project / ".project-log").mkdir(parents=True)
             plugin = root / "vibe-workflow.ts"
@@ -180,6 +181,9 @@ class OpenCodePluginTests(unittest.TestCase):
                 environment.pop(key, None)
             environment.update({
                 "HOME": str(root / "home"),
+                # node:os homedir() ignores HOME on Windows and reads USERPROFILE,
+                # so pin it too or the probe would resolve the real ~/.codex runtime.
+                "USERPROFILE": str(root / "home"),
                 "OPENCODE_CONFIG_DIR": str(root / "config"),
             })
             result = subprocess.run(

@@ -6,15 +6,24 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+from urllib.parse import urlparse
+from urllib.request import url2pathname
 
 import yaml
 
 
 ROOT = Path(__file__).resolve().parents[1]
 OPENCODE = ROOT / "runtime" / "opencode"
+# Windows ships the CLI as `opencode.CMD`; CreateProcess does not apply PATHEXT
+# to a bare "opencode", so resolve the real launcher once and pass its path.
+OPENCODE_CLI = shutil.which("opencode")
+if str(Path(__file__).resolve().parent) not in sys.path:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _platform import make_opencode_ai_node_modules  # noqa: E402
 EXPECTED_AGENTS = {
     "vibe-main",
     "business-analyst",
@@ -167,7 +176,10 @@ class OpenCodeStaticSurfaceTests(unittest.TestCase):
             self.assertNotIn("python3 -m unittest*", allow, role)
         wrapper = OPENCODE / "bin" / "vibe-python"
         self.assertTrue(wrapper.is_file(), "bin/vibe-python entry point is missing")
-        self.assertTrue(wrapper.stat().st_mode & 0o111, "bin/vibe-python must be executable")
+        # Windows has no POSIX permission bits, so the executable-bit check is
+        # POSIX-only; the file-exists assertion above still runs everywhere.
+        if os.name == "posix":
+            self.assertTrue(wrapper.stat().st_mode & 0o111, "bin/vibe-python must be executable")
 
     def test_commands_are_thin_primary_agent_entrypoints(self) -> None:
         paths = sorted((OPENCODE / "commands").glob("*.md"))
@@ -275,7 +287,7 @@ class OpenCodeStaticSurfaceTests(unittest.TestCase):
             self.assertEqual(metadata.get("compatibility"), "opencode", path)
 
 
-@unittest.skipUnless(shutil.which("opencode"), "OpenCode CLI is required")
+@unittest.skipUnless(OPENCODE_CLI, "OpenCode CLI is required")
 class OpenCodeIsolatedLoadTests(unittest.TestCase):
     def test_isolated_config_loads_agents_commands_and_skills(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -284,20 +296,12 @@ class OpenCodeIsolatedLoadTests(unittest.TestCase):
             home = root / "home"
             shutil.copytree(OPENCODE, config)
             shutil.copytree(ROOT / "skills", config / "skills")
-            global_node_modules = Path(
-                os.environ.get("OPENCODE_NODE_MODULES", Path.home() / ".config/opencode/node_modules")
-            )
-            plugin_package = global_node_modules / "@opencode-ai/plugin"
+            # A self-contained node_modules shim keeps the isolated config load from
+            # depending on this machine's global ~/.config/opencode (and avoids the
+            # symlink privilege Windows does not grant).
+            make_opencode_ai_node_modules(config)
             for relative in (".config", ".local/share", ".local/state", ".cache"):
                 (home / relative).mkdir(parents=True, exist_ok=True)
-            if plugin_package.is_dir():
-                node_modules = config / "node_modules"
-                node_modules.mkdir()
-                (node_modules / "@opencode-ai").mkdir()
-                os.symlink(plugin_package, node_modules / "@opencode-ai/plugin")
-                sdk_package = global_node_modules / "@opencode-ai/sdk"
-                if sdk_package.is_dir():
-                    os.symlink(sdk_package, node_modules / "@opencode-ai/sdk")
 
             environment = os.environ.copy()
             environment.update({
@@ -310,7 +314,7 @@ class OpenCodeIsolatedLoadTests(unittest.TestCase):
             })
 
             resolved = subprocess.run(
-                ["opencode", "debug", "config", "--pure"],
+                [OPENCODE_CLI, "debug", "config", "--pure"],
                 env=environment, text=True, errors="replace", stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT, check=False,
             )
@@ -326,10 +330,10 @@ class OpenCodeIsolatedLoadTests(unittest.TestCase):
             )
             local_plugins = [item for item in plugins if not str(item).startswith("@")]
             self.assertEqual(len(local_plugins), 1, plugins)
-            self.assertTrue(
-                Path(str(local_plugins[0]).removeprefix("file://")).is_absolute(),
-                plugins,
-            )
+            # A file:// URI must be converted with url2pathname: on Windows a
+            # naive removeprefix("file://") leaves "/C:/..." which is not absolute.
+            local_plugin_path = url2pathname(urlparse(str(local_plugins[0])).path)
+            self.assertTrue(Path(local_plugin_path).is_absolute(), plugins)
 
             # Non-pure debug agent performs the real plugin load in OpenCode.
             # Runtime plugin import/execution is covered by tests/test_opencode_plugin.py and the
@@ -337,7 +341,7 @@ class OpenCodeIsolatedLoadTests(unittest.TestCase):
             # real model belongs to TASK-075.
 
             listed = subprocess.run(
-                ["opencode", "debug", "skill", "--pure"],
+                [OPENCODE_CLI, "debug", "skill", "--pure"],
                 env=environment, text=True, errors="replace", stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT, check=False,
             )
@@ -367,7 +371,7 @@ class OpenCodeIsolatedLoadTests(unittest.TestCase):
                 round_environment = dict(environment)
                 round_environment["OPENCODE_CONFIG_DIR"] = str(round_config)
                 loaded = subprocess.run(
-                    ["opencode", "debug", "skill", "--pure"],
+                    [OPENCODE_CLI, "debug", "skill", "--pure"],
                     env=round_environment, text=True, errors="replace", stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT, check=False,
                 )
@@ -381,7 +385,7 @@ class OpenCodeIsolatedLoadTests(unittest.TestCase):
 
             for agent in sorted(EXPECTED_AGENTS):
                 loaded = subprocess.run(
-                    ["opencode", "debug", "agent", agent, "--pure"],
+                    [OPENCODE_CLI, "debug", "agent", agent, "--pure"],
                     env=environment, text=True, errors="replace", stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT, check=False,
                 )
@@ -392,7 +396,7 @@ class OpenCodeIsolatedLoadTests(unittest.TestCase):
                 self.assertEqual(payload["mode"], expected_mode)
 
             reviewer = json.loads(subprocess.run(
-                ["opencode", "debug", "agent", "verification-reviewer", "--pure"],
+                [OPENCODE_CLI, "debug", "agent", "verification-reviewer", "--pure"],
                 env=environment, text=True, errors="replace", stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT, check=False,
             ).stdout)
