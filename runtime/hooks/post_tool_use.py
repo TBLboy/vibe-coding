@@ -16,6 +16,15 @@ WRITE_TOOL_HINTS = ("apply_patch", "edit", "write", "shell", "exec", "command")
 
 
 def main() -> int:
+    # A Windows console defaults to a legacy codepage (for example cp1252); printing this
+    # hook's non-ASCII JSON output there raises UnicodeEncodeError. The output contract is
+    # UTF-8 on every platform, so force the process streams before anything is printed.
+    # Only stdout/stderr are touched, never stdin, so the hook's stdin JSON protocol is
+    # unchanged. The getattr check tolerates a harness with no reconfigure().
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            reconfigure(encoding="utf-8")
     payload = read_input()
     root = ensure_project(payload)
     from state_context import is_transactional

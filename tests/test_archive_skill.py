@@ -99,10 +99,37 @@ class ArchiveSkillTests(unittest.TestCase):
         self.temporary.cleanup()
 
     def archive(self, env: dict | None = None) -> subprocess.CompletedProcess:
+        # The archive CLI's output contract is UTF-8 on every platform, so decode it
+        # explicitly. Relying on the parent locale would mis-decode the non-ASCII
+        # ``工程记录`` in error messages on a legacy Windows console and report a
+        # correct archive failure as a test failure.
         return subprocess.run(
             [sys.executable, str(SCRIPT), "--project-root", str(self.work), "--kb", str(self.kb)],
-            text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False,
+            text=True, encoding="utf-8",
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False,
             env=None if env is None else {**os.environ, **env},
+        )
+
+    def legacy_console_environment(self) -> dict:
+        """A child environment that reproduces a legacy Windows console on any platform.
+
+        ``PYTHONIOENCODING=cp1252`` forces the child's std streams to the codepage the
+        GitHub ``windows-latest`` runner uses, and ``PYTHONUTF8`` is *removed* so the
+        parent's UTF-8 mode cannot mask the defect. The archive then has to encode the
+        non-ASCII knowledge-base directory ``工程记录`` into a legacy stream.
+        """
+        environment = {
+            key: value for key, value in os.environ.items() if key.upper() != "PYTHONUTF8"
+        }
+        environment["PYTHONIOENCODING"] = "cp1252"
+        return environment
+
+    def archive_legacy_console(self) -> subprocess.CompletedProcess:
+        """Run the archive and capture raw bytes so the output encoding is asserted."""
+        return subprocess.run(
+            [sys.executable, str(SCRIPT), "--project-root", str(self.work), "--kb", str(self.kb)],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False,
+            env=self.legacy_console_environment(),
         )
 
     def commits(self) -> int:
@@ -175,6 +202,15 @@ class ArchiveSkillTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('"project": "work"', result.stdout)
         self.assertTrue((self.kb / "工程记录" / "work").is_dir())
+
+    def test_archive_output_is_utf8_on_a_legacy_console(self) -> None:
+        """A non-UTF-8 console must not change the archive's UTF-8 output contract."""
+        result = self.archive_legacy_console()
+        stdout = result.stdout.decode("utf-8")
+        stderr = result.stderr.decode("utf-8")
+
+        self.assertEqual(result.returncode, 0, stderr)
+        self.assertIn("工程记录", stdout)
 
     # -- TASK-079: a silent archive must fail loudly ---------------------------------
 
