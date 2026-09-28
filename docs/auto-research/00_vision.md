@@ -128,6 +128,6 @@ Idea → Mathematical Structure → Theorem → Proof → Falsification → Simu
 
 ## 10. 本文件涉及的开放问题
 
-- `OQ-01` 初始垂直领域的收窄程度（Koopman 单点 vs 更宽的控制理论）。
+- `OQ-01` 初始垂直领域的收窄程度（Koopman 算子/非线性控制/数据驱动控制这一领域 vs 更宽的控制理论）。注意：CCK 只是该领域内一篇参考文献，用于举例创新模式，不是研究范围。
 - `OQ-07` MVP-0 的量化验收阈值与基准集。
 - `OQ-09` 是否把"人类 copilot 模式"设为 MVP-0 的默认形态（任务书第 16.2 节提到 human copilot 与 autonomous 可共存）。

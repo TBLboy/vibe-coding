@@ -48,7 +48,7 @@ EXP-xxx
   provenance*
 ```
 
-**Common baselines（控制/Koopman 领域，任务书第 9 节）**：DMDc、standard Koopman with control、bilinear Koopman、original CCK、proposed。
+**Common baselines（控制/Koopman 领域，任务书第 9 节）**：DMDc、standard Koopman with control、bilinear Koopman、original CCK、proposed。注意：CCK 只是该领域内一篇参考文献，作为 baseline 之一出现，**不是**必须复现或必须超越的对象。
 
 **Common metrics**：one-step prediction error、rollout prediction error、closed-loop tracking error、LQR/MPC cost、robustness、computation time。
 
