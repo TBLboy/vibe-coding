@@ -12,6 +12,8 @@ Archiving is a merge, never a replacement:
 * A silent archive is treated as a failure: the ledger staged in the knowledge base
   index must be byte-identical to the local ledger, so an ignored, skipped, or
   otherwise unstaged ledger can never be reported as archived.
+* The work folder's ``AGENTS.md`` is archived beside the Project Log it governs, so a
+  project's operating rules travel with its history.
 * Re-running the archive is idempotent.
 """
 from __future__ import annotations
@@ -34,6 +36,8 @@ PROXY_CONFIG = SKILL_DIR / "scripts" / "git_proxy.conf"
 PLACEHOLDER = "__UNSET__"
 LEDGER_RELATIVE = Path("ledger") / "v1" / "ledger.jsonl"
 MARKER = "state-format.json"
+# The project's own operating rules, archived beside the Project Log it governs.
+AGENTS_MARKER = "AGENTS.md"
 # Machine-local or derivable: never archived.
 EXCLUDED_NAMES = {".state", ".git", ".migration", "new-writes", "ledger"}
 # Authorities a file:// push target may carry. Anything else is a form whose meaning
@@ -222,6 +226,37 @@ def copy_project_log(src: Path, dst: Path) -> dict:
         "files": sum(1 for item in dst.rglob("*") if item.is_file()),
         "ledger": str(dst / LEDGER_RELATIVE),
     }
+
+
+def copy_agents_md(root: Path, project_directory: Path) -> str:
+    """Mirror the work folder's AGENTS.md beside the archived Project Log.
+
+    Only the AGENTS.md at the same level as ``.project-log`` belongs to this project; a
+    file inside the log directory is already carried by ``copy_project_log``, and nothing
+    above the work folder is read. The local file is the source of truth, so a changed
+    AGENTS.md overwrites the knowledge base copy. A missing local file reports ``absent``
+    and leaves any existing knowledge base copy in place, because the archive merges and
+    never deletes.
+    """
+    source = root / AGENTS_MARKER
+    if not source.is_file():
+        return "absent"
+    target = project_directory / AGENTS_MARKER
+    target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(source, target)
+    return "archived"
+
+
+def normalised_newlines(data: bytes) -> bytes:
+    """Bytes with CRLF collapsed to LF, for comparing a document across a checkout.
+
+    The Project Log ledger must reach the remote as the exact bytes written locally, so it
+    is compared strictly. A document does not carry that contract: a knowledge base with
+    ``core.autocrlf`` stores LF for a CRLF file, which is a faithful archive, not an
+    alteration. Collapsing both sides still fails on truncated, reordered or otherwise
+    different content.
+    """
+    return data.replace(b"\r\n", b"\n")
 
 
 def ignored_rule(kb_root: Path, relative: str) -> str | None:
@@ -563,6 +598,7 @@ def git_push(
     project_name: str,
     local_ledger: Path,
     target: tuple[str, str, list[str]] | None = None,
+    local_agents: Path | None = None,
 ) -> str:
     """Stage, commit, and push only this project's archive directory.
 
@@ -574,6 +610,9 @@ def git_push(
 
     ``target`` is the already-validated ``push_target`` result; callers pass it so an
     unusable upstream is rejected before the knowledge base worktree is modified.
+    ``local_agents`` is the work folder's AGENTS.md when one was copied; it is held to the
+    same "no silent archive" rule, except that end-of-line conversion is tolerated because
+    a document, unlike the ledger, has no byte-exact contract.
     """
     # Git pathspecs and the ``:path`` / ``HEAD:path`` revision syntax take POSIX
     # separators: a backslash from ``str(Path(...))`` on Windows is read as an escape,
@@ -583,6 +622,7 @@ def git_push(
     ledger_relative = (
         Path("工程记录") / project_name / ".project-log" / LEDGER_RELATIVE
     ).as_posix()
+    agents_relative = (Path("工程记录") / project_name / AGENTS_MARKER).as_posix()
     remote, remote_ref, urls = target if target is not None else push_target(kb_root)
     rule = ignored_rule(kb_root, ledger_relative)
     if rule is not None:
@@ -594,6 +634,16 @@ def git_push(
             f"  !{relative}/.project-log/**\n"
             "then re-run the archive"
         )
+    if local_agents is not None:
+        agents_rule = ignored_rule(kb_root, agents_relative)
+        if agents_rule is not None:
+            raise ArchiveError(
+                "the knowledge base ignores the archived AGENTS.md, so the project rules "
+                f"would never reach the remote:\n  {agents_rule}\n"
+                "add a negation for this project to the knowledge base .gitignore:\n"
+                f"  !{agents_relative}\n"
+                "then re-run the archive"
+            )
     completed = _run_git(
         ["git", "-C", str(kb_root), "add", "-A", "--", relative],
         capture_output=True, text=True, check=False,
@@ -605,6 +655,15 @@ def git_push(
         local_bytes = local_ledger.read_bytes()
     except OSError as error:
         raise ArchiveError(f"cannot read the local ledger {local_ledger}: {error}") from error
+
+    local_agents_bytes = None
+    if local_agents is not None:
+        try:
+            local_agents_bytes = local_agents.read_bytes()
+        except OSError as error:
+            raise ArchiveError(
+                f"cannot read the local AGENTS.md {local_agents}: {error}"
+            ) from error
 
     staged_bytes = blob_bytes(kb_root, f":{ledger_relative}")
     if staged_bytes is None:
@@ -623,6 +682,25 @@ def git_push(
             f"  git -C {kb_root} update-index --no-assume-unchanged -- {ledger_relative}\n"
             f"  # a clean filter or text/eol conversion on {ledger_relative} must be removed"
         )
+
+    if local_agents_bytes is not None:
+        staged_agents = blob_bytes(kb_root, f":{agents_relative}")
+        if staged_agents is None:
+            raise ArchiveError(
+                f"the knowledge base index does not hold {agents_relative}, so the project "
+                "rules would never reach the remote. Check that the knowledge base tracks "
+                "the file:\n"
+                f"  git -C {kb_root} check-ignore -v -- {agents_relative}\n"
+                f"  git -C {kb_root} ls-files --error-unmatch -- {agents_relative}"
+            )
+        if normalised_newlines(staged_agents) != normalised_newlines(local_agents_bytes):
+            raise ArchiveError(
+                "the staged AGENTS.md does not match the local one, so the archive would "
+                "publish different project rules. Common causes and fixes:\n"
+                f"  git -C {kb_root} update-index --no-skip-worktree -- {agents_relative}\n"
+                f"  git -C {kb_root} update-index --no-assume-unchanged -- {agents_relative}\n"
+                f"  # a clean filter that rewrites {agents_relative} must be removed"
+            )
 
     pending = _run_git(
         ["git", "-C", str(kb_root), "diff", "--cached", "--quiet", "--", relative],
@@ -672,6 +750,21 @@ def git_push(
             "(that reset is only safe while HEAD is the archive commit; it is now "
             f"{archive_commit})."
         )
+    if local_agents_bytes is not None:
+        head_agents = blob_bytes(kb_root, f"HEAD:{agents_relative}")
+        if head_agents is None or normalised_newlines(head_agents) != normalised_newlines(
+            local_agents_bytes
+        ):
+            raise ArchiveError(
+                "the committed AGENTS.md does not match the local one; refusing to push. "
+                "Inspect with:\n"
+                f"  git -C {kb_root} log --oneline -2\n"
+                f"  git -C {kb_root} cat-file blob HEAD:{agents_relative}\n"
+                "If HEAD is still the archive commit, undo it with:\n"
+                f"  git -C {kb_root} reset --soft {parent}\n"
+                "(that reset is only safe while HEAD is the archive commit; it is now "
+                f"{archive_commit})."
+            )
     if revision(kb_root, "HEAD") != archive_commit:
         raise ArchiveError(
             "HEAD moved after the archive commit, so the revision that was verified is no "
@@ -692,7 +785,8 @@ def archive(project_root: Path, kb_base: Path) -> dict:
 
     # The project name is the work folder name, exactly as the user specified.
     project_name = root.name
-    destination = engineering / project_name / ".project-log"
+    project_directory = engineering / project_name
+    destination = project_directory / ".project-log"
 
     local_id = read_project_id(source)
     known_id = read_project_id(destination)
@@ -722,13 +816,21 @@ def archive(project_root: Path, kb_base: Path) -> dict:
     # 工程记录/ directory behind.
     target = push_target(kb_root)
     copied = copy_project_log(source, destination)
-    pushed = git_push(kb_root, project_name, source / LEDGER_RELATIVE, target)
+    agents_md = copy_agents_md(root, project_directory)
+    pushed = git_push(
+        kb_root,
+        project_name,
+        source / LEDGER_RELATIVE,
+        target,
+        local_agents=root / AGENTS_MARKER if agents_md == "archived" else None,
+    )
     return {
         "project": project_name,
         "project_id": local_id,
         "destination": str(destination),
         "ledger": ledger,
         "files": copied["files"],
+        "agents_md": agents_md,
         "git": pushed,
     }
 

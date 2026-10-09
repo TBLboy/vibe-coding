@@ -1,6 +1,6 @@
 ---
 name: a-project-log-archive
-description: Archive the current project's .project-log to the centralized knowledge base for later analysis. Use when the user wants to save progress, archive records, or sync project logs.
+description: Archive the current project's .project-log and the same-level AGENTS.md to the centralized knowledge base for later analysis. Use when the user wants to save progress, archive records, or sync project logs.
 license: MIT
 compatibility: opencode
 metadata:
@@ -10,7 +10,7 @@ metadata:
 
 # Project Log Archive
 
-Archive the current project's `.project-log/` into the knowledge base and push the knowledge base to remote.
+Archive the current project's `.project-log/` and the work folder's `AGENTS.md` into the knowledge base and push the knowledge base to remote.
 
 ## When to Use
 
@@ -47,18 +47,23 @@ before and uses its own configuration plus the inherited environment.
 5. Verify the KB ledger is an exact prefix of the local ledger, so only new commands are added.
 6. Merge the local `.project-log/` into `<kb>/工程记录/<project-name>/.project-log/`,
    excluding `.state/`, `.git`, `.migration/`, `legacy/new-writes/` and copying the ledger separately.
-7. Stage only `工程记录/<project-name>`, verify the staged ledger is byte-identical to the
+7. Mirror the work folder's `AGENTS.md` into `<kb>/工程记录/<project-name>/AGENTS.md`. Only
+   the file at the same level as `.project-log/` is read: nothing inside the log directory
+   (already carried by step 6) and nothing above the work folder. A missing local file
+   archives nothing and leaves any existing knowledge base copy in place, because the
+   archive merges and never deletes.
+8. Stage only `工程记录/<project-name>`, verify the staged ledger is byte-identical to the
    local ledger, then `git commit --only -- 工程记录/<project-name>`, re-verify the
    committed blob, and push `HEAD` to the checked-out branch's upstream ref with an
    explicit refspec.
-8. Fail loudly instead of reporting `no-changes` whenever either blob differs from the
+9. Fail loudly instead of reporting `no-changes` whenever either blob differs from the
    local ledger: an ignored, `skip-worktree`, or `assume-unchanged` ledger keeps the index
    stale while unrelated files still stage, and a content filter or end-of-line
    conversion rewrites the ledger on the way into Git. Both would otherwise be reported
    as a successful archive.
-9. Fail unless **every** push URL of that remote reports the archived revision after the
-   push, so a remote hook that rewrites or rejects the ref cannot be mistaken for a
-   successful archive.
+10. Fail unless **every** push URL of that remote reports the archived revision after the
+    push, so a remote hook that rewrites or rejects the ref cannot be mistaken for a
+    successful archive.
 
 Re-running the archive is idempotent: unchanged logs produce no commit.
 
@@ -72,6 +77,17 @@ python3 "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/skills/a-project-log-arc
 ## Safety
 
 - Only copies directories containing `.project-log/`.
+- Archives the work folder's `AGENTS.md` only when it sits at the same level as
+  `.project-log/`: a log-level `AGENTS.md` stays part of the log copy, and no file above the
+  work folder is read. A project without one archives without it and reports
+  `"agents_md": "absent"`, and removing the local file never deletes the archived copy.
+- Refuses when the KB `.gitignore` actually excludes the archived `AGENTS.md`, and prints the
+  matching rule plus the negation line to add, so the project's rules cannot silently stay
+  out of the archive.
+- Compares the archived `AGENTS.md` with the local file after collapsing CRLF to LF: a
+  knowledge base with `core.autocrlf` stores LF for a CRLF document, which is a faithful
+  archive, while truncated or otherwise different content still fails. The ledger keeps its
+  strict byte-for-byte contract.
 - Refuses when the KB holds commands the local ledger is missing; run the
   align-project-progress skill first so the two histories are merged.
 - Refuses when the KB `project_id` differs from the local one, so two unrelated

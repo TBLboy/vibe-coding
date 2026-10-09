@@ -203,6 +203,118 @@ class ArchiveSkillTests(unittest.TestCase):
         self.assertIn('"project": "work"', result.stdout)
         self.assertTrue((self.kb / "工程记录" / "work").is_dir())
 
+    # -- AGENTS.md: the work folder's rules travel with its Project Log ----------------
+
+    @property
+    def archived_agents(self) -> Path:
+        return self.kb / "工程记录" / "work" / "AGENTS.md"
+
+    def write_agents(self, text: str = "# work rules\n") -> None:
+        (self.work / "AGENTS.md").write_text(text, encoding="utf-8", newline="\n")
+
+    def remote_has_agents(self) -> bool:
+        completed = subprocess.run(
+            [
+                "git", "--git-dir", str(self.remote), "cat-file", "-e",
+                "HEAD:工程记录/work/AGENTS.md",
+            ],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False,
+        )
+        return completed.returncode == 0
+
+    def test_archive_copies_the_agents_md_beside_the_project_log(self) -> None:
+        self.write_agents("# work rules\n")
+
+        result = self.archive()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.archived_agents.read_text(encoding="utf-8"), "# work rules\n")
+        self.assertIn('"agents_md": "archived"', result.stdout)
+
+    def test_archive_without_an_agents_md_reports_absent(self) -> None:
+        result = self.archive()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(self.archived_agents.exists())
+        self.assertIn('"agents_md": "absent"', result.stdout)
+
+    def test_archive_publishes_the_agents_md_to_the_remote(self) -> None:
+        self.write_agents("# work rules\n")
+
+        self.assertEqual(self.archive().returncode, 0)
+
+        self.assertTrue(self.remote_has_agents())
+
+    def test_archive_refreshes_a_changed_agents_md(self) -> None:
+        self.write_agents("# v1\n")
+        self.assertEqual(self.archive().returncode, 0)
+
+        self.write_agents("# v2\n")
+        result = self.archive()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.archived_agents.read_text(encoding="utf-8"), "# v2\n")
+
+    def test_archive_keeps_an_archived_agents_md_when_the_local_one_is_gone(self) -> None:
+        """The archive merges: a removed local file must not delete the knowledge base copy."""
+        self.write_agents("# work rules\n")
+        self.assertEqual(self.archive().returncode, 0)
+        (self.work / "AGENTS.md").unlink()
+
+        result = self.archive()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(self.archived_agents.is_file())
+        self.assertIn('"agents_md": "absent"', result.stdout)
+
+    def test_archive_accepts_a_crlf_agents_md(self) -> None:
+        """A knowledge base with core.autocrlf stores LF; that is a faithful archive."""
+        (self.work / "AGENTS.md").write_bytes(b"# rules\r\nline\r\n")
+
+        result = self.archive()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            self.archived_agents.read_bytes().replace(b"\r\n", b"\n"), b"# rules\nline\n"
+        )
+
+    def test_archiving_an_unchanged_agents_md_is_idempotent(self) -> None:
+        self.write_agents("# work rules\n")
+        self.assertEqual(self.archive().returncode, 0)
+        before = self.commits()
+
+        result = self.archive()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.commits(), before)
+        self.assertIn("no-changes", result.stdout)
+
+    def test_archive_refuses_when_the_agents_md_is_ignored(self) -> None:
+        self.write_agents("# work rules\n")
+        (self.kb / ".gitignore").write_text("AGENTS.md\n", encoding="utf-8")
+        subprocess.run(["git", "-C", str(self.kb), "add", "-A"], check=True)
+        subprocess.run(
+            ["git", "-C", str(self.kb), "commit", "-qm", "ignore agents files"], check=True
+        )
+        before = self.commits()
+
+        result = self.archive()
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("ignores the archived AGENTS.md", result.stderr)
+        self.assertIn("!工程记录/work/AGENTS.md", result.stderr)
+        self.assertEqual(self.commits(), before)
+
+    def test_archive_archives_only_the_same_layer_agents_md(self) -> None:
+        """A log-level AGENTS.md belongs to the log copy, not to the project rules file."""
+        (self.log / "AGENTS.md").write_text("# inner\n", encoding="utf-8")
+
+        result = self.archive()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(self.archived_agents.exists())
+        self.assertTrue((self.archived / "AGENTS.md").is_file())
+
     def test_archive_output_is_utf8_on_a_legacy_console(self) -> None:
         """A non-UTF-8 console must not change the archive's UTF-8 output contract."""
         result = self.archive_legacy_console()
