@@ -52,7 +52,8 @@
 
 ## Project Log 长文档组织
 
-- `current-session.md` 与 `progress.md` 是面向人的快速摘要：最新在最上，顶部“当前状态”快照每次覆盖更新，超限时旧段落归档到 `.project-log/docs/archive/`。
+- `.project-log/current-session.md` 与 `.project-log/progress.md` 是**面向人的手工摘要**：最新在最上，顶部“当前状态”快照每次覆盖更新，超限时旧段落归档到 `.project-log/docs/archive/`（维护约定见 `a-project-log`）。
+- `vibe render` 生成的视图在状态库旁的 `generated/` 目录下（含 `current-session.md`、`progress.md`、`handoff.md`），以 `CURRENT.json` 指向的同一版本为一组读取，不逐文件猜测哪个版本更新；**生成视图只读**，不手工编辑、不重排。
 - format 2 的精确当前状态与下一步以状态库、Git 账本和生成的 `handoff.md` 为单一事实源。不要在多份长文档里维护互相矛盾的“下一步”。
 - 机器维护的结构化状态（状态库、账本与生成视图）不手工重排或改写。
 

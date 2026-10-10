@@ -651,6 +651,43 @@ class GateStoreTests(unittest.TestCase):
         self.assertTrue(result["passed"], result)
         self.assertEqual(result["reasons"], [])
 
+    def test_high_risk_goal_rejects_a_review_from_its_own_implementer(self) -> None:
+        """N01 / T03: the reviewer must not be the goal's implementer.
+
+        PR-01 implements the comparison (``reviewer != implementer``) but nothing
+        asserted it, so the branch could regress unnoticed. The review here is otherwise
+        perfect - scoped to the goal's own task, verdict ``go``, bound to valid evidence -
+        so only the identity check can reject it.
+        """
+        self._high_risk_goal("GOAL-A", implementer="builder-a")
+        self._task_with_review_evidence("TASK-A", "GOAL-A", reviewer="builder-a")
+
+        result = self.store.evaluate_goal("GOAL-A")
+        self.assertFalse(result["passed"], result)
+        self.assertTrue(
+            any("review_not_independent" in reason for reason in result["reasons"]),
+            result["reasons"],
+        )
+
+    def test_high_risk_goal_rejects_a_review_whose_evidence_is_gone(self) -> None:
+        """N01 / T04: a go review bound to unusable evidence must not pass.
+
+        The review is independent (T03) and scoped to the goal's own task (T01), so only
+        its ``evidence_refs`` are the problem. The gate must reject it for that reason
+        instead of falling back to "some review exists"; an invalidated reference and a
+        stale one take the same path through ``evidence_status``.
+        """
+        self._high_risk_goal("GOAL-A", implementer="builder-a")
+        self._task_with_review_evidence("TASK-A", "GOAL-A", reviewer="reviewer-a")
+        self.apply("evidence.invalidate", {"id": "EVID-TASK-A", "reason": "superseded"})
+
+        result = self.store.evaluate_goal("GOAL-A")
+        self.assertFalse(result["passed"], result)
+        self.assertTrue(
+            any("review_evidence_stale" in reason for reason in result["reasons"]),
+            result["reasons"],
+        )
+
     def test_unrelated_doc_ref_drift_does_not_block_an_unrelated_task(self) -> None:
         """D05 / T18: drift is scoped to the goal/task that depends on the document.
 
