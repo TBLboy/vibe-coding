@@ -176,6 +176,25 @@ def main() -> int:
     goal_update.add_argument("--required-evidence", help="JSON list; @file reads from disk")
     goal_complete = goal_sub.add_parser("complete")
     goal_complete.add_argument("--id", required=True)
+    goal_cancel = goal_sub.add_parser("cancel", help="cancel a goal without a completion gate")
+    goal_cancel.add_argument("--id", required=True)
+    goal_cancel.add_argument("--reason", required=True)
+    goal_cancel.add_argument("--child-policy", choices=["cancel_open", "keep"],
+                             default="cancel_open")
+    workspace = sub.add_parser("workspace", help="manage the active workspace generation")
+    workspace_sub = workspace.add_subparsers(dest="workspace_action", required=True)
+    workspace_clear = workspace_sub.add_parser(
+        "clear", help="archive the active view and cancel its open work")
+    workspace_clear.add_argument("--scope", choices=["active"], default="active")
+    workspace_clear.add_argument("--reason", required=True)
+    workspace_clear.add_argument("--dry-run", action="store_true",
+                                 help="report the plan without writing anything")
+    workspace_clear.add_argument("--expected-revision", type=int,
+                                 help="the revision the plan was inspected at")
+    workspace_clear.add_argument("--plan-digest",
+                                 help="the plan_digest returned by --dry-run")
+    workspace_sub.add_parser("status", help="show the current workspace generation")
+    workspace_sub.add_parser("history", help="show every goal and task, cancelled included")
     gate = sub.add_parser("gate", help="evaluate a task completion gate")
     gate.add_argument("--task", required=True)
     review = sub.add_parser("review", help="manage transactional reviews")
@@ -367,8 +386,47 @@ def main() -> int:
                 if required is not None:
                     payload["required_evidence"] = required
                 result = apply_cli_action(root, "goal.update", payload)
+            elif args.goal_action == "cancel":
+                result = apply_cli_action(root, "goal.cancel", {
+                    "id": args.id, "reason": args.reason,
+                    "child_policy": args.child_policy,
+                })
             else:
                 result = apply_cli_action(root, "goal.complete", {"id": args.id})
+        elif args.command == "workspace":
+            store = open_store(root, heal=True)
+            if args.workspace_action == "clear":
+                if args.dry_run:
+                    result = store.workspace_plan()
+                else:
+                    if args.plan_digest is None or args.expected_revision is None:
+                        raise StateError(
+                            "invalid_input",
+                            "workspace clear needs --expected-revision and --plan-digest; "
+                            "run it with --dry-run first",
+                        )
+                    current = store.status()["revision"]
+                    if current != args.expected_revision:
+                        raise StateError(
+                            "state_conflict",
+                            f"Workspace moved to revision {current}; "
+                            f"expected {args.expected_revision}. Re-run --dry-run.",
+                        )
+                    result = apply_cli_action(root, "workspace.clear", {
+                        "reason": args.reason, "plan_digest": args.plan_digest,
+                        "scope": args.scope,
+                    })
+            elif args.workspace_action == "status":
+                plan = store.workspace_plan()
+                result = {
+                    "generation": plan["generation"], "revision": plan["revision"],
+                    "affected_goal_ids": plan["affected_goal_ids"],
+                    "affected_task_ids": plan["affected_task_ids"],
+                    "active_run_ids": plan["active_run_ids"],
+                    "warnings": plan["warnings"],
+                }
+            else:
+                result = store.workspace_history()
         elif args.command == "gate":
             result = open_store(root, heal=True).gate_task(args.task)
         elif args.command == "review":

@@ -13,7 +13,7 @@ from urllib.parse import quote
 
 SCHEMA_VERSION = 1
 # 3 adds the lifecycle record/evidence/review tables of the promoted format.
-STORE_SCHEMA = 3
+STORE_SCHEMA = 4
 MAX_LIMIT = 100
 MAX_REQUEST_BYTES = 65536
 MAX_REVISION = 9223372036854775806
@@ -356,6 +356,8 @@ def _request(envelope: dict) -> tuple[dict, str, str]:
         "goal.create": ({"id", "title"}, {"extensions"}),
         "goal.update": ({"id"}, {"success_conditions", "required_evidence"}),
         "goal.complete": ({"id"}, set()),
+        "goal.cancel": ({"id", "reason"}, {"child_policy"}),
+        "workspace.clear": ({"reason", "plan_digest"}, {"scope"}),
         "task.create": ({"id", "title", "goal_id"}, {"extensions"}),
         "task.update": ({"task_id"}, {"implementer", "owner"}),
         "task.begin": ({"task_id", "run_id", "next_action"}, set()),
@@ -379,7 +381,11 @@ def _request(envelope: dict) -> tuple[dict, str, str]:
         raise StateError("invalid_input", f"{action} payload has missing or unknown fields")
     for key, value in payload.items():
         if key in {"extensions", "payload", "covers", "version_binding", "scope"}:
-            if type(value) is not dict:
+            if key == "scope" and action == "workspace.clear":
+                # workspace.clear records the scope *name* ("active"), while
+                # review.record's scope is an object; one rule cannot cover both.
+                _text(value, key, 64)
+            elif type(value) is not dict:
                 raise StateError("invalid_input", f"{key} must be an object")
         elif key == "evidence_refs":
             _evidence_refs(value)
@@ -510,13 +516,13 @@ def _validate_bundle(bundle) -> dict:
 _DDL = (
     """CREATE TABLE metadata (
         singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
-        store_schema INTEGER NOT NULL CHECK(store_schema = 3),
+        store_schema INTEGER NOT NULL CHECK(store_schema = 4),
         schema_version INTEGER NOT NULL CHECK(schema_version = 1),
         project_id TEXT NOT NULL, context_id TEXT NOT NULL,
         local_revision INTEGER NOT NULL CHECK(local_revision >= 0))""",
     """CREATE TABLE goals (
         id TEXT PRIMARY KEY, title TEXT NOT NULL,
-        status TEXT NOT NULL CHECK(status IN ('draft','active','waiting-user','blocked','complete')),
+        status TEXT NOT NULL CHECK(status IN ('draft','active','waiting-user','blocked','complete','cancelled')),
         extensions TEXT NOT NULL,
         created_sequence INTEGER NOT NULL, updated_sequence INTEGER NOT NULL)""",
     """CREATE TABLE tasks (
@@ -628,7 +634,7 @@ class Store:
         return project_ledger_path(self.root)
 
     @contextmanager
-    def _connection(self, write: bool = False):
+    def _connection(self, write: bool = False, foreign_keys: bool = True):
         if not self.path.is_file():
             raise StateError("missing_store", f"State database does not exist: {self.path}")
         connection = None
@@ -640,7 +646,9 @@ class Store:
                 timeout=BUSY_TIMEOUT_MS / 1000, isolation_level=None,
             )
             connection.row_factory = sqlite3.Row
-            connection.execute("PRAGMA foreign_keys = ON")
+            # SQLite cannot toggle foreign_keys inside a transaction, so a caller that
+            # has to rebuild a referenced table (schema upgrade) must decide here.
+            connection.execute(f"PRAGMA foreign_keys = {'ON' if foreign_keys else 'OFF'}")
             connection.execute(f"PRAGMA busy_timeout = {BUSY_TIMEOUT_MS}")
             if not write:
                 connection.execute("PRAGMA query_only = ON")
@@ -684,6 +692,80 @@ class Store:
             connection.execute("INSERT INTO exchange VALUES (1, NULL, 0, NULL, NULL, NULL, NULL)")
             connection.commit()
         return self.status()
+
+    def upgrade(self) -> dict:
+        """Bring an older projection up to ``STORE_SCHEMA``.
+
+        The ledger is the fact source, so this only rebuilds projection tables: an
+        interrupted migration can always be re-derived from the ledger. Store schema 3
+        locked ``goals.status`` to the pre-cancellation set, so the table is rebuilt
+        with the wider CHECK. SQLite cannot toggle foreign keys inside a transaction,
+        so the rebuild runs with them off and re-checks integrity before committing.
+        """
+        if not self.path.is_file():
+            return {"status": "absent", "store_schema": None}
+        with self._connection(write=True, foreign_keys=False) as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                "SELECT store_schema FROM metadata WHERE singleton = 1"
+            ).fetchone()
+            if row is None:
+                raise StateError("state_conflict", "Missing store metadata")
+            current = row["store_schema"]
+            if current == STORE_SCHEMA:
+                connection.rollback()
+                return {"status": "current", "store_schema": current}
+            if current != 3:
+                raise StateError(
+                    "state_conflict",
+                    f"Unsupported store schema {current}; expected {STORE_SCHEMA}",
+                )
+            connection.execute(
+                """CREATE TABLE metadata_upgrade (
+                    singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
+                    store_schema INTEGER NOT NULL CHECK(store_schema = 4),
+                    schema_version INTEGER NOT NULL CHECK(schema_version = 1),
+                    project_id TEXT NOT NULL, context_id TEXT NOT NULL,
+                    local_revision INTEGER NOT NULL CHECK(local_revision >= 0))"""
+            )
+            connection.execute(
+                """INSERT INTO metadata_upgrade
+                       (singleton, store_schema, schema_version, project_id, context_id,
+                        local_revision)
+                   SELECT singleton, ?, schema_version, project_id, context_id, local_revision
+                   FROM metadata""",
+                (STORE_SCHEMA,),
+            )
+            connection.execute("DROP TABLE metadata")
+            connection.execute("ALTER TABLE metadata_upgrade RENAME TO metadata")
+            connection.execute(
+                """CREATE TABLE goals_upgrade (
+                    id TEXT PRIMARY KEY, title TEXT NOT NULL,
+                    status TEXT NOT NULL CHECK(status IN
+                        ('draft','active','waiting-user','blocked','complete','cancelled')),
+                    extensions TEXT NOT NULL,
+                    created_sequence INTEGER NOT NULL, updated_sequence INTEGER NOT NULL)"""
+            )
+            connection.execute(
+                """INSERT INTO goals_upgrade
+                       (id, title, status, extensions, created_sequence, updated_sequence)
+                   SELECT id, title, status, extensions, created_sequence, updated_sequence
+                   FROM goals"""
+            )
+            connection.execute("DROP TABLE goals")
+            connection.execute("ALTER TABLE goals_upgrade RENAME TO goals")
+            violations = connection.execute("PRAGMA foreign_key_check").fetchall()
+            if violations:
+                raise StateError(
+                    "state_conflict",
+                    f"Schema upgrade would break foreign keys: {len(violations)} violation(s)",
+                )
+            connection.commit()
+        with self._connection() as connection:
+            verdict = connection.execute("PRAGMA integrity_check").fetchone()[0]
+        if verdict != "ok":
+            raise StateError("state_conflict", f"Schema upgrade left a damaged store: {verdict}")
+        return {"status": "upgraded", "store_schema": STORE_SCHEMA}
 
     @staticmethod
     def _task(connection, task_id: str) -> dict:
@@ -733,6 +815,39 @@ class Store:
                 + "; pass an explicit goal id instead of relying on the default",
             )
         return active[0]
+
+    def workspace_plan(self) -> dict:
+        """The read-only dry-run plan that ``workspace.clear`` must be committed with."""
+        with self._connection() as connection:
+            connection.execute("BEGIN")
+            metadata = self._metadata(connection)
+            plan = Store._workspace_plan(connection)
+        plan["revision"] = metadata["local_revision"]
+        plan["warnings"] = []
+        if plan["active_run_ids"]:
+            plan["warnings"].append(
+                "active run(s) will be cancelled: " + ", ".join(plan["active_run_ids"])
+                + "; stop or isolate the executor first"
+            )
+        return plan
+
+    def workspace_history(self) -> dict:
+        """Every goal and task, including terminal and cancelled ones."""
+        with self._connection() as connection:
+            connection.execute("BEGIN")
+            self._metadata(connection)
+            goals = [dict(row) for row in connection.execute(
+                "SELECT id, title, status, created_sequence, updated_sequence "
+                "FROM goals ORDER BY created_sequence"
+            )]
+            tasks = [dict(row) for row in connection.execute(
+                "SELECT id, title, goal_id, status, run_id, cancel_reason, "
+                "created_sequence, updated_sequence FROM tasks ORDER BY created_sequence"
+            )]
+            generation = connection.execute(
+                "SELECT COUNT(*) FROM commands WHERE action = 'workspace.clear'"
+            ).fetchone()[0]
+        return {"generation": generation, "goals": goals, "tasks": tasks}
 
     def get_goal(self, goal_id: str) -> dict:
         _text(goal_id, "goal_id", 256)
@@ -1048,12 +1163,25 @@ class Store:
         ).fetchone()
         pending = connection.execute("SELECT local_revision FROM projection_jobs WHERE singleton = 1").fetchone()
         task_ids = connection.execute(
-            "SELECT id FROM tasks ORDER BY updated_sequence DESC, id LIMIT ?", (limit,)
+            "SELECT id FROM tasks WHERE status IN "
+            "('ready','in-progress','waiting-user','blocked','handed-off') "
+            "ORDER BY updated_sequence DESC, id LIMIT ?", (limit,)
         ).fetchall()
+        generation = 0
+        for row in connection.execute(
+            "SELECT receipt_json FROM commands WHERE action = 'workspace.clear'"
+        ):
+            receipt = _decode_json(row["receipt_json"], "command receipt")
+            result = receipt.get("result") if type(receipt) is dict else None
+            # A clear of an already empty workspace is a no-op and must not invent a
+            # generation, so the count follows the receipts rather than the commands.
+            if type(result) is dict and result.get("cleared"):
+                generation += 1
         return {
             "schema_version": SCHEMA_VERSION, "project_id": metadata["project_id"],
             "store_schema": metadata["store_schema"], "context_id": metadata["context_id"],
             "revision": metadata["local_revision"], "local_revision": metadata["local_revision"],
+            "workspace_generation": generation,
             "current_run": dict(active) if active else None,
             "current_task": self._task(connection, active["task_id"]) if active else None,
             "latest_run": dict(latest) if latest else None,
@@ -1117,6 +1245,83 @@ class Store:
             return True
         task_id = row["task_id"]
         return bool(task_id) and task_id in scoped_tasks
+
+    def _cancel_open_tasks(connection, goal_ids, policy: str, sequence: int) -> list[str]:
+        """Cancel every open task of the given goals, in a deterministic order.
+
+        Only tasks that have not reached a terminal state move. ``implemented-unverified``
+        is deliberately left alone: it records an implementation that really happened, and
+        cancellation must not rewrite that history (it is hidden from the active view by
+        status instead).
+        """
+        if policy != "cancel_open":
+            return []
+        open_statuses = {"ready", "in-progress", "waiting-user", "blocked", "handed-off"}
+        cancelled: list[str] = []
+        for goal_id in goal_ids:
+            rows = connection.execute(
+                "SELECT id, status FROM tasks WHERE goal_id = ? ORDER BY created_sequence",
+                (goal_id,),
+            ).fetchall()
+            for row in rows:
+                if row["status"] not in open_statuses:
+                    continue
+                connection.execute(
+                    """UPDATE tasks SET status = 'cancelled', cancel_reason = ?,
+                       updated_sequence = ? WHERE id = ?""",
+                    ("open work cancelled with its goal", sequence, row["id"]),
+                )
+                connection.execute(
+                    """UPDATE runs SET status = 'cancelled', updated_sequence = ?
+                       WHERE task_id = ? AND status != 'finished'""",
+                    (sequence, row["id"]),
+                )
+                cancelled.append(row["id"])
+        return cancelled
+
+    def _workspace_plan(connection) -> dict:
+        """Read-only description of what ``workspace.clear`` would affect.
+
+        The generation is derived from the ledger (the number of ``workspace.clear``
+        events) instead of being materialised, so a rebuilt or healed projection
+        agrees without an extra table to keep in sync.
+        """
+        generation = 0
+        for row in connection.execute(
+            "SELECT receipt_json FROM commands WHERE action = 'workspace.clear'"
+        ):
+            receipt = _decode_json(row["receipt_json"], "command receipt")
+            result = receipt.get("result") if type(receipt) is dict else None
+            # A clear of an already empty workspace is a no-op and must not invent a
+            # generation, so the count follows the receipts rather than the commands.
+            if type(result) is dict and result.get("cleared"):
+                generation += 1
+        goals = [
+            row["id"] for row in connection.execute(
+                "SELECT id FROM goals WHERE status IN "
+                "('draft','active','waiting-user','blocked') ORDER BY created_sequence"
+            )
+        ]
+        tasks = [
+            row["id"] for row in connection.execute(
+                "SELECT id FROM tasks WHERE status IN "
+                "('ready','in-progress','waiting-user','blocked','handed-off') "
+                "ORDER BY created_sequence"
+            )
+        ]
+        runs = [
+            row["id"] for row in connection.execute(
+                "SELECT id FROM runs WHERE status = 'active' ORDER BY created_sequence"
+            )
+        ]
+        from state_replay import workspace_plan_digest
+
+        return {
+            "scope": "active", "generation": generation,
+            "affected_goal_ids": goals, "affected_task_ids": tasks,
+            "active_run_ids": runs,
+            "plan_digest": workspace_plan_digest(generation, goals, tasks, runs),
+        }
 
     @staticmethod
     def _goal_completion_problems(connection, goal_id: str, root: Path | None = None) -> list[str]:
@@ -1458,6 +1663,72 @@ class Store:
                 (sequence, payload["id"]),
             )
             return {"goal_id": payload["id"], "status": "complete"}
+        if action == "goal.cancel":
+            # Cancellation is not completion: it must never run
+            # _goal_completion_problems, because the user is allowed to abandon a goal
+            # whose success conditions are unmet. It still validates the target, the
+            # reason and the transaction.
+            row = connection.execute("SELECT * FROM goals WHERE id = ?", (payload["id"],)).fetchone()
+            if row is None:
+                raise StateError("not_found", f"Unknown goal: {payload['id']}")
+            if row["status"] in {"complete", "cancelled"}:
+                raise StateError(
+                    "state_conflict",
+                    f"Cannot cancel a {row['status']} goal; archive or clear the view instead",
+                )
+            reason = payload.get("reason")
+            if type(reason) is not str or not reason.strip():
+                raise StateError("invalid_input", "goal.cancel requires a reason")
+            policy = payload.get("child_policy", "cancel_open")
+            if policy not in {"cancel_open", "keep"}:
+                raise StateError("invalid_input", f"Unsupported child_policy: {policy!r}")
+            cancelled = Store._cancel_open_tasks(connection, [payload["id"]], policy, sequence)
+            connection.execute(
+                "UPDATE goals SET status = 'cancelled', updated_sequence = ? WHERE id = ?",
+                (sequence, payload["id"]),
+            )
+            return {
+                "goal_id": payload["id"], "status": "cancelled",
+                "cancelled_task_ids": cancelled,
+            }
+        if action == "workspace.clear":
+            reason = payload.get("reason")
+            if type(reason) is not str or not reason.strip():
+                raise StateError("invalid_input", "workspace.clear requires a reason")
+            scope = payload.get("scope", "active")
+            if scope != "active":
+                raise StateError("invalid_input", f"Unsupported workspace scope: {scope!r}")
+            before = Store._workspace_plan(connection)
+            # The caller commits the plan it inspected; a digest mismatch means another
+            # writer moved the workspace between dry-run and commit (TOCTOU).
+            if payload.get("plan_digest") != before["plan_digest"]:
+                raise StateError(
+                    "plan_mismatch",
+                    "workspace.clear plan digest does not match the current active workspace",
+                )
+            if not before["affected_goal_ids"] and not before["affected_task_ids"]:
+                # An already empty workspace stays logically idempotent: no new
+                # generation is invented for work that does not exist.
+                return {
+                    "cleared": False, "generation_before": before["generation"],
+                    "generation_after": before["generation"],
+                    "cancelled_goal_ids": [], "cancelled_task_ids": [],
+                }
+            cancelled_tasks = Store._cancel_open_tasks(
+                connection, before["affected_goal_ids"], "cancel_open", sequence
+            )
+            for goal_id in before["affected_goal_ids"]:
+                connection.execute(
+                    "UPDATE goals SET status = 'cancelled', updated_sequence = ? WHERE id = ?",
+                    (sequence, goal_id),
+                )
+            return {
+                "cleared": True,
+                "generation_before": before["generation"],
+                "generation_after": before["generation"] + 1,
+                "cancelled_goal_ids": before["affected_goal_ids"],
+                "cancelled_task_ids": cancelled_tasks,
+            }
         if action == "task.create":
             self._active_goal(connection, payload["goal_id"])
             connection.execute(

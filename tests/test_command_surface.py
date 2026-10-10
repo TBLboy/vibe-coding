@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import json
 import subprocess
 import sys
 import tempfile
@@ -85,6 +86,46 @@ class CommandSurfaceTests(unittest.TestCase):
         self.assertEqual(status.returncode, 0, status.stdout)
         validate = run_vibe(self.root, "validate")
         self.assertEqual(validate.returncode, 0, validate.stdout)
+
+    def test_goal_cancel_through_the_formal_entry(self) -> None:
+        result = run_vibe(self.root, "goal", "cancel", "--id", "GOAL-001",
+                          "--reason", "用户确认本阶段不再需要")
+        self.assertEqual(result.returncode, 0, result.stdout)
+        store = open_store(self.root)
+        self.assertEqual(store.get_goal("GOAL-001")["status"], "cancelled")
+        self.assertEqual(store.get_task("TASK-001")["status"], "cancelled")
+        self.assertEqual(store.active_goal_ids(), [])
+        # A missing reason is a validation error, not a silent cancellation.
+        missing = run_vibe(self.root, "goal", "cancel", "--id", "GOAL-001")
+        self.assertEqual(missing.returncode, 2, missing.stdout)
+
+    def test_workspace_clear_is_two_phase_through_the_cli(self) -> None:
+        dry = run_vibe(self.root, "workspace", "clear", "--dry-run", "--reason", "重新规划")
+        self.assertEqual(dry.returncode, 0, dry.stdout)
+        plan = json.loads(dry.stdout)
+        self.assertEqual(plan["affected_goal_ids"], ["GOAL-001"])
+        self.assertEqual(plan["affected_task_ids"], ["TASK-001"])
+        # The dry run wrote nothing.
+        self.assertEqual(open_store(self.root).active_goal_ids(), ["GOAL-001"])
+
+        stale = run_vibe(self.root, "workspace", "clear", "--reason", "x",
+                         "--expected-revision", str(plan["revision"] + 5),
+                         "--plan-digest", plan["plan_digest"])
+        self.assertEqual(stale.returncode, 2, stale.stdout)
+        self.assertIn("state_conflict", stale.stdout)
+
+        committed = run_vibe(self.root, "workspace", "clear", "--reason", "重新规划",
+                             "--expected-revision", str(plan["revision"]),
+                             "--plan-digest", plan["plan_digest"])
+        self.assertEqual(committed.returncode, 0, committed.stdout)
+        store = open_store(self.root)
+        self.assertEqual(store.active_goal_ids(), [])
+        self.assertEqual(store.status()["workspace_generation"], 1)
+
+        history = run_vibe(self.root, "workspace", "history")
+        self.assertEqual(history.returncode, 0, history.stdout)
+        self.assertEqual([goal["status"] for goal in json.loads(history.stdout)["goals"]],
+                         ["cancelled"])
 
 
 class NonProjectSurfaceTests(unittest.TestCase):

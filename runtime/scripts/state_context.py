@@ -149,6 +149,10 @@ def open_store(root: Path, heal: bool = False) -> Store:
     context_id, directory = git_context(root)
     path = directory / marker["project_id"] / context_id / "state.sqlite3"
     store = Store(path, marker["project_id"], context_id, root)
+    # A store written by an older release is migrated here, before anything reads
+    # it: the ledger is the fact source, so the rebuild is projection-only and can
+    # always be re-derived if it is interrupted.
+    store.upgrade()
     if heal:
         store.heal_from_ledger()
     return store
