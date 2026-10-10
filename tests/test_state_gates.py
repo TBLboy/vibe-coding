@@ -543,6 +543,141 @@ class GateStoreTests(unittest.TestCase):
             self.assertIn("Project goal: GOAL-001", context)
             self.assertNotIn("ambiguous", context)
 
+    # --- V3 PR-00: failing counter-examples for the confirmed goal-gate defects ---
+    #
+    # Each test below encodes the *target* behaviour of a defect confirmed in
+    # Vibe-Workflow-V3-工程改造实施方案.md (N01, D05). They are marked
+    # ``expectedFailure`` on purpose: the test really does fail today, the suite stays
+    # readable, and the moment the fix lands the test passes "unexpectedly", which
+    # forces the decorator to be removed instead of the test being forgotten.
+
+    def _high_risk_goal(self, goal_id: str, **extensions: object) -> None:
+        """A high-risk goal whose only pending requirement is the review gate."""
+        base = {
+            "risk_level": "high",
+            "success_conditions": [{
+                "id": "SC-1",
+                "status": "not-applicable",
+                "reason": "no user-facing surface in this increment",
+            }],
+            "required_evidence": [],
+        }
+        base.update(extensions)
+        self.apply("goal.create", {"id": goal_id, "title": goal_id, "extensions": base})
+
+    def _task_with_review_evidence(self, task_id: str, goal_id: str, reviewer: str) -> None:
+        """A normal task carrying a valid review-kind evidence row plus a go review."""
+        self.apply("task.create", {
+            "id": task_id, "title": task_id, "goal_id": goal_id,
+            "extensions": {"risk": "normal", "implementer": "builder-" + task_id.lower()},
+        })
+        self.apply("evidence.record", {
+            "id": "EVID-" + task_id, "kind": "review", "subject": task_id + " review",
+            "status": "valid", "task_id": task_id,
+            "covers": {"tasks": [task_id]},
+        })
+        self.apply("review.record", {
+            "id": "REV-" + task_id, "task_id": task_id, "reviewer": reviewer,
+            "verdict": "go", "scope": {"tasks": [task_id]},
+            "evidence_refs": ["EVID-" + task_id],
+        })
+
+    @unittest.expectedFailure
+    def test_high_risk_goal_rejects_foreign_task_review(self) -> None:
+        """N01: another goal's task review must not complete this goal.
+
+        Target behaviour (V3 PR-01): review evidence and review rows are scoped to the
+        goal under evaluation, so GOAL-A reports a scope mismatch and stays incomplete.
+        Today ``_goal_completion_problems`` reads the whole evidence table and iterates
+        every row of ``reviews`` without a target filter, so GOAL-A completes on
+        GOAL-B's task review.
+        """
+        self._high_risk_goal("GOAL-A", implementer="builder-a")
+        self.apply("goal.create", {"id": "GOAL-B", "title": "Goal B"})
+        self._task_with_review_evidence("TASK-B", "GOAL-B", reviewer="reviewer-b")
+
+        result = self.store.evaluate_goal("GOAL-A")
+        self.assertFalse(
+            result["passed"],
+            "GOAL-A was completed by a review belonging to TASK-B/GOAL-B: " + repr(result),
+        )
+
+    @unittest.expectedFailure
+    def test_high_risk_goal_without_implementer_fails_closed(self) -> None:
+        """N01: a high-risk goal with no implementer must not skip independence.
+
+        Target behaviour (V3 PR-01): report ``missing_implementer``. Today the whole
+        independence check sits inside ``if implementer:`` with no else branch, so an
+        unregistered implementer silently satisfies the high-risk review requirement
+        (the task gate already fails closed here; the goal gate does not).
+        """
+        self._high_risk_goal("GOAL-A")
+        self._task_with_review_evidence("TASK-A", "GOAL-A", reviewer="reviewer-a")
+
+        result = self.store.evaluate_goal("GOAL-A")
+        self.assertFalse(
+            result["passed"],
+            "GOAL-A has no implementer yet passed the high-risk review gate: " + repr(result),
+        )
+
+    @unittest.expectedFailure
+    def test_unrelated_doc_ref_drift_does_not_block_an_unrelated_task(self) -> None:
+        """D05: drift is scoped to the goal/task that actually depends on the document.
+
+        Target behaviour (V3 PR-03): an informational ``doc_ref`` on an unrelated
+        record may surface a diagnostic in ``validate`` but must not block TASK-X.
+        Today ``_document_drift_problems`` scans every record and both completion gates
+        consume the result globally. This test replaces the expectation encoded in
+        ``test_changed_doc_ref_propagates_into_task_and_goal_gates``, which asserts
+        today's global behaviour and has to be rewritten together with PR-03.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            project = Path(temporary)
+            store = initialize_project(project)
+            document = project / ".project-log" / "docs" / "note.md"
+            document.parent.mkdir(parents=True, exist_ok=True)
+            document.write_text("# Original\n", encoding="utf-8")
+            digest = hashlib.sha256(document.read_bytes()).hexdigest()
+            store.apply({
+                "schema_version": 1, "command_id": uuid.uuid4().hex,
+                "expected_revision": store.status()["revision"], "action": "record.create",
+                "payload": {
+                    "kind": "research", "id": "RES-DOC", "title": "Unrelated research",
+                    "status": "complete",
+                    "payload": {
+                        "doc_ref": {"path": ".project-log/docs/note.md", "sha256": digest},
+                    },
+                },
+            })
+            store.apply({
+                "schema_version": 1, "command_id": uuid.uuid4().hex,
+                "expected_revision": store.status()["revision"], "action": "goal.create",
+                "payload": {"id": "GOAL-X", "title": "Unrelated goal"},
+            })
+            store.apply({
+                "schema_version": 1, "command_id": uuid.uuid4().hex,
+                "expected_revision": store.status()["revision"], "action": "task.create",
+                "payload": {
+                    "id": "TASK-X", "title": "Unrelated task", "goal_id": "GOAL-X",
+                    "extensions": {"risk": "normal", "implementer": "builder"},
+                },
+            })
+            store.apply({
+                "schema_version": 1, "command_id": uuid.uuid4().hex,
+                "expected_revision": store.status()["revision"], "action": "evidence.record",
+                "payload": {
+                    "id": "EVID-X", "kind": "test", "subject": "unrelated task",
+                    "status": "valid", "task_id": "TASK-X",
+                    "covers": {"tasks": ["TASK-X"]},
+                },
+            })
+            self.assertEqual(open_store(project).gate_task("TASK-X")["decision"], "allowed")
+
+            document.write_text("# Changed\n", encoding="utf-8")
+
+            gate = open_store(project).gate_task("TASK-X")
+            self.assertEqual(gate["decision"], "allowed", gate["blocking"])
+
 
 if __name__ == "__main__":
     unittest.main()
