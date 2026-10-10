@@ -246,5 +246,28 @@ class RunnerEntryPointTests(unittest.TestCase):
         self.assertIn("verification_action_untrusted", result.stdout + result.stderr)
 
 
+class TargetedRunTests(unittest.TestCase):
+    """TASK-121: a targeted run must execute something, or it is not evidence.
+
+    `unittest discover -p` compares its pattern against the *basename*, so the resolved
+    relative path used to match nothing: the action exited 0 after `Ran 0 tests`, which
+    reads exactly like a green targeted run.
+    """
+
+    def test_unittest_file_actually_runs_the_named_file(self) -> None:
+        # Deliberately *not* this file: `unittest-file` on test_verification_runner.py
+        # would re-run this very test and recurse.
+        report = runner.run("unittest-file", ROOT, path="tests/test_docs_consistency.py")
+        self.assertEqual(report["exit_code"], 0, report["output_tail"])
+        self.assertIn("Ran ", report["output_tail"])
+        self.assertNotIn("Ran 0 tests", report["output_tail"])
+
+    def test_a_file_with_no_tests_is_refused_instead_of_passing(self) -> None:
+        """A run that executes nothing is refused, not recorded as a pass."""
+        with self.assertRaises(StateError) as caught:
+            runner.run("unittest-file", ROOT, path="tests/_platform.py")
+        self.assertEqual(caught.exception.code, "verification_no_tests")
+
+
 if __name__ == "__main__":
     unittest.main()

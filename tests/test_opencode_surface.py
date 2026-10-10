@@ -200,12 +200,15 @@ class OpenCodeStaticSurfaceTests(unittest.TestCase):
             self.assertTrue(wrapper.stat().st_mode & 0o111, "bin/vibe-python must be executable")
 
     def test_read_only_history_forms_are_listed_explicitly(self) -> None:
-        """The matcher's `--flag=value` handling is inconsistent, so list the forms.
+        """The two explicit history entries stay listed and stay read-only.
 
-        The quirk cannot be re-tested from inside a running session (the allowlist is read
-        at start-up), so these entries are best-effort. The test pins that the workaround
-        exists, that it stays read-only, and that the alternatives the reviewers are told
-        to prefer (`git log --oneline`, `git show`, `git rev-parse`) remain covered by the
+        They were added after a session reported the matcher mishandling `--flag=value`
+        history queries; a later session found the plain `git log*` already matched them,
+        so they are redundant insurance rather than a fix. Whether the allowlist is read
+        once at start-up -- and therefore cannot be re-tested inside a running session --
+        is an assumption about OpenCode that nothing in this repository verifies. The test
+        pins the entries, the read-only boundary, and that the observed-to-match
+        alternatives (`git log --oneline`, `git show`, `git rev-parse`) stay covered by the
         plain patterns above them.
         """
         for role in ("verification-reviewer", "alignment-reviewer"):

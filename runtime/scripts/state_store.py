@@ -1153,6 +1153,32 @@ class Store:
             return "current"
         return Store.evidence_applicability(root, evidence)["applicability"]
 
+    @staticmethod
+    def _unresolvable_hash_paths(root: Path | None, binding: dict | None) -> list[str]:
+        """Hash keys in a version binding that resolve to no file under ``root``.
+
+        A relative key is resolved against the project root, not against the repository
+        that happens to hold the code. A key written relative to the repository inside a
+        nested project therefore names nothing: the record is permanently unverifiable and
+        later reads exactly like "the covered artifact changed", even though its digest was
+        correct. Refusing such a key at write time is the only point where the mistake is
+        still cheap to correct.
+
+        A rootless store cannot resolve relative keys at all, so it is left alone.
+        """
+        hashes = (binding or {}).get("file_hashes") if type(binding) is dict else None
+        if type(hashes) is not dict or not hashes or root is None:
+            return []
+        base = Path(root)
+        unresolved = []
+        for key in hashes:
+            candidate = Path(key)
+            if not candidate.is_absolute():
+                candidate = base / candidate
+            if not candidate.is_file():
+                unresolved.append(key)
+        return unresolved
+
     def stale_evidence(self, root: Path) -> list[dict]:
         """Read-only list of active evidence whose recorded bytes changed."""
         result = []
@@ -2063,13 +2089,25 @@ class Store:
                 "SELECT 1 FROM tasks WHERE id = ?", (task_id,)
             ).fetchone() is None:
                 raise StateError("not_found", f"Unknown task: {task_id}")
+            binding = _version_binding(payload.get("version_binding"))
+            # Check the raw payload: `_version_binding` returns canonical JSON *text*, so
+            # passing its result here would silently resolve nothing.
+            unresolved = Store._unresolvable_hash_paths(
+                self.root, payload.get("version_binding")
+            )
+            if unresolved:
+                raise StateError(
+                    "invalid_input",
+                    "version_binding.file_hashes keys must name existing files, given as an "
+                    "absolute path or relative to the project root; unresolvable: "
+                    + ", ".join(sorted(unresolved)),
+                )
             connection.execute(
                 """INSERT INTO evidence
                    (id, task_id, kind, subject, status, covers, version_binding, recorded_sequence)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                 (evidence_id, task_id, payload["kind"], payload["subject"], payload["status"],
-                 _evidence_covers(payload.get("covers")), _version_binding(payload.get("version_binding")),
-                 sequence),
+                 _evidence_covers(payload.get("covers")), binding, sequence),
             )
             return {"evidence_id": evidence_id, "status": payload["status"]}
         if action == "evidence.invalidate":

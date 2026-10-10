@@ -397,6 +397,49 @@ class GateStoreTests(unittest.TestCase):
             apply("task.finish", {"task_id": "TASK-001", "summary": "implemented"})
         self.assertEqual(caught.exception.code, "task_gate")
 
+    def test_unresolvable_hash_keys_are_refused_at_write_time(self) -> None:
+        """TASK-120: a key that names nothing is refused, not silently unverifiable.
+
+        The store resolves relative keys against the project root, so a key written
+        relative to the repository inside a nested project was accepted and then read
+        forever as "the covered artifact changed" -- indistinguishable from real
+        staleness, even though the recorded digest was correct.
+        """
+        project = self.root / "hash-keys"
+        project.mkdir()
+        (project / "real.txt").write_text("bytes", encoding="utf-8")
+        store = Store(project / "state.sqlite3", uuid.uuid4().hex, "f" * 64, project)
+        store.initialize()
+
+        def apply(action: str, payload: dict) -> dict:
+            return store.apply({
+                "schema_version": 1, "command_id": uuid.uuid4().hex,
+                "expected_revision": store.status()["revision"],
+                "action": action, "payload": payload,
+            })
+
+        with self.assertRaises(StateError) as caught:
+            apply("evidence.record", {
+                "id": "EVID-001", "kind": "test", "subject": "unresolvable",
+                "status": "valid",
+                "version_binding": {"file_hashes": {"nested/real.txt": "0" * 64}},
+            })
+        self.assertEqual(caught.exception.code, "invalid_input")
+        self.assertIn("relative to the project root", str(caught.exception))
+        self.assertIn("nested/real.txt", str(caught.exception))
+
+        # A key relative to the project root, and an absolute one, both still work.
+        for evidence_id, key in (
+            ("EVID-002", "real.txt"),
+            ("EVID-003", str(project / "real.txt")),
+        ):
+            apply("evidence.record", {
+                "id": evidence_id, "kind": "test", "subject": "resolvable",
+                "status": "valid",
+                "version_binding": {"file_hashes": {key: "0" * 64}},
+            })
+            self.assertEqual(store.get_evidence(evidence_id)["status"], "valid")
+
     def test_goal_completion_rejects_evidence_whose_artifact_changed(self) -> None:
         project = self.root / "goal-worktree"
         project.mkdir()

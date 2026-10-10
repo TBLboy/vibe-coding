@@ -199,7 +199,12 @@ def build_argv(action: str, root, path: str | None = None, python: str | None = 
     if action == "unittest":
         return [program, "-m", "unittest", "discover", "-s", "tests", "-q"]
     if action == "unittest-file":
-        return [program, "-m", "unittest", "discover", "-s", "tests", "-p", resolved, "-q"]
+        # `discover -p` matches its pattern against the *basename* (CPython's loader), so
+        # passing the resolved relative path matched no file at all: the run exited 0
+        # after `Ran 0 tests`, i.e. a targeted "pass" that executed nothing. `_resolve_path`
+        # already confines the argument to `tests/`, so the basename is sufficient.
+        return [program, "-m", "unittest", "discover", "-s", "tests", "-p",
+                Path(resolved).name, "-q"]
     if action == "pytest":
         argv = [program, "-m", "pytest", "-q"]
         if resolved is not None:
@@ -208,6 +213,23 @@ def build_argv(action: str, root, path: str | None = None, python: str | None = 
     raise StateError(
         "verification_action_untrusted", f"Untrusted verification action: {action!r}"
     )
+
+
+_NO_TESTS_MARKER = "Ran 0 tests"
+
+
+def _refuse_empty_run(action: str, output: str) -> None:
+    """Treat a unittest run that executed nothing as a failure, not a pass.
+
+    `unittest discover` exits 0 when its pattern matches no file, so a mis-resolved or
+    mistyped target reads exactly like a green run. Targeted evidence is only evidence if
+    it executed something, so a `Ran 0 tests` line is refused instead of recorded.
+    """
+    if action in ("unittest", "unittest-file") and _NO_TESTS_MARKER in output:
+        raise StateError(
+            "verification_no_tests",
+            f"Action {action!r} ran 0 tests; a run that executes nothing is not evidence",
+        )
 
 
 def _interpreter_version(program: str, root: Path) -> tuple[int, int] | None:
@@ -331,6 +353,9 @@ def run(
         timed_out = True
         captured = expired.stdout
         output = captured if isinstance(captured, str) else ""
+
+    if not timed_out:
+        _refuse_empty_run(action, output)
 
     coverage = list(spec["coverage"])
     if spec["argument"] == "path" and path:

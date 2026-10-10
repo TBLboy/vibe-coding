@@ -110,6 +110,8 @@ python -m unittest discover -s tests -q   →  Ran 261 tests, OK (skipped=8), 19
 - 仓库 `github.com/TBLboy/vibe-coding` 是**公开**仓库。把真实账本提交进去等于**发布用户的历史数据**，属于 C 级发布决定，超出本 PR 权限。
 - 因此本 PR 的处置：把快照复制到**仓库之外**的本地目录 `D:\Project\vibe-coding\.v3-legacy-fixture\`（`ledger.jsonl` 1,701,517 B + `state.sqlite3` 3,231,744 B），源文件未改动；**不加入任何 `.gitignore`、不进入 git 索引**。
 - 待你决定（PR-06 前需要）：夹具是否允许入库？三选一 —— (a) 保持仓库之外、只在本地做迁移演练；(b) 提交**压缩后的真实前缀**（约 100 KB）；(c) 改为测试内生成**合成账本**（无真实数据、可公开、体积最小）。
+- **已裁决（DEC-048，2026-10-10）**：取 (a)。拒绝 (b)：公开仓库里提交真实历史数据不可逆，而同等保真度在本地已具备；(c) 的目标（无真实数据、可公开、可重复）已由 `tests/test_upgrade_recovery.py`（手搓 schema-3 投影）与 `tests/test_state_replay.py`（账本/回执等价）达成，故不新增合成夹具。
+- **复演结果（TASK-123，2026-10-10）**：该快照的 store 绑定其**原始 root 路径**——`context_id` 由 `{"root": <绝对 root>, "branch": "local"}` 派生。把快照搬到另一个 root 时，schema 3 → 4 的**原地升级确实成功**（806 事件全部重建、revision 806、`tasks` 102 行），且账本字节完全未变（`ledger.jsonl` SHA-256 `0872d4d0ba0a4f83a22495b2dbeffa6c53b85c50c8395e3cab4a62d862d161fc` 前后一致，1,701,517 B）；但随后 `status` / `validate` / `ledger verify` 一律以 `context_mismatch` 拒绝——**store 拒绝被静默迁移**，这是设计上的安全属性，不是缺陷。因此：§3.1 里"只在本地做迁移演练"应读作"**在原 root 路径上**"；跨目录复演需要另行设计（例如只带账本、由新 root 重建投影），本次未实现。仓库外的夹具目录名（`2428c28d…`）只在原 root 下有效。
 
 ### 3.2 `expectedFailure` 而非裸红
 
