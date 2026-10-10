@@ -76,6 +76,28 @@ class PreflightTests(unittest.TestCase):
         self.assertEqual(report["code"], "verification_capability_missing")
         self.assertIn("interpreter", report["missing"])
 
+    def test_preflight_reports_an_unsupported_interpreter_version(self) -> None:
+        """T: a review must not silently run under an older interpreter.
+
+        The allowlist can no longer be pinned to a POSIX-only wrapper, so the version
+        gate lives in the runner: whatever interpreter a reviewer reaches for, an
+        unsupported one is reported as a capability gap instead of quietly downgrading
+        the verification.
+        """
+        original = runner.MINIMUM_PYTHON
+        try:
+            runner.MINIMUM_PYTHON = (99, 0)
+            report = runner.preflight("unittest", ROOT)
+        finally:
+            runner.MINIMUM_PYTHON = original
+        self.assertFalse(report["available"], report)
+        self.assertEqual(report["code"], "verification_capability_missing")
+        self.assertIn("python>=99.0", report["missing"])
+        self.assertTrue(
+            any(not check["ok"] for check in report["checks"]), report["checks"])
+        # And the unmodified runner accepts the interpreter actually running this suite.
+        self.assertTrue(runner.preflight("unittest", ROOT)["available"])
+
 
 class VerificationRunTests(unittest.TestCase):
     def setUp(self) -> None:

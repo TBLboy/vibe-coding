@@ -32,6 +32,13 @@ from state_store import StateError  # noqa: E402
 
 COMMAND_SPEC_VERSION = 1
 
+# The verification entry point must refuse an interpreter this runtime does not support.
+# The reviewer's allowlist cannot be pinned to a POSIX-only wrapper (the installed
+# `bin/vibe-python` is a shell script), so the version gate lives here instead: whatever
+# interpreter a reviewer reaches for, an older one is a reported capability gap rather
+# than a silent downgrade of the verification.
+MINIMUM_PYTHON = (3, 11)
+
 # Every action is a fixed argv template plus the capability it needs. Nothing here
 # accepts a caller-supplied command, flag or interpreter argument: a new check is added
 # by declaring an action, not by widening a permission.
@@ -145,6 +152,21 @@ def build_argv(action: str, root, path: str | None = None, python: str | None = 
     )
 
 
+def _interpreter_version(program: str, root: Path) -> tuple[int, int] | None:
+    """The interpreter's major/minor version, or None when it cannot be probed."""
+    probe = subprocess.run(
+        [program, "-c", "import sys; print('%d.%d' % sys.version_info[:2])"],
+        cwd=str(root), env=_environment(), text=True,
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False,
+    )
+    if probe.returncode != 0:
+        return None
+    parts = (probe.stdout or "").strip().split(".")
+    if len(parts) != 2 or not all(part.isdigit() for part in parts):
+        return None
+    return int(parts[0]), int(parts[1])
+
+
 def _module_available(program: str, root: Path, module: str) -> bool:
     probe = subprocess.run(
         [program, "-c",
@@ -171,6 +193,18 @@ def preflight(action: str, root, path: str | None = None, python: str | None = N
     checks.append({"name": "interpreter", "ok": interpreter_ok, "detail": program})
     if not interpreter_ok:
         missing.append("interpreter")
+
+    minimum = f"python>={MINIMUM_PYTHON[0]}.{MINIMUM_PYTHON[1]}"
+    version = _interpreter_version(program, root) if interpreter_ok else None
+    version_ok = version is not None and version >= MINIMUM_PYTHON
+    checks.append({
+        "name": "interpreter-version",
+        "ok": version_ok,
+        "detail": (".".join(str(part) for part in version) if version
+                   else f"could not probe {program}"),
+    })
+    if not version_ok:
+        missing.append(minimum)
 
     for relative in spec["requires_paths"]:
         target = root / relative

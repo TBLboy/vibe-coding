@@ -14,13 +14,15 @@ permission:
     "git ls-files*": allow
     "grep *": allow
     "rg *": allow
-    # Verification runs through the trusted action registry, still pinned to the wrapper
-    # so a review cannot silently fall back to an older interpreter. There is deliberately
-    # no raw `-m unittest` / `*pytest*` allow: those admit any command while looking like
-    # a capability check. `verification_runner.py preflight` reports
-    # `verification_capability_missing` when an action cannot run here.
-    "*/.config/opencode/bin/vibe-python *verification_runner.py preflight*": allow
-    "*/.config/opencode/bin/vibe-python *verification_runner.py run*": allow
+    # Verification runs through the trusted action registry, anchored to the runner and its
+    # subcommand rather than to a wrapper: the installed `bin/vibe-python` is a POSIX shell
+    # script, so pinning the allowlist to it left a Windows reviewer unable to run anything.
+    # An unsupported interpreter is reported by `preflight` as
+    # `verification_capability_missing` (python>=3.11) instead. There is deliberately no raw
+    # `-m unittest` / `*pytest*` allow: those admit any command while looking like a
+    # capability check.
+    "*verification_runner.py preflight*": allow
+    "*verification_runner.py run*": allow
     "sha256sum *": allow
   task:
     "*": deny

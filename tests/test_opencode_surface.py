@@ -158,18 +158,20 @@ class OpenCodeStaticSurfaceTests(unittest.TestCase):
         # the allowlist a stable path without naming a machine-specific interpreter.
         #
         # V3 PR-04 replaced the raw `-m unittest` allow with the trusted verification
-        # runner. It is still pinned to the wrapper, and the runner picks the action from
-        # its registry, so a reviewer gets a capability-checked entry point instead of a
-        # general test-command grant.
+        # runner, and PR-06 made that pattern cross-platform: the installed wrapper is a
+        # POSIX script, so pinning the allowlist to it left a Windows reviewer unable to
+        # run anything at all. The pattern is anchored to the runner and its subcommand,
+        # and the runner itself refuses an interpreter below the supported version, so
+        # allowing any interpreter cannot silently downgrade a review.
         for role in ("verification-reviewer", "alignment-reviewer"):
             bash = parse_frontmatter(OPENCODE / f"agents/{role}.md")["permission"]["bash"]
             allow = {pattern for pattern, action in bash.items() if action == "allow"}
             self.assertIn(
-                "*/.config/opencode/bin/vibe-python *verification_runner.py preflight*",
+                "*verification_runner.py preflight*",
                 allow, role,
             )
             self.assertIn(
-                "*/.config/opencode/bin/vibe-python *verification_runner.py run*",
+                "*verification_runner.py run*",
                 allow, role,
             )
             self.assertIn("sha256sum *", allow, role)
