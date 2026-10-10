@@ -520,7 +520,10 @@ class GateStoreTests(unittest.TestCase):
 
         result = self.apply("goal.complete", {"id": "GOAL-001"})["result"]
         self.assertEqual(result["status"], "complete")
-        self.assertEqual(result["cancelled_task_ids"], ["TASK-001"])
+        # The receipt keeps its original shape on purpose: the reducer recomputes a receipt
+        # and compares it with the stored one, so widening this would make every *existing*
+        # `goal.complete` event fail to reduce and the live ledger unwritable.
+        self.assertEqual(set(result), {"goal_id", "status"})
 
         closed = self.store.get_task("TASK-001")
         self.assertEqual(closed["status"], "cancelled")

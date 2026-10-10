@@ -1895,7 +1895,12 @@ class Store:
             # never reach a terminal state and would linger in the active view forever.
             # They are cancelled with a reason that says *why*, which is the same mechanism
             # a cancelled goal uses -- only the reason differs.
-            closed = Store._cancel_open_tasks(
+            # The receipt deliberately keeps its original shape. A ledger event's receipt is
+            # recomputed from the reducer and compared with the stored one, so widening this
+            # return value would make every *existing* `goal.complete` event fail to reduce --
+            # the live ledger becomes unwritable ("Ledger header mismatch"). The evidence of
+            # what was closed lives on the tasks themselves, in `cancel_reason`.
+            Store._cancel_open_tasks(
                 connection, [payload["id"]], "cancel_open", sequence,
                 reason="open work closed when its goal completed",
             )
@@ -1903,8 +1908,7 @@ class Store:
                 "UPDATE goals SET status = 'complete', updated_sequence = ? WHERE id = ?",
                 (sequence, payload["id"]),
             )
-            return {"goal_id": payload["id"], "status": "complete",
-                    "cancelled_task_ids": closed}
+            return {"goal_id": payload["id"], "status": "complete"}
         if action == "goal.cancel":
             # Cancellation is not completion: it must never run
             # _goal_completion_problems, because the user is allowed to abandon a goal

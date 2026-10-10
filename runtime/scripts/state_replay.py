@@ -152,8 +152,7 @@ def reduce_ledger(entries, with_results: bool = False):
             # task could never reach a terminal state and would linger forever.
             # `implemented-unverified` is left alone -- it records an implementation that
             # really happened. Insertion order is creation order, matching the live
-            # transition, so the receipt's id list is reproducible.
-            cancelled: list[str] = []
+            # transition.
             for task in tasks.values():
                 if task["goal_id"] != payload["id"]:
                     continue
@@ -166,11 +165,11 @@ def reduce_ledger(entries, with_results: bool = False):
                     if run["task_id"] == task["id"] and run["status"] != "finished":
                         run["status"] = "cancelled"
                         run["updated_sequence"] = sequence
-                cancelled.append(task["id"])
             goal["status"] = "complete"
             goal["updated_sequence"] = sequence
-            result = {"goal_id": payload["id"], "status": "complete",
-                      "cancelled_task_ids": cancelled}
+            # Same receipt shape as before: the reducer's result must match what the live
+            # transition returned for *historical* events too, or the ledger stops reducing.
+            result = {"goal_id": payload["id"], "status": "complete"}
         elif action == "goal.cancel":
             goal = _require(goals, payload["id"], "goal")
             if goal["status"] in {"complete", "cancelled"}:
