@@ -39,6 +39,19 @@ COMMAND_SPEC_VERSION = 1
 # than a silent downgrade of the verification.
 MINIMUM_PYTHON = (3, 11)
 
+# The `hash` action needs a program rather than a test runner. It is a fixed script with
+# the file list as argv, so a reviewer can re-derive a recorded digest without being
+# handed a general-purpose shell: no flags, no command strings, no shell.
+_HASH_SCRIPT = (
+    "import hashlib, sys\n"
+    "for path in sys.argv[1:]:\n"
+    "    digest = hashlib.sha256()\n"
+    "    with open(path, 'rb') as stream:\n"
+    "        for block in iter(lambda: stream.read(1 << 20), b''):\n"
+    "            digest.update(block)\n"
+    "    print('%s  %s' % (digest.hexdigest(), path))\n"
+)
+
 # Every action is a fixed argv template plus the capability it needs. Nothing here
 # accepts a caller-supplied command, flag or interpreter argument: a new check is added
 # by declaring an action, not by widening a permission.
@@ -63,6 +76,13 @@ ACTION_SPECS = {
         "requires_modules": ("pytest",),
         "argument": None,
         "coverage": ("tests",),
+    },
+    "hash": {
+        "description": "hash the bytes of named project files through the trusted entry point",
+        "requires_paths": (),
+        "requires_modules": (),
+        "argument": "paths",
+        "coverage": (),
     },
 }
 
@@ -132,11 +152,49 @@ def _resolve_path(action: str, spec: dict, root: Path, path: str | None) -> str 
     return candidate.as_posix()
 
 
-def build_argv(action: str, root, path: str | None = None, python: str | None = None) -> list[str]:
+def _resolve_paths(root: Path, paths) -> list[str]:
+    """Resolve the file list for an action that hashes named files.
+
+    Every path must stay inside the project and name an existing file, and the list is
+    passed as argv rather than through a shell, so the action cannot be turned into a
+    general-purpose command runner.
+    """
+    if type(paths) is not list or not paths:
+        raise StateError("invalid_input", "This action requires a list of relative paths")
+    base = Path(root).resolve()
+    resolved: list[str] = []
+    for path in paths:
+        if type(path) is not str or not path:
+            raise StateError("invalid_input", "Every hashed path must be a non-empty string")
+        if any(character in path for character in SHELL_METACHARACTERS):
+            raise StateError(
+                "invalid_input",
+                f"Path argument must not contain shell metacharacters: {path!r}",
+            )
+        candidate = Path(path)
+        if candidate.is_absolute():
+            raise StateError(
+                "invalid_input", f"Path argument must be relative to the project root: {path!r}"
+            )
+        target = (base / candidate).resolve()
+        if target != base and base not in target.parents:
+            raise StateError(
+                "invalid_input", f"Path argument must stay inside the project: {path!r}"
+            )
+        if not target.is_file():
+            raise StateError("invalid_input", f"Path argument is not a file: {path!r}")
+        resolved.append(candidate.as_posix())
+    return resolved
+
+
+def build_argv(action: str, root, path: str | None = None, python: str | None = None,
+               paths=None) -> list[str]:
     """The exact argv for an action; callers never supply flags or a command string."""
     spec = _spec(action)
     root = Path(root)
     program = interpreter(python)
+    if spec["argument"] == "paths":
+        return [program, "-c", _HASH_SCRIPT] + _resolve_paths(root, paths)
     resolved = _resolve_path(action, spec, root, path)
     if action == "unittest":
         return [program, "-m", "unittest", "discover", "-s", "tests", "-q"]
@@ -178,7 +236,8 @@ def _module_available(program: str, root: Path, module: str) -> bool:
     return probe.returncode == 0
 
 
-def preflight(action: str, root, path: str | None = None, python: str | None = None) -> dict:
+def preflight(action: str, root, path: str | None = None, python: str | None = None,
+              paths=None) -> dict:
     """Check whether an action can run here, before verification starts."""
     spec = _spec(action)
     root = Path(root).resolve()
@@ -224,7 +283,7 @@ def preflight(action: str, root, path: str | None = None, python: str | None = N
 
     # A bad argument is a caller error, not a missing capability: it propagates instead
     # of being folded into `verification_capability_missing`.
-    argv = build_argv(action, root, path, program)
+    argv = build_argv(action, root, path, program, paths)
 
     return {
         "action": action,
@@ -244,13 +303,13 @@ def _timestamp() -> str:
 
 def run(
     action: str, root, path: str | None = None, python: str | None = None,
-    timeout: int = 900,
+    timeout: int = 900, paths=None,
 ) -> dict:
     """Execute one trusted action and return a traceable VerificationRun."""
     spec = _spec(action)
     root = Path(root).resolve()
     program = interpreter(python)
-    report = preflight(action, root, path, program)
+    report = preflight(action, root, path, program, paths)
     if not report["available"]:
         raise StateError(
             "verification_capability_missing",
@@ -276,6 +335,8 @@ def run(
     coverage = list(spec["coverage"])
     if spec["argument"] == "path" and path:
         coverage = [f"tests/{Path(path).as_posix()}"]
+    elif spec["argument"] == "paths" and paths:
+        coverage = [Path(item).as_posix() for item in paths]
     return {
         "id": "VR-" + uuid.uuid4().hex[:16],
         "action_id": action,
@@ -310,14 +371,17 @@ def main(argv=None) -> int:
         item.add_argument("--action", required=True, help="a trusted action id")
         item.add_argument("--root", default=".", help="project root (default: cwd)")
         item.add_argument("--path", help="file argument for actions that take one")
+        item.add_argument("--paths", action="append",
+                          help="project-relative file to hash (repeat for the hash action)")
         item.add_argument("--timeout", type=int, default=900)
     args = parser.parse_args(argv)
 
     try:
         if args.command == "preflight":
-            result = preflight(args.action, Path(args.root), args.path)
+            result = preflight(args.action, Path(args.root), args.path, paths=args.paths)
         else:
-            result = run(args.action, Path(args.root), args.path, timeout=args.timeout)
+            result = run(args.action, Path(args.root), args.path, timeout=args.timeout,
+                         paths=args.paths)
     except StateError as error:
         print(json.dumps(
             {"error": {"code": error.code, "message": str(error)}},

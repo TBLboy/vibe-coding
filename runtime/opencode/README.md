@@ -169,18 +169,18 @@ The following subagents are available through the OpenCode `task` tool:
 - `workflow-distiller`
 
 Read-only roles explicitly deny the `edit` tool. `verification-reviewer` and `alignment-reviewer`
-additionally deny Bash by default and allow only read-only `git`/search commands plus the unittest
-and package-validation entry points; any other shell command is denied even under `--auto`.
-Those entry points go through `bin/vibe-python`, a machine-independent wrapper that execs the
-interpreter named in the `vibe-python` pointer next to the config. The wrapper exists because
-OpenCode expands only `~` and `$HOME` in permission patterns and never `$VIBE_PYTHON`, while the
-real interpreter path can sit outside the home directory. The allowlist names the wrapper with its
-two exact subcommands (`-m unittest*` and `runtime/scripts/validate_package.py*`) rather than the
-bare wrapper, so a read-only role cannot reach `vibe-python -c "<arbitrary python>"`. `sha256sum`
-is allowed so a reviewer can recompute artifact hashes instead of trusting the implementer's. The
-allowlist is pinned to the default `~/.config/opencode` location: with a custom
-`OPENCODE_CONFIG_DIR` the wrapper patterns do not match, and independent review then fails
-explicitly instead of silently falling back to a possibly older `python3` on `PATH`.
+additionally deny Bash by default and allow only read-only `git`/search commands plus the trusted
+verification runner; any other shell command is denied even under `--auto`. The runner is reached
+through its own path and subcommand (`*verification_runner.py preflight*` and
+`*verification_runner.py run*`) rather than through a wrapper: OpenCode expands only `~` and
+`$HOME` in permission patterns, and the installed `bin/vibe-python` is a POSIX shell script, so
+pinning the allowlist to it left a Windows reviewer unable to run anything at all. The runner
+enforces the interpreter floor itself (`python>=3.11`) and answers an older interpreter with
+`verification_capability_missing`, so allowing any interpreter cannot silently downgrade a review.
+Digests are re-derived with the runner's `hash` action (`run --action hash --paths <file>`), which
+is why the allowlist carries no `sha256sum`: a permission entry for a command that does not exist
+on this platform advertises a capability the reviewer cannot actually use. Independent review
+fails explicitly rather than silently falling back to a possibly older `python3` on `PATH`.
 Research, onboarding, paper-reading, `business-analyst` and `workflow-distiller` roles have Bash
 fully denied and rely on built-in read/search tools or web tools. `business-analyst` and
 `workflow-distiller` may write draft records under `.project-log/**`; they cannot edit product

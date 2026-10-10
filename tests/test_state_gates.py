@@ -191,6 +191,83 @@ class GateStoreTests(unittest.TestCase):
             decision["blocking"],
         )
 
+    def test_strict_task_with_only_unverifiable_mechanical_evidence_is_not_confirmed(self) -> None:
+        """T22: a record that claims a version binding must be re-evaluable.
+
+        `version_binding` is the record saying "this result belongs to specific bytes".
+        When it carries a commit but no file hashes, nobody — not the gate, not a later
+        reviewer — can re-derive that claim. A strict task covered only by such records
+        must fail closed instead of reading as mechanically verified.
+        """
+        self.begin_task(risk="high")
+        self.apply("evidence.record", {
+            "id": "EVID-001", "kind": "test", "subject": "task",
+            "status": "valid", "task_id": "TASK-001",
+            "covers": {"tasks": ["TASK-001"]},
+            "version_binding": {"git_commit": "abc123"},
+        })
+        self.apply("review.record", {
+            "id": "REV-001", "task_id": "TASK-001", "reviewer": "independent",
+            "verdict": "go", "scope": {"tasks": ["TASK-001"]},
+            "evidence_refs": ["EVID-001"],
+        })
+        decision = self.store.gate_task("TASK-001")
+        self.assertEqual(decision["decision"], "blocked")
+        self.assertTrue(
+            any("mechanical verification is not confirmed" in problem
+                for problem in decision["blocking"]),
+            decision["blocking"],
+        )
+        self.assert_error("task_gate", "task.finish", {
+            "task_id": "TASK-001", "summary": "implemented",
+        })
+
+    def test_strict_task_with_hash_bound_evidence_still_completes(self) -> None:
+        """T22 is a floor, not a wall: a re-evaluable binding is still accepted."""
+        self.begin_task(risk="high")
+        self.apply("evidence.record", {
+            "id": "EVID-001", "kind": "test", "subject": "task",
+            "status": "valid", "task_id": "TASK-001",
+            "covers": {"tasks": ["TASK-001"]},
+            "version_binding": {"file_hashes": {"artifact.txt": "a" * 64}},
+        })
+        self.apply("review.record", {
+            "id": "REV-001", "task_id": "TASK-001", "reviewer": "independent",
+            "verdict": "go", "scope": {"tasks": ["TASK-001"]},
+            "evidence_refs": ["EVID-001"],
+        })
+        self.assertEqual(self.store.gate_task("TASK-001")["decision"], "allowed")
+
+    def test_evidence_that_claims_no_binding_is_left_alone(self) -> None:
+        """The T22 floor targets claimed bindings only, so ordinary records still pass.
+
+        Evidence with no `version_binding` at all is not asserting that it is bound to
+        bytes, and the strict-task contract for it is unchanged.
+        """
+        self.begin_task(risk="high")
+        self.apply("evidence.record", {
+            "id": "EVID-001", "kind": "test", "subject": "task",
+            "status": "valid", "task_id": "TASK-001",
+            "covers": {"tasks": ["TASK-001"]},
+        })
+        self.apply("review.record", {
+            "id": "REV-001", "task_id": "TASK-001", "reviewer": "independent",
+            "verdict": "go", "scope": {"tasks": ["TASK-001"]},
+            "evidence_refs": ["EVID-001"],
+        })
+        self.assertEqual(self.store.gate_task("TASK-001")["decision"], "allowed")
+
+    def test_the_unverifiable_binding_floor_is_scoped_to_strict_tasks(self) -> None:
+        """An ordinary task keeps its previous contract: no new retroactive blocking."""
+        self.begin_task()
+        self.apply("evidence.record", {
+            "id": "EVID-001", "kind": "test", "subject": "task",
+            "status": "valid", "task_id": "TASK-001",
+            "covers": {"tasks": ["TASK-001"]},
+            "version_binding": {"git_commit": "abc123"},
+        })
+        self.assertEqual(self.store.gate_task("TASK-001")["decision"], "allowed")
+
     def test_stale_covered_artifact_blocks_completion_without_refresh(self) -> None:
         project = self.root / "worktree"
         project.mkdir()

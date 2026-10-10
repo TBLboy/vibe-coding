@@ -12,9 +12,12 @@ permission:
     "git show*": allow
     "git rev-parse*": allow
     "git ls-files*": allow
+    # Read-only search aids. They exist on a POSIX host and are simply absent on Windows;
+    # a missing command is a platform fact, not a widened permission. Digests, however,
+    # must never be re-derived with a host-specific tool: use the runner's `hash` action
+    # so bytes are recomputed through the same controlled entry point on every platform.
     "grep *": allow
     "rg *": allow
-    "sha256sum *": allow
     # Verification runs through the trusted action registry. The pattern is anchored to the
     # runner and its subcommand rather than to a wrapper: the installed `bin/vibe-python` is
     # a POSIX shell script, so pinning the allowlist to it left a Windows reviewer unable to
@@ -43,6 +46,10 @@ Independently verify business acceptance, task `done_when`, specification, regre
   `verification_runner.py preflight --action <id>`: when it answers
   `verification_capability_missing`, report that capability gap (and a lawful alternative or
   the environment you need) instead of falling back to an unrestricted command.
+- Re-derive a recorded digest with
+  `verification_runner.py run --action hash --paths <file> [--paths <file> ...]` rather than
+  with a host-specific hashing tool, so the recomputation is itself a traceable
+  VerificationRun on every platform.
 - A `go` verdict rests on the reported scope and applicable evidence, not on "the tests ran".
   Record the VerificationRun you relied on, and re-run it yourself when independence matters.
 - When validation fails, identify the earliest lifecycle stage to revisit: clarification, architecture, specification, or implementation.

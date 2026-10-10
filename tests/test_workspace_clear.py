@@ -204,6 +204,24 @@ class WorkspaceClearTests(StoreTestCase):
         self.assertEqual(self.store.status()["workspace_generation"], 1)
 
 
+    def test_forged_authorization_fields_do_not_authorize_a_clear(self) -> None:
+        """T32: a payload cannot grant itself permission to clear the workspace.
+
+        Bulk clearing is a management action that the host authorizes; the store has no
+        identity of its own to check a caller against. What it can guarantee is the
+        negative: a payload asserting its own authority (`actor`, `authorized_by`, ...)
+        is an unknown field and is rejected, never read as consent.
+        """
+        self.goal_with_tasks()
+        plan = self.store.workspace_plan()
+        for forged in ({"actor": "user"}, {"authorized_by": "human"}, {"approved": True}):
+            payload = {"reason": "bulk clear", "plan_digest": plan["plan_digest"]}
+            payload.update(forged)
+            error = self.assert_error("invalid_input", "workspace.clear", payload)
+            self.assertIn("unknown fields", str(error))
+        self.assertEqual(self.store.active_goal_ids(), ["GOAL-001"])
+
+
 class WorkspaceRecoveryTests(unittest.TestCase):
     def test_clear_survives_the_crash_between_ledger_and_projection(self) -> None:
         """T14: the ledger is authoritative, so a lost SQLite commit is repaired.

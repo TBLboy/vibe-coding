@@ -84,6 +84,46 @@ class SessionRecoveryTests(unittest.TestCase):
             self.assertEqual(caught.exception.code, "state_conflict", action)
         self.assertEqual(restored.status()["tasks"], [])
 
+    def test_a_stale_fencing_token_is_rejected_after_a_clear(self) -> None:
+        """T13: a writer that names the pre-clear generation is refused outright.
+
+        Cancelling the old task stops an executor from reviving it, but an executor that
+        restored the pre-clear view could still create *new* work in the generation it
+        believes is current. The fencing token closes that: a write that names the
+        generation the writer really saw is checked against the generation on disk.
+        """
+        self.build_active_workspace()
+        self.clear_workspace()
+
+        restored = open_store(self.root)
+        with self.assertRaises(StateError) as caught:
+            restored.apply({
+                "schema_version": 1, "command_id": uuid.uuid4().hex,
+                "expected_revision": restored.status()["revision"],
+                "expected_generation": 0,
+                "action": "goal.create",
+                "payload": {"id": "GOAL-OLD", "title": "Revived work"},
+            })
+        self.assertEqual(caught.exception.code, "state_conflict")
+        self.assertIn("generation", str(caught.exception))
+        self.assertEqual(restored.active_goal_ids(), [])
+        self.assertEqual(restored.status()["workspace_generation"], 1)
+
+    def test_the_current_fencing_token_is_accepted(self) -> None:
+        """The fence must not block a writer that names the generation it really saw."""
+        self.build_active_workspace()
+        self.clear_workspace()
+
+        restored = open_store(self.root)
+        restored.apply({
+            "schema_version": 1, "command_id": uuid.uuid4().hex,
+            "expected_revision": restored.status()["revision"],
+            "expected_generation": 1,
+            "action": "goal.create",
+            "payload": {"id": "GOAL-NEW", "title": "New work"},
+        })
+        self.assertEqual(restored.active_goal_ids(), ["GOAL-NEW"])
+
     def test_history_keeps_everything_the_active_view_dropped(self) -> None:
         self.build_active_workspace()
         self.clear_workspace()

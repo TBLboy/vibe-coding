@@ -8,6 +8,7 @@ that reports `verification_capability_missing`, and a traceable VerificationRun.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import subprocess
 import sys
@@ -157,6 +158,70 @@ class VerificationRunTests(unittest.TestCase):
         with self.assertRaises(StateError) as caught:
             runner.run("unittest-file", self.root, path="../outside.py")
         self.assertEqual(caught.exception.code, "invalid_input")
+
+
+class HashActionTests(unittest.TestCase):
+    """Digest re-derivation must go through the same trusted registry as every check.
+
+    Before this action existed the reviewer allowlist carried `sha256sum *`, which does
+    not exist on Windows: the only way left to check a recorded digest was to leave the
+    controlled entry point. `hash` restores that capability on every platform without
+    handing out a general-purpose shell.
+    """
+
+    def setUp(self) -> None:
+        self.temporary = tempfile.TemporaryDirectory()
+        self.root = Path(self.temporary.name)
+        (self.root / "artifact.txt").write_bytes(b"verified bytes\n")
+
+    def tearDown(self) -> None:
+        self.temporary.cleanup()
+
+    def test_hash_is_a_registered_action(self) -> None:
+        self.assertIn("hash", runner.action_ids())
+
+    def test_hash_argv_is_a_fixed_script_plus_paths(self) -> None:
+        argv = runner.build_argv("hash", self.root, paths=["artifact.txt"])
+        self.assertEqual(argv[0], runner.interpreter())
+        self.assertEqual(argv[1], "-c")
+        self.assertEqual(argv[3:], ["artifact.txt"])
+        self.assertNotIn("&&", " ".join(argv))
+        self.assertNotIn("|", " ".join(argv))
+
+    def test_hash_reproduces_an_independently_computed_digest(self) -> None:
+        expected = hashlib.sha256((self.root / "artifact.txt").read_bytes()).hexdigest()
+        result = runner.run("hash", self.root, paths=["artifact.txt"], timeout=60)
+        self.assertEqual(result["exit_code"], 0, result.get("output_tail"))
+        self.assertIn(expected, result["output_tail"])
+        self.assertEqual(result["coverage_claims"]["paths"], ["artifact.txt"])
+
+    def test_hash_rejects_anything_that_leaves_the_project(self) -> None:
+        for bad in ("../outside.txt", "C:/Windows/win.ini", "artifact.txt; echo pwned"):
+            with self.assertRaises(StateError) as caught:
+                runner.build_argv("hash", self.root, paths=[bad])
+            self.assertEqual(caught.exception.code, "invalid_input", bad)
+
+    def test_hash_requires_at_least_one_named_file(self) -> None:
+        with self.assertRaises(StateError) as caught:
+            runner.build_argv("hash", self.root)
+        self.assertEqual(caught.exception.code, "invalid_input")
+
+    def test_hash_refuses_a_directory(self) -> None:
+        with self.assertRaises(StateError) as caught:
+            runner.build_argv("hash", self.root, paths=["."])
+        self.assertEqual(caught.exception.code, "invalid_input")
+
+    def test_reviewer_allowlists_carry_no_posix_only_hashing_tool(self) -> None:
+        """A permission entry for a command that cannot exist is a broken capability.
+
+        The allowlist is a contract about what a reviewer can do here, so it must not
+        advertise a tool that is missing on this platform; the registry action is the
+        supported way to re-derive a digest.
+        """
+        for name in ("verification-reviewer.md", "alignment-reviewer.md"):
+            text = (ROOT / "runtime" / "opencode" / "agents" / name).read_text(encoding="utf-8")
+            self.assertNotIn("sha256sum", text, name)
+            self.assertIn("*verification_runner.py run*", text, name)
 
 
 class RunnerEntryPointTests(unittest.TestCase):

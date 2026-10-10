@@ -430,8 +430,15 @@ def _decode_json(value: str, name: str):
 
 def _request(envelope: dict) -> tuple[dict, str, str]:
     fields = {"schema_version", "command_id", "expected_revision", "action", "payload"}
-    if type(envelope) is not dict or set(envelope) != fields:
+    # `expected_generation` is an optional fencing token: an executor that restored a
+    # session records the workspace generation it observed and passes it back on every
+    # write, so a writer that survived a `workspace.clear` cannot resurrect the old
+    # workspace or mutate the new one.
+    optional = {"expected_generation"}
+    if type(envelope) is not dict or not fields <= set(envelope) or not set(envelope) <= fields | optional:
         raise StateError("invalid_input", "Operation envelope has missing or unknown fields")
+    if "expected_generation" in envelope:
+        _integer(envelope["expected_generation"], "expected_generation")
     _integer(envelope["schema_version"], "schema_version", 1)
     if envelope["schema_version"] != SCHEMA_VERSION:
         raise StateError("invalid_input", "Unsupported schema_version")
@@ -1120,6 +1127,23 @@ class Store:
             "reasons": reasons,
         }
 
+    @staticmethod
+    def _applicability(root: Path | None, evidence: dict) -> str:
+        """Applicability of one evidence record: ``current``, ``stale`` or ``unknown``.
+
+        ``unknown`` means the record carries no file hashes, so its applicability can
+        never be re-evaluated. That is a property of the record itself and is
+        therefore detected without a worktree, which keeps the verdict identical in
+        rootless stores and in `vibe status`.
+        """
+        binding = evidence.get("version_binding")
+        hashes = binding.get("file_hashes") if type(binding) is dict else None
+        if type(hashes) is not dict or not hashes:
+            return "unknown"
+        if root is None:
+            return "current"
+        return Store.evidence_applicability(root, evidence)["applicability"]
+
     def stale_evidence(self, root: Path) -> list[dict]:
         """Read-only list of active evidence whose recorded bytes changed."""
         result = []
@@ -1268,16 +1292,7 @@ class Store:
             "('ready','in-progress','waiting-user','blocked','handed-off') "
             "ORDER BY updated_sequence DESC, id LIMIT ?", (limit,)
         ).fetchall()
-        generation = 0
-        for row in connection.execute(
-            "SELECT receipt_json FROM commands WHERE action = 'workspace.clear'"
-        ):
-            receipt = _decode_json(row["receipt_json"], "command receipt")
-            result = receipt.get("result") if type(receipt) is dict else None
-            # A clear of an already empty workspace is a no-op and must not invent a
-            # generation, so the count follows the receipts rather than the commands.
-            if type(result) is dict and result.get("cleared"):
-                generation += 1
+        generation = Store._workspace_generation(connection)
         return {
             "schema_version": SCHEMA_VERSION, "project_id": metadata["project_id"],
             "store_schema": metadata["store_schema"], "context_id": metadata["context_id"],
@@ -1380,12 +1395,12 @@ class Store:
                 cancelled.append(row["id"])
         return cancelled
 
-    def _workspace_plan(connection) -> dict:
-        """Read-only description of what ``workspace.clear`` would affect.
+    @staticmethod
+    def _workspace_generation(connection) -> int:
+        """Number of effective ``workspace.clear`` events recorded in the ledger.
 
-        The generation is derived from the ledger (the number of ``workspace.clear``
-        events) instead of being materialised, so a rebuilt or healed projection
-        agrees without an extra table to keep in sync.
+        A clear of an already empty workspace is a no-op and must not invent a
+        generation, so the count follows the receipts rather than the commands.
         """
         generation = 0
         for row in connection.execute(
@@ -1393,10 +1408,18 @@ class Store:
         ):
             receipt = _decode_json(row["receipt_json"], "command receipt")
             result = receipt.get("result") if type(receipt) is dict else None
-            # A clear of an already empty workspace is a no-op and must not invent a
-            # generation, so the count follows the receipts rather than the commands.
             if type(result) is dict and result.get("cleared"):
                 generation += 1
+        return generation
+
+    def _workspace_plan(connection) -> dict:
+        """Read-only description of what ``workspace.clear`` would affect.
+
+        The generation is derived from the ledger (the number of ``workspace.clear``
+        events) instead of being materialised, so a rebuilt or healed projection
+        agrees without an extra table to keep in sync.
+        """
+        generation = Store._workspace_generation(connection)
         goals = [
             row["id"] for row in connection.execute(
                 "SELECT id FROM goals WHERE status IN "
@@ -1661,11 +1684,13 @@ class Store:
             connection, root, ("task", task["id"])
         )
         valid = []
+        unverifiable = []
         covered = Store._evidence_covers_task(connection, task["id"])
         for row in covered:
             if row["status"] != "valid":
                 continue
-            stale = Store._stale_reasons(root, Store._evidence(row))
+            entry = Store._evidence(row)
+            stale = Store._stale_reasons(root, entry)
             if stale:
                 # A covered artifact changed after verification: the evidence is
                 # stale whether or not anyone refreshed the stored status yet.
@@ -1674,6 +1699,13 @@ class Store:
                     + "; ".join(stale)
                 )
                 continue
+            binding = entry.get("version_binding")
+            claims_binding = type(binding) is dict and bool(binding)
+            if claims_binding and Store._applicability(root, entry) == "unknown":
+                # The record claims to be bound to a version but carries no file hashes,
+                # so its applicability can never be re-evaluated. It must not be what
+                # proves mechanical verification for a strict task. (T22)
+                unverifiable.append(row["id"])
             valid.append(row)
         if not valid:
             problems.append(
@@ -1682,7 +1714,17 @@ class Store:
         risk = extensions.get("risk")
         verification = extensions.get("verification")
         level = verification.get("level") if type(verification) is dict else None
-        if risk in {"high", "critical"} or (type(level) is int and level >= 3):
+        strict = risk in {"high", "critical"} or (type(level) is int and level >= 3)
+        if strict and valid and len(unverifiable) == len(valid):
+            # T22: a strict task covered only by records that claim a version binding but
+            # carry no file hashes must never be reported as mechanically verified. Fail
+            # closed and ask for evidence bound to the bytes it claims to cover.
+            problems.append(
+                f"strict task {task['id']} is covered only by evidence whose claimed binding "
+                "cannot be re-evaluated (version_binding without file hashes), so mechanical "
+                "verification is not confirmed: " + ", ".join(unverifiable)
+            )
+        if strict:
             reviews = [
                 dict(row) for row in connection.execute(
                     "SELECT * FROM reviews WHERE task_id = ? ORDER BY created_sequence DESC",
@@ -2130,6 +2172,18 @@ class Store:
                 )
             if metadata["local_revision"] >= MAX_REVISION:
                 raise StateError("state_conflict", "Revision limit reached")
+            if "expected_generation" in request:
+                # Fencing token (T13): an executor that restored a session states the
+                # workspace generation it believes is current. After a clear, a stale
+                # writer is rejected instead of resurrecting the old workspace or
+                # mutating the new one.
+                generation = Store._workspace_generation(connection)
+                if request["expected_generation"] != generation:
+                    raise StateError(
+                        "state_conflict",
+                        f"Expected workspace generation {request['expected_generation']}; "
+                        f"current is {generation}",
+                    )
             sequence = metadata["local_revision"] + 1
             result = self._transition(connection, request["action"], request["payload"], sequence)
             origin_context = self.context_id
@@ -2949,7 +3003,9 @@ class Store:
                    WHERE (tasks.status = 'ready' AND tasks.run_id IS NOT NULL)
                    OR (tasks.status NOT IN ('ready','cancelled') AND runs.id IS NULL)
                    OR (runs.id IS NOT NULL AND (runs.task_id != tasks.id OR runs.status != CASE tasks.status
-                       WHEN 'in-progress' THEN 'active' WHEN 'implemented-unverified' THEN 'finished'
+                       WHEN 'in-progress' THEN 'active'
+                       WHEN 'implemented-unverified' THEN 'finished'
+                       WHEN 'complete' THEN 'finished'
                        ELSE tasks.status END))
                    OR (tasks.status IN ('waiting-user','blocked') AND blockers.id IS NULL)
                    OR (tasks.status NOT IN ('waiting-user','blocked') AND blockers.id IS NOT NULL)

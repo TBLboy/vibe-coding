@@ -20,10 +20,10 @@ permission:
     # An unsupported interpreter is reported by `preflight` as
     # `verification_capability_missing` (python>=3.11) instead. There is deliberately no raw
     # `-m unittest` / `*pytest*` allow: those admit any command while looking like a
-    # capability check.
+    # capability check. Digests are recomputed with `run --action hash`, not with a
+    # host-specific hashing tool, so no POSIX-only entry is needed here.
     "*verification_runner.py preflight*": allow
     "*verification_runner.py run*": allow
-    "sha256sum *": allow
   task:
     "*": deny
 ---

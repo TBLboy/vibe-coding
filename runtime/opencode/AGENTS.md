@@ -47,6 +47,7 @@
    "$VIBE_PYTHON" "$VIBE_RUNTIME/scripts/vibe.py" --root <project-root> context <task-id>
    ```
    恢复 Project Goal、任务、阻塞、证据有效性、活动 Run 和精确下一步。
+   同时记下 `status` 的 `workspace_generation`：后续写入把它作为 `expected_generation` 传回（`state-apply` 包络的可选字段），代次与磁盘不符的写入会被拒绝，因此清空前的旧执行器无法复活旧任务或在新代次里创建新工作。
 5. 会话 Goal 与自动续跑由 `@prevalentware/opencode-goal-plugin`（固定版本 `0.1.51`）承担，由 OpenCode 安装器写入客户端配置；真实运行时已验证该插件被加载注册，且 idle 自动续跑会自行驱动后续回合。插件状态是会话控制面而非业务事实源：宣告完成前必须运行 `vibe goal` 的证据门禁。插件未安装或被禁用时，会话续跑退回显式用户指令，并标注 `serial-role-fallback`。
 6. 恢复事实状态后再行动。恢复状态不是交付：对实质性用户任务，必须继续执行到完成、明确阻塞或用户要求暂停；不得只输出恢复摘要后结束。无活动 Run 时，先建立新 Run，再执行当前用户请求。没有非琐碎任务时，先建立最小任务记录；不要无计划地修改项目。
 

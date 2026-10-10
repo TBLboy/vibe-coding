@@ -162,7 +162,10 @@ class OpenCodeStaticSurfaceTests(unittest.TestCase):
         # POSIX script, so pinning the allowlist to it left a Windows reviewer unable to
         # run anything at all. The pattern is anchored to the runner and its subcommand,
         # and the runner itself refuses an interpreter below the supported version, so
-        # allowing any interpreter cannot silently downgrade a review.
+        # allowing any interpreter cannot silently downgrade a review. Digest
+        # re-derivation goes through the same entry point (`run --action hash`), so the
+        # allowlist no longer advertises `sha256sum`: a permission entry for a command
+        # that does not exist on this platform is a capability the reviewer cannot use.
         for role in ("verification-reviewer", "alignment-reviewer"):
             bash = parse_frontmatter(OPENCODE / f"agents/{role}.md")["permission"]["bash"]
             allow = {pattern for pattern, action in bash.items() if action == "allow"}
@@ -174,7 +177,10 @@ class OpenCodeStaticSurfaceTests(unittest.TestCase):
                 "*verification_runner.py run*",
                 allow, role,
             )
-            self.assertIn("sha256sum *", allow, role)
+            self.assertFalse(
+                [pattern for pattern in allow if "sha256sum" in pattern],
+                f"{role} still advertises a POSIX-only hashing tool",
+            )
             # Least privilege: the bare wrapper pattern would also permit
             # `vibe-python -c "<arbitrary python>"` for a read-only role.
             self.assertNotIn("*/.config/opencode/bin/vibe-python *", allow, role)
