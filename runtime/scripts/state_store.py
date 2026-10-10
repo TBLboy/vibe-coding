@@ -1714,7 +1714,7 @@ class Store:
         risk = extensions.get("risk")
         verification = extensions.get("verification")
         level = verification.get("level") if type(verification) is dict else None
-        strict = risk in {"high", "critical"} or (type(level) is int and level >= 3)
+        strict = risk in {"strict", "high", "critical"} or (type(level) is int and level >= 3)
         if strict and valid and len(unverifiable) == len(valid):
             # T22: a strict task covered only by records that claim a version binding but
             # carry no file hashes must never be reported as mechanically verified. Fail

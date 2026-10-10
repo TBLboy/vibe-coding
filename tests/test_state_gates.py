@@ -199,7 +199,7 @@ class GateStoreTests(unittest.TestCase):
         reviewer — can re-derive that claim. A strict task covered only by such records
         must fail closed instead of reading as mechanically verified.
         """
-        self.begin_task(risk="high")
+        self.begin_task(risk="strict")
         self.apply("evidence.record", {
             "id": "EVID-001", "kind": "test", "subject": "task",
             "status": "valid", "task_id": "TASK-001",
@@ -221,6 +221,33 @@ class GateStoreTests(unittest.TestCase):
         self.assert_error("task_gate", "task.finish", {
             "task_id": "TASK-001", "summary": "implemented",
         })
+
+    def test_both_strictness_vocabularies_are_treated_as_strict(self) -> None:
+        """`risk: strict` is the routing word for tasks; `high`/`critical` are the goals'.
+
+        The T22 floor has to fire for both, or a strict task could pick the vocabulary
+        that happens not to be checked.
+        """
+        for risk in ("strict", "high", "critical"):
+            with self.subTest(risk=risk):
+                self.setUp()
+                try:
+                    self.begin_task(risk=risk)
+                    self.apply("evidence.record", {
+                        "id": "EVID-001", "kind": "test", "subject": "task",
+                        "status": "valid", "task_id": "TASK-001",
+                        "covers": {"tasks": ["TASK-001"]},
+                        "version_binding": {"git_commit": "abc123"},
+                    })
+                    self.apply("review.record", {
+                        "id": "REV-001", "task_id": "TASK-001", "reviewer": "independent",
+                        "verdict": "go", "scope": {"tasks": ["TASK-001"]},
+                        "evidence_refs": ["EVID-001"],
+                    })
+                    blocking = " ".join(self.store.gate_task("TASK-001")["blocking"])
+                    self.assertIn("mechanical verification is not confirmed", blocking, risk)
+                finally:
+                    self.tearDown()
 
     def test_strict_task_with_hash_bound_evidence_still_completes(self) -> None:
         """T22 is a floor, not a wall: a re-evaluable binding is still accepted."""

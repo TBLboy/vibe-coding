@@ -921,7 +921,7 @@ format 2 是框架**唯一支持**的格式：新建项目直接生成新格式�
 - `evidence`：证据状态、覆盖范围与产物哈希绑定；
 - `reviews`：任务级独立复核、结论与证据引用。
 
-长文档正文只放在 `.project-log/docs/**`，结构化记录只保存 `doc_ref`（路径与内容哈希）。`task.finish` 要求至少一条 `valid` 且覆盖该任务的证据；这里的“覆盖”指证据的 `covers.tasks` 列出该任务 ID，只用 `--task-id` 归属不足以通过 `vibe gate`。高风险任务还要求独立 `go` 复核。高风险（或 `verification.level >= 3`）任务还受一条机械验证下限约束：若它仅由“声称绑定版本、却没有文件哈希”的证据覆盖（`version_binding` 存在但没有 `file_hashes`），适用性无法被任何人重算，门禁按失败处理，并要求补上绑定到字节的证据。`goal.complete` 会逐条检查 `success_conditions`、`required_evidence` 与显式 `not-applicable` 理由。`evidence refresh` 会在覆盖文件字节变化后把证据写成 `stale`，旧证据不会被删除。
+长文档正文只放在 `.project-log/docs/**`，结构化记录只保存 `doc_ref`（路径与内容哈希）。`task.finish` 要求至少一条 `valid` 且覆盖该任务的证据；这里的“覆盖”指证据的 `covers.tasks` 列出该任务 ID，只用 `--task-id` 归属不足以通过 `vibe gate`。高风险任务还要求独立 `go` 复核。风险等级为 `strict`（或 `high`/`critical`）、或 `verification.level >= 3` 的任务还受一条机械验证下限约束：若它仅由“声称绑定版本、却没有文件哈希”的证据覆盖（`version_binding` 存在但没有 `file_hashes`），适用性无法被任何人重算，门禁按失败处理，并要求补上绑定到字节的证据。`goal.complete` 会逐条检查 `success_conditions`、`required_evidence` 与显式 `not-applicable` 理由。`evidence refresh` 会在覆盖文件字节变化后把证据写成 `stale`，旧证据不会被删除。
 
 文档引用分两类。显式的 `{"type": "bound_document", "path": ..., "sha256": ..., "subject": {"kind": "task", "id": "TASK-001"}, "binding": "required"}` 是受控依赖：它声明的那个任务（或目标）在文档变化后必须重新验证。`informational_ref` 以及未标注类型的旧式 `doc_ref` 只作为诊断出现在 `validate` 里，不阻塞任何任务——它们既没声明被评对象也没声明绑定方式。
 
