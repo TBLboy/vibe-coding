@@ -296,12 +296,19 @@ def refresh_evidence(root: Path, reason: str | None = None, changed_paths=None) 
 def compact_context(root: Path) -> str:
     store = open_store(root, heal=True)
     state = store.status(limit=5)
-    # Only an active run makes a task *current*. Falling back to the latest task would
-    # present work that a workspace clear already cancelled as if it were still open,
-    # which is exactly the "a resumed session revives cleared work" defect.
+    # Work in hand is the active run's task, or — when a run is not active — the latest
+    # task while it is still open (a blocked or handed-off task is paused, not history).
+    # Only genuinely finished work is shown separately, and cancelled work is never
+    # presented at all: falling back to it is how a resumed session revives what a
+    # workspace clear already dropped.
     task = state.get("current_task")
     last = state.get("latest_task")
-    if last is not None and last["status"] == "cancelled":
+    if task is None and last is not None and last.get("execution_state") in {
+        "not-started", "active", "paused",
+    }:
+        task = last
+        last = None
+    if last is not None and last.get("execution_state") != "finished":
         last = None
     try:
         goal = store.get_goal(store.active_goal_id())
