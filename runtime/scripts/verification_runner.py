@@ -359,7 +359,10 @@ def run(
 
     coverage = list(spec["coverage"])
     if spec["argument"] == "path" and path:
-        coverage = [f"tests/{Path(path).as_posix()}"]
+        # `_resolve_path` accepts a path relative to the *project root* (``tests/x.py``), so
+        # prefixing ``tests/`` unconditionally reported ``tests/tests/x.py`` -- a coverage
+        # claim naming a file that does not exist.
+        coverage = [Path(path).as_posix()]
     elif spec["argument"] == "paths" and paths:
         coverage = [Path(item).as_posix() for item in paths]
     return {

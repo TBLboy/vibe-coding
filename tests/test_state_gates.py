@@ -531,6 +531,43 @@ class GateStoreTests(unittest.TestCase):
         # History is not rewritten: an implementation that really happened stays recorded.
         self.assertEqual(self.store.get_task("TASK-002")["status"], "implemented-unverified")
 
+    def test_completing_a_goal_cancels_the_run_of_an_open_task(self) -> None:
+        """An in-progress task's run must not survive its goal's completion.
+
+        The audit invariant requires an active run to belong to a task that is really
+        running. Closing the task without closing its run would leave a run pointing at a
+        cancelled task, so completion cancels the run too.
+        """
+        self.apply("goal.create", {
+            "id": "GOAL-001", "title": "Goal",
+            "extensions": {
+                "success_conditions": [{
+                    "id": "SC-001", "status": "passed", "evidence_refs": ["EVID-GOAL"],
+                }],
+                "required_evidence": [{
+                    "kind": "test", "subject": "goal", "evidence_refs": ["EVID-GOAL"],
+                }],
+                "risk_level": "normal",
+            },
+        })
+        self.apply("evidence.record", {
+            "id": "EVID-GOAL", "kind": "test", "subject": "goal", "status": "valid",
+        })
+        self.apply("task.create", {
+            "id": "TASK-001", "title": "still running", "goal_id": "GOAL-001",
+            "extensions": {"risk": "normal", "implementer": "implementer-a"},
+        })
+        self.apply("task.begin", {
+            "task_id": "TASK-001", "run_id": "RUN-001", "next_action": "verify",
+        })
+        self.assertIsNotNone(self.store.status()["current_run"])
+
+        self.apply("goal.complete", {"id": "GOAL-001"})
+
+        self.assertEqual(self.store.get_task("TASK-001")["status"], "cancelled")
+        self.assertIsNone(self.store.status()["current_run"],
+                          "the run of a cancelled task must not stay active")
+
     def test_goal_completion_requires_condition_and_required_evidence(self) -> None:
         self.apply("goal.create", {
             "id": "GOAL-001", "title": "Goal",

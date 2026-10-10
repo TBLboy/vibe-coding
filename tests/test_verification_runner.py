@@ -268,6 +268,19 @@ class TargetedRunTests(unittest.TestCase):
             runner.run("unittest-file", ROOT, path="tests/_platform.py")
         self.assertEqual(caught.exception.code, "verification_no_tests")
 
+    def test_the_coverage_claim_names_a_path_that_exists(self) -> None:
+        """The claim must not double-prefix `tests/`.
+
+        `_resolve_path` takes a project-root-relative path, so prefixing `tests/`
+        unconditionally produced `tests/tests/x.py`: a coverage claim naming a file that
+        does not exist, in the very field a reviewer reads to see what was covered.
+        """
+        report = runner.run("unittest-file", ROOT, path="tests/test_docs_consistency.py")
+        paths = report["coverage_claims"]["paths"]
+        self.assertEqual(paths, ["tests/test_docs_consistency.py"])
+        for claimed in paths:
+            self.assertTrue((ROOT / claimed).is_file(), claimed)
+
 
 if __name__ == "__main__":
     unittest.main()
