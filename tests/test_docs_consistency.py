@@ -13,13 +13,23 @@ class DocumentationConsistencyTests(unittest.TestCase):
     def test_usage_describes_the_formal_surface(self) -> None:
         text = (ROOT / "docs/USAGE.md").read_text(encoding="utf-8")
         for command in (
-            "task begin|update|wait|resume|handoff|finish|cancel",
+            "task create|reopen|begin|update|wait|resume|handoff|finish|cancel",
             "record create|update|link",
             "evidence record|invalidate|refresh",
             "review record",
-            "goal update|complete",
+            "goal create|update|cancel|complete",
+            "workspace clear|status|history",
+            "verification preflight|run",
         ):
             self.assertIn(command, text)
+        # A capability that exists only in the CLI is not documented. V3 added several,
+        # so the guide is asserted against them instead of being trusted to keep up.
+        for phrase in (
+            "bound_document", "informational_ref", "workspace_generation",
+            "verification_capability_missing", "reopens", "open-question",
+            "execution_state", "verification_state", "review_verdict",
+        ):
+            self.assertIn(phrase, text, phrase)
         self.assertNotIn("尚未接入", text)
         self.assertNotIn("自动 apply 按迁移状态机实施", text)
         # The migration tool and the retired compatibility entry are gone.

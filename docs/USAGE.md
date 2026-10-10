@@ -886,12 +886,14 @@ format 2 是框架**唯一支持**的格式：新建项目直接生成新格式�
 --root <project> init
 --root <project> status
 --root <project> validate
---root <project> task begin|update|wait|resume|handoff|finish|cancel
+--root <project> task create|reopen|begin|update|wait|resume|handoff|finish|cancel
 --root <project> record create|update|link
 --root <project> evidence record|invalidate|refresh
 --root <project> review record
 --root <project> gate --task TASK-001
---root <project> goal update|complete --id GOAL-001
+--root <project> goal create|update|cancel|complete --id GOAL-001
+--root <project> workspace clear|status|history
+--root <project> verification preflight|run --action unittest
 --root <project> route --path <file> --signal <signal>
 --root <project> context TASK-001 --budget-bytes 4096
 --root <project> render
@@ -920,6 +922,20 @@ format 2 是框架**唯一支持**的格式：新建项目直接生成新格式�
 - `reviews`：任务级独立复核、结论与证据引用。
 
 长文档正文只放在 `.project-log/docs/**`，结构化记录只保存 `doc_ref`（路径与内容哈希）。`task.finish` 要求至少一条 `valid` 且覆盖该任务的证据；这里的“覆盖”指证据的 `covers.tasks` 列出该任务 ID，只用 `--task-id` 归属不足以通过 `vibe gate`。高风险任务还要求独立 `go` 复核。`goal.complete` 会逐条检查 `success_conditions`、`required_evidence` 与显式 `not-applicable` 理由。`evidence refresh` 会在覆盖文件字节变化后把证据写成 `stale`，旧证据不会被删除。
+
+文档引用分两类。显式的 `{"type": "bound_document", "path": ..., "sha256": ..., "subject": {"kind": "task", "id": "TASK-001"}, "binding": "required"}` 是受控依赖：它声明的那个任务（或目标）在文档变化后必须重新验证。`informational_ref` 以及未标注类型的旧式 `doc_ref` 只作为诊断出现在 `validate` 里，不阻塞任何任务——它们既没声明被评对象也没声明绑定方式。
+
+取消和清空是两件不同的事。`goal.cancel` 放弃一个尚未达标的目标，并默认连带取消它的开放子任务，它**不**经过完成门禁，也**不会**把目标改写成 complete；已经 complete 的目标只能归档或清空视图。`workspace.clear` 是两阶段操作：先 `--dry-run` 只读拿到受影响集合、`revision` 和 `plan_digest`，再带着 `--expected-revision` 与 `--plan-digest` 提交；期间有任何写入都会以过期计划被拒绝，不会产生部分效果。清空把当前活动视图归档并取消开放中的工作，历史完整保留在 `workspace history` 中，且不会把旧目标默认为 complete。
+
+每次有效清空都会让工作区进入新一代（空工作区上的重复清空是幂等的，不制造新代次）。恢复会话时先看 `status` 的 `workspace_generation`：被取消的工作无法被旧执行器复活——`task.begin` 只接受 `ready`，`task.resume` 只接受暂停态，`task.finish` 只接受 `in-progress`。恢复文本 `context` 会打印当前代次。
+
+重开已终结的工作用 `task reopen --task-id OLD --new-task-id NEW --reason ...`：它新建一个 `ready` 任务并记录 `reopens` 关系，继承旧任务的 goal，而旧任务与其 Run 完全不变。这样不会覆盖执行史，也不需要让同一个任务 ID 跨多次执行。
+
+`status` 里的每个任务同时给出三个派生维度：`execution_state`（not-started/active/paused/finished/cancelled）、`verification_state`（pending/passed/failed/stale/not-applicable）和 `review_verdict`（go/conditional/no-go/missing）。它们是只读投影，`tasks.status` 与证据/复核行才是门禁读取的事实，因此“已完成但未验证”不再被一个字段掩盖。
+
+复核者用受控入口取得验证能力：`verification preflight --action <id>` 先回答该动作在这里能不能跑，缺失时报 `verification_capability_missing` 并列出确切缺失项；`verification run --action <id>` 执行受信动作并产出可追溯的 VerificationRun（argv、环境、退出码、输出摘要、覆盖声明与限制）。不在受信动作清单里的动作以 `verification_action_untrusted` 被拒绝——验证能力不通过放宽 Shell 权限获得。
+
+业务澄清可以只留草稿：`open-question` 是真实的记录类型（`open`/`answered`/`deferred`/`archived`），低影响且可逆的未知可以显式记为 `deferred`，不必为每轮澄清新建 Goal/Task。
 
 新格式标记为 `.project-log/state-format.json`。Git 项目数据库位于该 worktree 的 Git 管理目录下，按项目 ID 和分支上下文隔离；非 Git 测试项目位于 `.project-log/.state/`。不会把 SQLite 文件加入 Git。初次切换到没有本地状态的分支会明确失败，而不是沿用另一分支的状态。跨副本同步由知识库归档承担（见“快照交换已退役”）。普通操作不占用或清理 `index.lock`。
 

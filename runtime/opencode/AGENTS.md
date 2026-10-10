@@ -99,6 +99,23 @@ business-intent
 - quick 只减少记录与验证，不降低正确性要求：出错、被质疑或需要证据时立即升级。
 - 分流结论属于 B 级决定，需随任务记录；改变已批准方向仍按 C 级处理。
 
+## 风险自适应与安静执行
+
+复用已有的 `quick / standard / strict` 与 A/B/C 权限词表，不引入第二套等级：
+
+| 路由 | 实现与错误恢复 | 用户可见消息 |
+|---|---|---|
+| quick | 针对性验证；安全、幂等的失败可自主处理 | 关键变化或结果时汇报 |
+| standard | 定向与邻近回归；按失败签名有限次尝试不同的诊断假设 | 重复同签名且无新 delta，或需要业务选择时询问 |
+| strict | 预检复核能力、可重放证据与用户验收；绝不偷偷放宽门禁 | C 级决策、不可逆范围变更、必需能力缺失时询问 |
+
+- **澄清阶段主动对话，工程执行阶段尽量安静。** 子 Agent 只向主 Agent 报告，由主 Agent 统一面向用户沟通。
+- `status` 默认只给：当前 Goal / 当前 Task、正在做什么、阻塞、需要用户决定什么、验证/复核结果、下一步；历史与细节通过 `--all` / `history` 查看。
+- 每个任务同时报告三个派生维度：`execution_state`、`verification_state`、`review_verdict`。已完成不等于已验证；`go` 裁决必须基于被评范围与适用证据，不能用"测试跑过了"或"命令被允许执行"代替。
+- 历史完成事实与当前适用性拆开：`completed_at` 不变，适用性可以变成 `stale` 并需要重新验证，不回写历史事实。
+- 失败先归因（`implementation` / `specification` / `task-decomposition` / `technical-selection` / `functional-business-logic` / `technical-business-logic` / `environment` / `verification-harness` / `unknown`），再决定是否重试；同错误同输入不得无限重试。
+- 复核能力缺失时如实报告 `verification_capability_missing`，不得改用无限制命令或全开 Shell 绕过。
+
 ## 全局 Vibe Python 环境
 
 - 所有 Vibe Coding runtime、Loop Core、Project Log 校验和插件的 Python 命令，默认使用 `${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/vibe-python` 指向的解释器。

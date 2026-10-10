@@ -296,7 +296,13 @@ def refresh_evidence(root: Path, reason: str | None = None, changed_paths=None) 
 def compact_context(root: Path) -> str:
     store = open_store(root, heal=True)
     state = store.status(limit=5)
-    task = state.get("current_task") or state.get("latest_task")
+    # Only an active run makes a task *current*. Falling back to the latest task would
+    # present work that a workspace clear already cancelled as if it were still open,
+    # which is exactly the "a resumed session revives cleared work" defect.
+    task = state.get("current_task")
+    last = state.get("latest_task")
+    if last is not None and last["status"] == "cancelled":
+        last = None
     try:
         goal = store.get_goal(store.active_goal_id())
         goal_label = goal["id"]
@@ -318,17 +324,28 @@ def compact_context(root: Path) -> str:
         "Vibe transactional context (read-only restore).",
         f"Project: {state['project_id']}",
         f"Revision: {state['revision']}",
+        f"Workspace generation: {state['workspace_generation']}",
         f"Project goal: {goal_label}",
         f"Run status: {(state.get('current_run') or state.get('latest_run') or {}).get('status', '-')}",
-        f"Task: {task['id'] if task else '-'} [{task['status'] if task else '-'}]",
+        f"Task: {task['id'] if task else '- (no active work)'} "
+        f"[{task['status'] if task else '-'}]",
         f"Next action: {task.get('next_action') if task and task.get('next_action') else '-'}",
         "Evidence: " + ", ".join(f"{name}={counts[name]}" for name in counts),
     ]
+    if task is None and last is not None:
+        lines.append(
+            f"Last task: {last['id']} [{last['status']}] — finished history, not current work"
+        )
     if task and task.get("blocker"):
         blocker = task["blocker"]
         lines.append(
             f"Blocker: {blocker['kind']} / {blocker['reason']} / resume when: {blocker['resume_when']}"
         )
+    lines.append(
+        "A workspace clear starts a new generation: work from an earlier generation is "
+        "cancelled and cannot be resumed (task.begin needs ready, task.resume needs a paused "
+        "task), so a restored session must not try to revive it."
+    )
     lines.append(
         "Completion requires valid evidence; high-risk work also requires an independent go review. "
         "Use the formal vibe command surface; the Project Log is the transactional format 2 store."
