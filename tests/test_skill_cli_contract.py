@@ -19,9 +19,11 @@ contract rather than record a known defect.
 from __future__ import annotations
 
 from pathlib import Path
+import json
 import re
 import subprocess
 import sys
+import tempfile
 import unittest
 
 
@@ -99,6 +101,35 @@ class SkillCliContractTests(unittest.TestCase):
             offenders, [],
             "Skills name record kinds the store does not define:\n  " + "\n  ".join(offenders),
         )
+
+
+    def test_task_create_without_a_goal_id_really_is_goal_less(self) -> None:
+        """`--goal-id` is documented as omittable, so omitting it must work.
+
+        The store's `task.create` shape requires the key — a null goal is a real
+        choice, not a missing field — while the CLI dropped it whenever the flag was
+        absent. The documented "omit for a goal-less task" path therefore failed with
+        `payload has missing or unknown fields`.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            project = Path(temporary)
+            init = subprocess.run(
+                [sys.executable, str(VIBE), "--root", str(project), "init"],
+                text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False,
+            )
+            self.assertEqual(init.returncode, 0, init.stdout)
+            created = subprocess.run(
+                [sys.executable, str(VIBE), "--root", str(project), "task", "create",
+                 "--id", "TASK-1", "--title", "Goal-less work"],
+                text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False,
+            )
+            self.assertEqual(created.returncode, 0, created.stdout)
+            shown = subprocess.run(
+                [sys.executable, str(VIBE), "--root", str(project), "state-task", "TASK-1"],
+                text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False,
+            )
+            self.assertEqual(shown.returncode, 0, shown.stdout)
+            self.assertIsNone(json.loads(shown.stdout)["goal_id"])
 
 
 if __name__ == "__main__":

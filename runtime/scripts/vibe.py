@@ -296,9 +296,10 @@ def main() -> int:
                 result = evidence_invalidate(json.load(stream), args.changed, root)
         elif args.command == "task":
             if args.task_action == "create":
-                payload = {"id": args.id, "title": args.title}
-                if args.goal_id is not None:
-                    payload["goal_id"] = args.goal_id
+                # `--goal-id` is documented as omittable, and a null goal is a real
+                # choice rather than a missing field: the store's `task.create` shape
+                # requires the key, so the CLI has to send the explicit null.
+                payload = {"id": args.id, "title": args.title, "goal_id": args.goal_id}
                 extensions = _json_argument(args.extensions, "extensions")
                 if extensions is not None:
                     payload["extensions"] = extensions
