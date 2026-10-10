@@ -1439,13 +1439,18 @@ class Store:
         task_id = row["task_id"]
         return bool(task_id) and task_id in scoped_tasks
 
-    def _cancel_open_tasks(connection, goal_ids, policy: str, sequence: int) -> list[str]:
+    def _cancel_open_tasks(connection, goal_ids, policy: str, sequence: int,
+                           reason: str = "open work cancelled with its goal") -> list[str]:
         """Cancel every open task of the given goals, in a deterministic order.
 
         Only tasks that have not reached a terminal state move. ``implemented-unverified``
         is deliberately left alone: it records an implementation that really happened, and
         cancellation must not rewrite that history (it is hidden from the active view by
         status instead).
+
+        ``reason`` distinguishes why the goal ended: a cancelled goal and a completed one
+        close the same rows for different reasons, and the reason is what a reader has to
+        go on later.
         """
         if policy != "cancel_open":
             return []
@@ -1462,7 +1467,7 @@ class Store:
                 connection.execute(
                     """UPDATE tasks SET status = 'cancelled', cancel_reason = ?,
                        updated_sequence = ? WHERE id = ?""",
-                    ("open work cancelled with its goal", sequence, row["id"]),
+                    (reason, sequence, row["id"]),
                 )
                 connection.execute(
                     """UPDATE runs SET status = 'cancelled', updated_sequence = ?
@@ -1885,11 +1890,21 @@ class Store:
             problems = self._goal_completion_problems(connection, payload["id"], self.root)
             if problems:
                 raise StateError("goal_gate", "Goal completion rejected: " + "; ".join(problems))
+            # A completed goal must not leave its never-started tasks behind as open work:
+            # `task.begin` refuses once the goal is no longer active, so such a task could
+            # never reach a terminal state and would linger in the active view forever.
+            # They are cancelled with a reason that says *why*, which is the same mechanism
+            # a cancelled goal uses -- only the reason differs.
+            closed = Store._cancel_open_tasks(
+                connection, [payload["id"]], "cancel_open", sequence,
+                reason="open work closed when its goal completed",
+            )
             connection.execute(
                 "UPDATE goals SET status = 'complete', updated_sequence = ? WHERE id = ?",
                 (sequence, payload["id"]),
             )
-            return {"goal_id": payload["id"], "status": "complete"}
+            return {"goal_id": payload["id"], "status": "complete",
+                    "cancelled_task_ids": closed}
         if action == "goal.cancel":
             # Cancellation is not completion: it must never run
             # _goal_completion_problems, because the user is allowed to abandon a goal

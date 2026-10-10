@@ -478,6 +478,56 @@ class GateStoreTests(unittest.TestCase):
         self.assertFalse(result["passed"])
         self.assertTrue(any("stale" in reason for reason in result["reasons"]), result["reasons"])
 
+    def test_completing_a_goal_closes_its_never_started_tasks(self) -> None:
+        """A completed goal must not leave tasks that can never be started.
+
+        `task.begin` refuses once the goal is not active, so a `ready` task under a
+        completed goal could never reach a terminal state and would linger in the active
+        view forever. Completion closes those rows with a reason that says why, while a
+        task that really was implemented keeps its history.
+        """
+        self.apply("goal.create", {
+            "id": "GOAL-001", "title": "Goal",
+            "extensions": {
+                "success_conditions": [{
+                    "id": "SC-001", "status": "passed", "evidence_refs": ["EVID-GOAL"],
+                }],
+                "required_evidence": [{
+                    "kind": "test", "subject": "goal", "evidence_refs": ["EVID-GOAL"],
+                }],
+                "risk_level": "normal",
+            },
+        })
+        self.apply("evidence.record", {
+            "id": "EVID-GOAL", "kind": "test", "subject": "goal", "status": "valid",
+        })
+        self.apply("task.create", {
+            "id": "TASK-001", "title": "never started", "goal_id": "GOAL-001",
+            "extensions": {"risk": "normal", "implementer": "implementer-a"},
+        })
+        self.apply("task.create", {
+            "id": "TASK-002", "title": "really implemented", "goal_id": "GOAL-001",
+            "extensions": {"risk": "normal", "implementer": "implementer-a"},
+        })
+        self.apply("task.begin", {
+            "task_id": "TASK-002", "run_id": "RUN-001", "next_action": "verify",
+        })
+        self.apply("evidence.record", {
+            "id": "EVID-002", "kind": "test", "subject": "task",
+            "status": "valid", "covers": {"tasks": ["TASK-002"]},
+        })
+        self.apply("task.finish", {"task_id": "TASK-002", "summary": "done"})
+
+        result = self.apply("goal.complete", {"id": "GOAL-001"})["result"]
+        self.assertEqual(result["status"], "complete")
+        self.assertEqual(result["cancelled_task_ids"], ["TASK-001"])
+
+        closed = self.store.get_task("TASK-001")
+        self.assertEqual(closed["status"], "cancelled")
+        self.assertIn("goal completed", closed["cancel_reason"])
+        # History is not rewritten: an implementation that really happened stays recorded.
+        self.assertEqual(self.store.get_task("TASK-002")["status"], "implemented-unverified")
+
     def test_goal_completion_requires_condition_and_required_evidence(self) -> None:
         self.apply("goal.create", {
             "id": "GOAL-001", "title": "Goal",

@@ -147,9 +147,30 @@ def reduce_ledger(entries, with_results: bool = False):
             result = {"goal_id": payload["id"], "updated": True}
         elif action == "goal.complete":
             goal = _require(goals, payload["id"], "goal")
+            # A completed goal closes its never-started tasks, exactly as the live
+            # transition does: `task.begin` refuses once the goal is not active, so such a
+            # task could never reach a terminal state and would linger forever.
+            # `implemented-unverified` is left alone -- it records an implementation that
+            # really happened. Insertion order is creation order, matching the live
+            # transition, so the receipt's id list is reproducible.
+            cancelled: list[str] = []
+            for task in tasks.values():
+                if task["goal_id"] != payload["id"]:
+                    continue
+                if task["status"] not in TASK_OPEN_STATUSES:
+                    continue
+                task["status"] = "cancelled"
+                task["cancel_reason"] = "open work closed when its goal completed"
+                task["updated_sequence"] = sequence
+                for run in runs.values():
+                    if run["task_id"] == task["id"] and run["status"] != "finished":
+                        run["status"] = "cancelled"
+                        run["updated_sequence"] = sequence
+                cancelled.append(task["id"])
             goal["status"] = "complete"
             goal["updated_sequence"] = sequence
-            result = {"goal_id": payload["id"], "status": "complete"}
+            result = {"goal_id": payload["id"], "status": "complete",
+                      "cancelled_task_ids": cancelled}
         elif action == "goal.cancel":
             goal = _require(goals, payload["id"], "goal")
             if goal["status"] in {"complete", "cancelled"}:
