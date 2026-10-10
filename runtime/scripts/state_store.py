@@ -68,6 +68,11 @@ EXECUTION_STATES = {
 }
 EVIDENCE_STATES = ("candidate", "valid", "failed", "stale", "superseded", "invalid")
 REVIEW_VERDICTS = ("go", "no-go", "conditional")
+# Strict work is named in two vocabularies: tasks carry the routing words
+# (`quick`/`standard`/`strict`) while goals carry `risk_level` (`high`/`critical`).
+# Both mean "strict" wherever a gate has to be strict, and a task may also declare it
+# through `extensions.verification.level`.
+STRICT_RISKS = ("strict", "high", "critical")
 DOCUMENT_BODY_KEYS = ("body", "content", "markdown")
 
 
@@ -972,9 +977,7 @@ class Store:
                 "SELECT id, title, goal_id, status, run_id, cancel_reason, "
                 "created_sequence, updated_sequence FROM tasks ORDER BY created_sequence"
             )]
-            generation = connection.execute(
-                "SELECT COUNT(*) FROM commands WHERE action = 'workspace.clear'"
-            ).fetchone()[0]
+            generation = Store._workspace_generation(connection)
         return {"generation": generation, "goals": goals, "tasks": tasks}
 
     def get_goal(self, goal_id: str) -> dict:
@@ -1128,6 +1131,12 @@ class Store:
         }
 
     @staticmethod
+    def _claims_version_binding(evidence: dict) -> bool:
+        """True when the record asserts that its result belongs to specific bytes."""
+        binding = evidence.get("version_binding")
+        return type(binding) is dict and bool(binding)
+
+    @staticmethod
     def _applicability(root: Path | None, evidence: dict) -> str:
         """Applicability of one evidence record: ``current``, ``stale`` or ``unknown``.
 
@@ -1185,6 +1194,47 @@ class Store:
                 })
         return result
 
+    @staticmethod
+    def _is_strict(extensions: dict) -> bool:
+        """Whether a task counts as strict, in either risk vocabulary."""
+        verification = extensions.get("verification")
+        level = verification.get("level") if type(verification) is dict else None
+        return (extensions.get("risk") in STRICT_RISKS
+                or (type(level) is int and level >= 3))
+
+    @staticmethod
+    def _task_notes(connection, task: dict, root: Path | None) -> list[str]:
+        """Non-blocking observations about how a task's completion was evidenced.
+
+        T22/N04: a strict task whose covering evidence cannot be re-evaluated must never
+        have mechanical reproduction *silently* assumed. Evidence that claims a version
+        binding without file hashes is already a gate failure; this records the wider
+        case — evidence that never claimed a binding at all — as an explicit note rather
+        than a blocker, because a manual or external check legitimately cannot carry a
+        worktree hash.
+        """
+        extensions = task.get("extensions")
+        if type(extensions) is not dict:
+            extensions = {}
+        if not Store._is_strict(extensions):
+            return []
+        covered = [
+            Store._evidence(row)
+            for row in Store._evidence_covers_task(connection, task["id"])
+            if row["status"] == "valid"
+        ]
+        covered = [entry for entry in covered if not Store._stale_reasons(root, entry)]
+        unknown = [entry for entry in covered if Store._applicability(root, entry) == "unknown"]
+        unclaimed = [entry for entry in unknown if not Store._claims_version_binding(entry)]
+        if covered and len(unknown) == len(covered) and unclaimed:
+            return [
+                f"strict task {task['id']} is covered only by evidence with unknown "
+                "applicability (no recorded file hashes), so mechanical reproduction is "
+                "not confirmed by re-derivation: "
+                + ", ".join(entry["id"] for entry in unknown)
+            ]
+        return []
+
     def gate_task(self, task_id: str) -> dict:
         _text(task_id, "task_id", 256)
         with self._connection() as connection:
@@ -1196,6 +1246,7 @@ class Store:
                 "task_id": task_id,
                 "decision": "blocked" if problems else "allowed",
                 "blocking": problems,
+                "notes": Store._task_notes(connection, task, self.root),
             }
 
     def evaluate_goal(self, goal_id: str) -> dict:
@@ -1699,9 +1750,8 @@ class Store:
                     + "; ".join(stale)
                 )
                 continue
-            binding = entry.get("version_binding")
-            claims_binding = type(binding) is dict and bool(binding)
-            if claims_binding and Store._applicability(root, entry) == "unknown":
+            if (Store._claims_version_binding(entry)
+                    and Store._applicability(root, entry) == "unknown"):
                 # The record claims to be bound to a version but carries no file hashes,
                 # so its applicability can never be re-evaluated. It must not be what
                 # proves mechanical verification for a strict task. (T22)
@@ -1714,7 +1764,7 @@ class Store:
         risk = extensions.get("risk")
         verification = extensions.get("verification")
         level = verification.get("level") if type(verification) is dict else None
-        strict = risk in {"strict", "high", "critical"} or (type(level) is int and level >= 3)
+        strict = Store._is_strict(extensions)
         if strict and valid and len(unverifiable) == len(valid):
             # T22: a strict task covered only by records that claim a version binding but
             # carry no file hashes must never be reported as mechanically verified. Fail
@@ -3005,7 +3055,6 @@ class Store:
                    OR (runs.id IS NOT NULL AND (runs.task_id != tasks.id OR runs.status != CASE tasks.status
                        WHEN 'in-progress' THEN 'active'
                        WHEN 'implemented-unverified' THEN 'finished'
-                       WHEN 'complete' THEN 'finished'
                        ELSE tasks.status END))
                    OR (tasks.status IN ('waiting-user','blocked') AND blockers.id IS NULL)
                    OR (tasks.status NOT IN ('waiting-user','blocked') AND blockers.id IS NOT NULL)

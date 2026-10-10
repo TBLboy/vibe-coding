@@ -249,6 +249,65 @@ class GateStoreTests(unittest.TestCase):
                 finally:
                     self.tearDown()
 
+    def test_bindingless_strict_evidence_is_reported_but_not_blocked(self) -> None:
+        """T22/N04: unclaimed evidence must not *silently* read as mechanically reproduced.
+
+        A manual or external check legitimately cannot carry a worktree hash, so the gate
+        does not block on it — but it says out loud that re-derivation is impossible, so
+        `unknown` applicability is never quietly treated as independently reproduced.
+        """
+        self.begin_task(risk="strict")
+        self.apply("evidence.record", {
+            "id": "EVID-001", "kind": "manual", "subject": "task",
+            "status": "valid", "task_id": "TASK-001",
+            "covers": {"tasks": ["TASK-001"]},
+        })
+        self.apply("review.record", {
+            "id": "REV-001", "task_id": "TASK-001", "reviewer": "independent",
+            "verdict": "go", "scope": {"tasks": ["TASK-001"]},
+            "evidence_refs": ["EVID-001"],
+        })
+        decision = self.store.gate_task("TASK-001")
+        self.assertEqual(decision["decision"], "allowed")
+        self.assertTrue(
+            any("mechanical reproduction is not confirmed" in note
+                for note in decision["notes"]),
+            decision["notes"],
+        )
+
+    def test_gate_notes_are_scoped_to_strict_tasks(self) -> None:
+        """An ordinary task is never told its evidence is unverifiable: the floor is strict-only."""
+        self.begin_task()
+        self.apply("evidence.record", {
+            "id": "EVID-001", "kind": "manual", "subject": "task",
+            "status": "valid", "task_id": "TASK-001",
+            "covers": {"tasks": ["TASK-001"]},
+        })
+        self.assertEqual(self.store.gate_task("TASK-001")["notes"], [])
+
+    def test_a_claimed_binding_without_hashes_blocks_instead_of_being_noted(self) -> None:
+        """The claimed-binding case is a failure, not a note: it must not be double-reported."""
+        self.begin_task(risk="strict")
+        self.apply("evidence.record", {
+            "id": "EVID-001", "kind": "test", "subject": "task",
+            "status": "valid", "task_id": "TASK-001",
+            "covers": {"tasks": ["TASK-001"]},
+            "version_binding": {"git_commit": "abc123"},
+        })
+        self.apply("review.record", {
+            "id": "REV-001", "task_id": "TASK-001", "reviewer": "independent",
+            "verdict": "go", "scope": {"tasks": ["TASK-001"]},
+            "evidence_refs": ["EVID-001"],
+        })
+        decision = self.store.gate_task("TASK-001")
+        self.assertEqual(decision["decision"], "blocked")
+        self.assertTrue(
+            any("mechanical verification is not confirmed" in problem
+                for problem in decision["blocking"]),
+            decision["blocking"],
+        )
+        self.assertEqual(decision["notes"], [])
+
     def test_strict_task_with_hash_bound_evidence_still_completes(self) -> None:
         """T22 is a floor, not a wall: a re-evaluable binding is still accepted."""
         self.begin_task(risk="high")
