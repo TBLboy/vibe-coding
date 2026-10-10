@@ -156,14 +156,20 @@ class OpenCodeStaticSurfaceTests(unittest.TestCase):
         # The `python3` on PATH can be older than what the runtime requires (3.10 vs
         # 3.11), which silently downgrades independent verification; the wrapper gives
         # the allowlist a stable path without naming a machine-specific interpreter.
+        #
+        # V3 PR-04 replaced the raw `-m unittest` allow with the trusted verification
+        # runner. It is still pinned to the wrapper, and the runner picks the action from
+        # its registry, so a reviewer gets a capability-checked entry point instead of a
+        # general test-command grant.
         for role in ("verification-reviewer", "alignment-reviewer"):
             bash = parse_frontmatter(OPENCODE / f"agents/{role}.md")["permission"]["bash"]
             allow = {pattern for pattern, action in bash.items() if action == "allow"}
             self.assertIn(
-                "*/.config/opencode/bin/vibe-python -m unittest*", allow, role
+                "*/.config/opencode/bin/vibe-python *verification_runner.py preflight*",
+                allow, role,
             )
             self.assertIn(
-                "*/.config/opencode/bin/vibe-python runtime/scripts/validate_package.py*",
+                "*/.config/opencode/bin/vibe-python *verification_runner.py run*",
                 allow, role,
             )
             self.assertIn("sha256sum *", allow, role)
@@ -174,6 +180,10 @@ class OpenCodeStaticSurfaceTests(unittest.TestCase):
             # installed (3.10 here) and make reviews fail for environmental reasons.
             self.assertNotIn("python -m unittest*", allow, role)
             self.assertNotIn("python3 -m unittest*", allow, role)
+            # A raw test-command wildcard admits any command while looking like a
+            # capability check; the runner's action registry is the replacement.
+            for forbidden in ("*pytest*", "* -m pytest*", "* -m unittest*"):
+                self.assertNotIn(forbidden, allow, role)
         wrapper = OPENCODE / "bin" / "vibe-python"
         self.assertTrue(wrapper.is_file(), "bin/vibe-python entry point is missing")
         # Windows has no POSIX permission bits, so the executable-bit check is

@@ -195,6 +195,18 @@ def main() -> int:
                                  help="the plan_digest returned by --dry-run")
     workspace_sub.add_parser("status", help="show the current workspace generation")
     workspace_sub.add_parser("history", help="show every goal and task, cancelled included")
+    verification = sub.add_parser(
+        "verification", help="run project checks through the trusted action registry")
+    verification_sub = verification.add_subparsers(
+        dest="verification_action", required=True)
+    for name, help_text in (
+        ("preflight", "report whether an action can run here, before verification starts"),
+        ("run", "execute one trusted action and print its VerificationRun"),
+    ):
+        item = verification_sub.add_parser(name, help=help_text)
+        item.add_argument("--action", required=True, help="a trusted action id")
+        item.add_argument("--path", help="file argument for actions that take one")
+        item.add_argument("--timeout", type=int, default=900)
     gate = sub.add_parser("gate", help="evaluate a task completion gate")
     gate.add_argument("--task", required=True)
     review = sub.add_parser("review", help="manage transactional reviews")
@@ -427,6 +439,17 @@ def main() -> int:
                 }
             else:
                 result = store.workspace_history()
+        elif args.command == "verification":
+            # The reviewer's verification entry point. It resolves the action through the
+            # trusted registry instead of being handed a command string, so the permission
+            # it needs is one narrow allow rather than a general shell grant.
+            import verification_runner
+
+            if args.verification_action == "preflight":
+                result = verification_runner.preflight(args.action, root, args.path)
+            else:
+                result = verification_runner.run(
+                    args.action, root, args.path, timeout=args.timeout)
         elif args.command == "gate":
             result = open_store(root, heal=True).gate_task(args.task)
         elif args.command == "review":
