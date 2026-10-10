@@ -1,4 +1,4 @@
-"""N02 (V3 PR-00): every command and record kind a Skill names must really exist.
+﻿"""N02 (V3 PR-00): every command and record kind a Skill names must really exist.
 
 Skills and Commands are instructions an executing agent follows literally. When one of
 them names a CLI entry or a record kind that the store does not implement, the
@@ -10,11 +10,11 @@ This module walks the backticked ``vibe`` invocations in ``skills/**/SKILL.md`` 
 (including the ``--flags`` it mentions), and checks that every record kind a Skill names
 exists in ``state_store.RECORD_KINDS``.
 
-Both tests are marked ``expectedFailure`` for V3 PR-00: ``a-business-clarify`` names
-``vibe task create`` and the record kind ``open-question``, neither of which exists today.
-PR-05 either publishes those entries or points the Skill at the real ones. When that
-lands the tests pass "unexpectedly", which forces this decorator to be removed rather
-than the check being forgotten.
+Both tests were marked ``expectedFailure`` for V3 PR-00, when ``a-business-clarify`` named
+``vibe task create`` and the record kind ``open-question``, neither of which existed.
+V3 PR-05 publishes both (``vibe goal create`` / ``vibe task create``, and a real
+``open-question`` lifecycle), so the decorators are gone: the checks now guard the
+contract rather than record a known defect.
 """
 from __future__ import annotations
 
@@ -61,7 +61,6 @@ def help_output(parts: tuple[str, ...]) -> tuple[int, str]:
 
 
 class SkillCliContractTests(unittest.TestCase):
-    @unittest.expectedFailure
     def test_skill_invocations_resolve_to_the_real_cli(self) -> None:
         offenders: list[str] = []
         for path in instruction_sources():
@@ -87,7 +86,6 @@ class SkillCliContractTests(unittest.TestCase):
             + "\n  ".join(offenders),
         )
 
-    @unittest.expectedFailure
     def test_skill_record_kinds_exist(self) -> None:
         offenders: list[str] = []
         for path in instruction_sources():

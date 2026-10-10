@@ -84,6 +84,10 @@ class GoldenReplayTests(unittest.TestCase):
             "evidence_refs": ["EVID-001"],
         })
         self.apply("task.finish", {"task_id": "TASK-001", "summary": "reducer landed"})
+        self.apply("task.reopen", {
+            "task_id": "TASK-001", "new_task_id": "TASK-004",
+            "reason": "the first attempt did not cover the export path",
+        })
         self.apply("task.create", {"id": "TASK-002", "title": "Second", "goal_id": "GOAL-001"})
         self.apply("task.begin", {
             "task_id": "TASK-002", "run_id": "RUN-002", "next_action": "handoff",

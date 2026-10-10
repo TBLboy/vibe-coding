@@ -226,6 +226,23 @@ def reduce_ledger(entries, with_results: bool = False):
                 "created_sequence": sequence, "updated_sequence": sequence,
             }
             result = {"task_id": payload["id"], "run_id": None, "status": "ready"}
+        elif action == "task.reopen":
+            old = _require(tasks, payload["task_id"], "task")
+            extensions = dict(payload.get("extensions", {}))
+            extensions["reopens"] = old["id"]
+            extensions["reopen_reason"] = payload["reason"]
+            tasks[payload["new_task_id"]] = {
+                "id": payload["new_task_id"],
+                "title": payload.get("title", old["title"]),
+                "goal_id": old["goal_id"], "status": "ready", "run_id": None,
+                "next_action": None, "summary": None, "cancel_reason": None,
+                "extensions": _json(extensions),
+                "created_sequence": sequence, "updated_sequence": sequence,
+            }
+            result = {
+                "task_id": payload["new_task_id"], "run_id": None, "status": "ready",
+                "reopens": old["id"],
+            }
         elif action == "task.update":
             task = _require(tasks, payload["task_id"], "task")
             extensions = json.loads(task["extensions"])

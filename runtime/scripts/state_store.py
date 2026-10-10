@@ -41,6 +41,10 @@ RECORD_KINDS = {
     "architecture": ("draft", "active", "superseded", "archived"),
     "research": ("draft", "complete", "superseded", "archived"),
     "alignment": ("open", "resolved", "accepted", "archived"),
+    # Clarification may hold open questions without promoting them to a formal task.
+    # This is a real persisted kind with its own lifecycle: `deferred` is the recorded
+    # exit for a low-impact question that does not block the increment.
+    "open-question": ("open", "answered", "deferred", "archived"),
     "retrospective": ("draft", "complete", "archived"),
     "distillation": ("candidate", "approved", "rejected", "encoded", "archived"),
 }
@@ -48,6 +52,20 @@ RECORD_RELATIONS = (
     "references", "depends-on", "supersedes", "implements",
     "verifies", "derived-from", "blocks", "aligns",
 )
+# `tasks.status` stays the single stored lifecycle field. These are read-only
+# projections of it, so an operator can see "finished but not verified" without
+# re-deriving it by hand, and without rewriting historical `implemented-unverified`
+# records to make the display simpler.
+EXECUTION_STATES = {
+    "ready": "not-started",
+    "in-progress": "active",
+    "waiting-user": "paused",
+    "blocked": "paused",
+    "handed-off": "paused",
+    "implemented-unverified": "finished",
+    "complete": "finished",
+    "cancelled": "cancelled",
+}
 EVIDENCE_STATES = ("candidate", "valid", "failed", "stale", "superseded", "invalid")
 REVIEW_VERDICTS = ("go", "no-go", "conditional")
 DOCUMENT_BODY_KEYS = ("body", "content", "markdown")
@@ -427,6 +445,7 @@ def _request(envelope: dict) -> tuple[dict, str, str]:
         "goal.cancel": ({"id", "reason"}, {"child_policy"}),
         "workspace.clear": ({"reason", "plan_digest"}, {"scope"}),
         "task.create": ({"id", "title", "goal_id"}, {"extensions"}),
+        "task.reopen": ({"task_id", "new_task_id", "reason"}, {"title", "extensions"}),
         "task.update": ({"task_id"}, {"implementer", "owner"}),
         "task.begin": ({"task_id", "run_id", "next_action"}, set()),
         "task.wait": ({"task_id", "kind", "reason", "resume_when"}, {"question_ref"}),
@@ -848,7 +867,41 @@ class Store:
         ).fetchone()
         task["run"] = dict(run) if run else None
         task["blocker"] = dict(blocker) if blocker else None
+        task.update(Store._derived_states(connection, task))
         return task
+
+    @staticmethod
+    def _derived_states(connection, task: dict) -> dict:
+        """Project one task into the two execution dimensions and the review verdict.
+
+        These are display projections over stored facts, never a second source of truth:
+        `tasks.status` and the evidence/review rows remain what the gates read. A task can
+        therefore read `finished` while verification is still `pending`, which is the
+        state the old single status field could not express.
+        """
+        execution = EXECUTION_STATES.get(task["status"], "unknown")
+        covered = Store._evidence_covers_task(connection, task["id"])
+        states = [row["status"] for row in covered]
+        if execution == "cancelled":
+            verification = "not-applicable"
+        elif "valid" in states:
+            verification = "passed"
+        elif "failed" in states:
+            verification = "failed"
+        elif "stale" in states:
+            verification = "stale"
+        else:
+            verification = "pending"
+        review = connection.execute(
+            "SELECT verdict FROM reviews WHERE task_id = ? "
+            "ORDER BY created_sequence DESC, id DESC LIMIT 1",
+            (task["id"],),
+        ).fetchone()
+        return {
+            "execution_state": execution,
+            "verification_state": verification,
+            "review_verdict": review["verdict"] if review else "missing",
+        }
 
     def get_task(self, task_id: str) -> dict:
         _text(task_id, "task_id", 256)
@@ -1794,6 +1847,40 @@ class Store:
                  _json(payload.get("extensions", {})), sequence, sequence),
             )
             return {"task_id": payload["id"], "run_id": None, "status": "ready"}
+        if action == "task.reopen":
+            old = connection.execute(
+                "SELECT * FROM tasks WHERE id = ?", (payload["task_id"],)
+            ).fetchone()
+            if old is None:
+                raise StateError("not_found", f"Unknown task: {payload['task_id']}")
+            if old["status"] in {"ready", "in-progress", "waiting-user", "blocked", "handed-off"}:
+                raise StateError(
+                    "state_conflict",
+                    f"Task {payload['task_id']} is still {old['status']}; reopen applies to "
+                    "a finished or cancelled task",
+                )
+            if connection.execute(
+                "SELECT 1 FROM tasks WHERE id = ?", (payload["new_task_id"],)
+            ).fetchone():
+                raise StateError(
+                    "state_conflict", f"Task already exists: {payload['new_task_id']}"
+                )
+            self._active_goal(connection, old["goal_id"])
+            extensions = dict(payload.get("extensions", {}))
+            # The old task and its run are left exactly as they were: a reopen is a new
+            # attempt with its own history, not a rewrite of what already happened.
+            extensions["reopens"] = old["id"]
+            extensions["reopen_reason"] = payload["reason"]
+            connection.execute(
+                """INSERT INTO tasks (id, title, goal_id, status, extensions, created_sequence, updated_sequence)
+                   VALUES (?, ?, ?, 'ready', ?, ?, ?)""",
+                (payload["new_task_id"], payload.get("title", old["title"]), old["goal_id"],
+                 _json(extensions), sequence, sequence),
+            )
+            return {
+                "task_id": payload["new_task_id"], "run_id": None, "status": "ready",
+                "reopens": old["id"],
+            }
         if action == "record.create":
             kind = payload["kind"]
             record_id = payload["id"]

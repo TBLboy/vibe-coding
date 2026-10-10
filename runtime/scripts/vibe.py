@@ -94,6 +94,17 @@ def main() -> int:
     state_invalidate.add_argument("--changed", action="append", default=[])
     task = sub.add_parser("task", help="manage transactional task lifecycle")
     task_sub = task.add_subparsers(dest="task_action", required=True)
+    task_create = task_sub.add_parser("create", help="create a task")
+    task_create.add_argument("--id", required=True)
+    task_create.add_argument("--title", required=True)
+    task_create.add_argument("--goal-id", help="owning goal (omit for a goal-less task)")
+    task_create.add_argument("--extensions", help="JSON object of task extensions")
+    task_reopen = task_sub.add_parser(
+        "reopen", help="start a new attempt at a finished or cancelled task")
+    task_reopen.add_argument("--task-id", required=True)
+    task_reopen.add_argument("--new-task-id", required=True)
+    task_reopen.add_argument("--reason", required=True)
+    task_reopen.add_argument("--title", help="title for the new task (default: the old one)")
     task_begin = task_sub.add_parser("begin")
     task_begin.add_argument("--task-id", required=True)
     task_begin.add_argument("--run-id", required=True)
@@ -170,6 +181,10 @@ def main() -> int:
     evidence_refresh.add_argument("--reason")
     goal = sub.add_parser("goal", help="manage the active project goal")
     goal_sub = goal.add_subparsers(dest="goal_action", required=True)
+    goal_create = goal_sub.add_parser("create", help="create a goal")
+    goal_create.add_argument("--id", required=True)
+    goal_create.add_argument("--title", required=True)
+    goal_create.add_argument("--extensions", help="JSON object of goal extensions")
     goal_update = goal_sub.add_parser("update", help="record success-condition progress")
     goal_update.add_argument("--id", required=True)
     goal_update.add_argument("--success-conditions", help="JSON list; @file reads from disk")
@@ -280,7 +295,23 @@ def main() -> int:
             with Path(args.file).open(encoding="utf-8") as stream:
                 result = evidence_invalidate(json.load(stream), args.changed, root)
         elif args.command == "task":
-            if args.task_action == "begin":
+            if args.task_action == "create":
+                payload = {"id": args.id, "title": args.title}
+                if args.goal_id is not None:
+                    payload["goal_id"] = args.goal_id
+                extensions = _json_argument(args.extensions, "extensions")
+                if extensions is not None:
+                    payload["extensions"] = extensions
+                result = apply_cli_action(root, "task.create", payload)
+            elif args.task_action == "reopen":
+                payload = {
+                    "task_id": args.task_id, "new_task_id": args.new_task_id,
+                    "reason": args.reason,
+                }
+                if args.title is not None:
+                    payload["title"] = args.title
+                result = apply_cli_action(root, "task.reopen", payload)
+            elif args.task_action == "begin":
                 result = apply_cli_action(root, "task.begin", {
                     "task_id": args.task_id, "run_id": args.run_id,
                     "next_action": args.next_action,
@@ -389,7 +420,13 @@ def main() -> int:
 
                 result = refresh_evidence(root, args.reason)
         elif args.command == "goal":
-            if args.goal_action == "update":
+            if args.goal_action == "create":
+                payload = {"id": args.id, "title": args.title}
+                extensions = _json_argument(args.extensions, "extensions")
+                if extensions is not None:
+                    payload["extensions"] = extensions
+                result = apply_cli_action(root, "goal.create", payload)
+            elif args.goal_action == "update":
                 payload = {"id": args.id}
                 conditions = _json_argument(args.success_conditions, "success_conditions")
                 if conditions is not None:
