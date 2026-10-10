@@ -12,6 +12,13 @@ permission:
     "git show*": allow
     "git rev-parse*": allow
     "git ls-files*": allow
+    # `git log` is already allowed above. These two forms are listed explicitly too,
+    # because the matcher was observed to be inconsistent for `--flag=value` history
+    # queries. Alternatives that always match: `git log --oneline`, `git show`,
+    # `git rev-parse`. A denied command is a capability gap to report, not a reason to
+    # widen the allowlist.
+    "git log --format=*": allow
+    "git log --pretty=*": allow
     "grep *": allow
     "rg *": allow
     # Verification runs through the trusted action registry, anchored to the runner and its

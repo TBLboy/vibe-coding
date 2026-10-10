@@ -199,6 +199,26 @@ class OpenCodeStaticSurfaceTests(unittest.TestCase):
         if os.name == "posix":
             self.assertTrue(wrapper.stat().st_mode & 0o111, "bin/vibe-python must be executable")
 
+    def test_read_only_history_forms_are_listed_explicitly(self) -> None:
+        """The matcher's `--flag=value` handling is inconsistent, so list the forms.
+
+        The quirk cannot be re-tested from inside a running session (the allowlist is read
+        at start-up), so these entries are best-effort. The test pins that the workaround
+        exists, that it stays read-only, and that the alternatives the reviewers are told
+        to prefer (`git log --oneline`, `git show`, `git rev-parse`) remain covered by the
+        plain patterns above them.
+        """
+        for role in ("verification-reviewer", "alignment-reviewer"):
+            bash = parse_frontmatter(OPENCODE / f"agents/{role}.md")["permission"]["bash"]
+            allow = {pattern for pattern, action in bash.items() if action == "allow"}
+            self.assertIn("git log --format=*", allow, role)
+            self.assertIn("git log --pretty=*", allow, role)
+            for pattern in ("git log*", "git show*", "git rev-parse*"):
+                self.assertIn(pattern, allow, role)
+            # Still read-only: the explicit entries must not admit a mutating subcommand.
+            for pattern in ("git commit*", "git push*", "git reset*", "git checkout*"):
+                self.assertNotIn(pattern, allow, role)
+
     def test_commands_are_thin_primary_agent_entrypoints(self) -> None:
         paths = sorted((OPENCODE / "commands").glob("*.md"))
         self.assertEqual({path.stem for path in paths}, EXPECTED_COMMANDS)

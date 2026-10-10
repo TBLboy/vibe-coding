@@ -12,6 +12,14 @@ permission:
     "git show*": allow
     "git rev-parse*": allow
     "git ls-files*": allow
+    # `git log` is already allowed above. These two forms are also listed explicitly
+    # because the matcher was observed to be inconsistent for `--flag=value` history
+    # queries: listing them is free, and it keeps read-only history inspection available
+    # without widening anything else. Alternatives that always match if these are still
+    # denied: `git log --oneline`, `git show`, `git rev-parse`. Report a denied command
+    # as a capability gap rather than reaching for a wider shell.
+    "git log --format=*": allow
+    "git log --pretty=*": allow
     # Read-only search aids. They exist on a POSIX host and are simply absent on Windows;
     # a missing command is a platform fact, not a widened permission. Digests, however,
     # must never be re-derived with a host-specific tool: use the runner's `hash` action
