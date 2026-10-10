@@ -369,7 +369,15 @@ class GateStoreTests(unittest.TestCase):
             self.assertEqual(refreshed["status"], "stale")
             self.assertEqual(refreshed["invalidation_reason"], "artifact changed after verification")
 
-    def test_changed_doc_ref_propagates_into_task_and_goal_gates(self) -> None:
+    def test_legacy_doc_ref_drift_is_reported_but_does_not_block(self) -> None:
+        """T18: an untyped legacy ``doc_ref`` declares no subject and no binding.
+
+        V3 PR-03 stops treating it as a controlled dependency: nothing proves the record
+        is load-bearing for this task, so the gate must not fail closed on it. The drift
+        is still surfaced by ``validate`` as an unclassified reference, so it is never
+        silently ignored either. Before PR-03 the global scan blocked every task and
+        goal in the project as soon as any referenced document changed.
+        """
         with tempfile.TemporaryDirectory() as temporary:
             project = Path(temporary)
             store = initialize_project(project)
@@ -394,7 +402,17 @@ class GateStoreTests(unittest.TestCase):
             store.apply({
                 "schema_version": 1, "command_id": uuid.uuid4().hex,
                 "expected_revision": store.status()["revision"], "action": "goal.create",
-                "payload": {"id": "GOAL-DOC", "title": "Document goal"},
+                "payload": {
+                    "id": "GOAL-DOC", "title": "Document goal",
+                    "extensions": {
+                        "risk_level": "normal",
+                        "success_conditions": [{
+                            "id": "SC-1", "status": "not-applicable",
+                            "reason": "nothing to prove in this increment",
+                        }],
+                        "required_evidence": [],
+                    },
+                },
             })
             store.apply({
                 "schema_version": 1, "command_id": uuid.uuid4().hex,
@@ -414,15 +432,17 @@ class GateStoreTests(unittest.TestCase):
                 },
             })
             self.assertEqual(open_store(project).gate_task("TASK-DOC")["decision"], "allowed")
+            self.assertTrue(open_store(project).evaluate_goal("GOAL-DOC")["passed"])
+
             document.write_text("# Changed\n", encoding="utf-8")
+
             gate = open_store(project).gate_task("TASK-DOC")
-            self.assertEqual(gate["decision"], "blocked")
+            self.assertEqual(gate["decision"], "allowed", gate["blocking"])
+            self.assertEqual(gate["blocking"], [])
+            self.assertTrue(open_store(project).evaluate_goal("GOAL-DOC")["passed"])
+            diagnostics = open_store(project).validate()
             self.assertTrue(
-                any("doc_ref changed" in problem for problem in gate["blocking"]),
-                gate["blocking"],
-            )
-            self.assertTrue(
-                any("doc_ref changed" in problem for problem in open_store(project).validate()),
+                any("unclassified" in problem for problem in diagnostics), diagnostics
             )
 
     def test_task_update_records_implementer_and_keeps_risk_frozen(self) -> None:
@@ -631,16 +651,13 @@ class GateStoreTests(unittest.TestCase):
         self.assertTrue(result["passed"], result)
         self.assertEqual(result["reasons"], [])
 
-    @unittest.expectedFailure
     def test_unrelated_doc_ref_drift_does_not_block_an_unrelated_task(self) -> None:
-        """D05: drift is scoped to the goal/task that actually depends on the document.
+        """D05 / T18: drift is scoped to the goal/task that depends on the document.
 
-        Target behaviour (V3 PR-03): an informational ``doc_ref`` on an unrelated
-        record may surface a diagnostic in ``validate`` but must not block TASK-X.
-        Today ``_document_drift_problems`` scans every record and both completion gates
-        consume the result globally. This test replaces the expectation encoded in
-        ``test_changed_doc_ref_propagates_into_task_and_goal_gates``, which asserts
-        today's global behaviour and has to be rewritten together with PR-03.
+        Fixed in V3 PR-03: ``_document_drift_problems`` is scope-aware, and an untyped
+        legacy ``doc_ref`` counts as informational because nothing declares it as a
+        required dependency of TASK-X. The drift still reaches ``validate`` as an
+        unclassified reference, so it is neither a silent pass nor a global block.
         """
         with tempfile.TemporaryDirectory() as temporary:
             project = Path(temporary)
@@ -688,6 +705,139 @@ class GateStoreTests(unittest.TestCase):
 
             gate = open_store(project).gate_task("TASK-X")
             self.assertEqual(gate["decision"], "allowed", gate["blocking"])
+            self.assertEqual(gate["blocking"], [])
+            diagnostics = open_store(project).validate()
+            self.assertTrue(
+                any("unclassified" in problem for problem in diagnostics), diagnostics
+            )
+
+    def test_bound_document_drift_blocks_only_its_subject(self) -> None:
+        """T19: a reference that names its subject is a controlled dependency.
+
+        The record declares ``binding: required`` for TASK-DOC, so editing the document
+        must fail closed for TASK-DOC while TASK-OTHER, which depends on nothing, stays
+        allowed. This is what the global scan could not express.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            project = Path(temporary)
+            store = initialize_project(project)
+            document = project / ".project-log" / "docs" / "spec.md"
+            document.parent.mkdir(parents=True, exist_ok=True)
+            document.write_text("# Spec\n", encoding="utf-8")
+            digest = hashlib.sha256(document.read_bytes()).hexdigest()
+            store.apply({
+                "schema_version": 1, "command_id": uuid.uuid4().hex,
+                "expected_revision": store.status()["revision"], "action": "record.create",
+                "payload": {
+                    "kind": "requirement", "id": "REQ-DOC", "title": "Bound spec",
+                    "status": "active",
+                    "payload": {
+                        "approval": {"status": "approved"},
+                        "doc_ref": {
+                            "type": "bound_document",
+                            "path": ".project-log/docs/spec.md",
+                            "sha256": digest,
+                            "subject": {"kind": "task", "id": "TASK-DOC"},
+                            "binding": "required",
+                        },
+                    },
+                },
+            })
+            store.apply({
+                "schema_version": 1, "command_id": uuid.uuid4().hex,
+                "expected_revision": store.status()["revision"], "action": "goal.create",
+                "payload": {"id": "GOAL-DOC", "title": "Bound goal"},
+            })
+            for task_id in ("TASK-DOC", "TASK-OTHER"):
+                store.apply({
+                    "schema_version": 1, "command_id": uuid.uuid4().hex,
+                    "expected_revision": store.status()["revision"], "action": "task.create",
+                    "payload": {
+                        "id": task_id, "title": task_id, "goal_id": "GOAL-DOC",
+                        "extensions": {"risk": "normal", "implementer": "builder"},
+                    },
+                })
+                store.apply({
+                    "schema_version": 1, "command_id": uuid.uuid4().hex,
+                    "expected_revision": store.status()["revision"], "action": "evidence.record",
+                    "payload": {
+                        "id": "EVID-" + task_id, "kind": "test", "subject": task_id,
+                        "status": "valid", "task_id": task_id,
+                        "covers": {"tasks": [task_id]},
+                    },
+                })
+            self.assertEqual(open_store(project).gate_task("TASK-DOC")["decision"], "allowed")
+
+            document.write_text("# Spec changed\n", encoding="utf-8")
+
+            blocked = open_store(project).gate_task("TASK-DOC")
+            self.assertEqual(blocked["decision"], "blocked", blocked)
+            self.assertTrue(
+                any("spec.md" in problem for problem in blocked["blocking"]),
+                blocked["blocking"],
+            )
+            untouched = open_store(project).gate_task("TASK-OTHER")
+            self.assertEqual(untouched["decision"], "allowed", untouched["blocking"])
+
+    def test_informational_ref_drift_does_not_block(self) -> None:
+        """T20: an explicitly informational reference is a diagnostic, not a gate.
+
+        Declaring the type is what distinguishes "we point at this document" from "this
+        task is only done while the document still matches".
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            project = Path(temporary)
+            store = initialize_project(project)
+            document = project / ".project-log" / "docs" / "background.md"
+            document.parent.mkdir(parents=True, exist_ok=True)
+            document.write_text("# Background\n", encoding="utf-8")
+            digest = hashlib.sha256(document.read_bytes()).hexdigest()
+            store.apply({
+                "schema_version": 1, "command_id": uuid.uuid4().hex,
+                "expected_revision": store.status()["revision"], "action": "record.create",
+                "payload": {
+                    "kind": "research", "id": "RES-INFO", "title": "Background reading",
+                    "status": "complete",
+                    "payload": {
+                        "doc_ref": {
+                            "type": "informational_ref",
+                            "path": ".project-log/docs/background.md",
+                            "sha256": digest,
+                            "description": "context only",
+                        },
+                    },
+                },
+            })
+            store.apply({
+                "schema_version": 1, "command_id": uuid.uuid4().hex,
+                "expected_revision": store.status()["revision"], "action": "goal.create",
+                "payload": {"id": "GOAL-INFO", "title": "Goal"},
+            })
+            store.apply({
+                "schema_version": 1, "command_id": uuid.uuid4().hex,
+                "expected_revision": store.status()["revision"], "action": "task.create",
+                "payload": {
+                    "id": "TASK-INFO", "title": "Task", "goal_id": "GOAL-INFO",
+                    "extensions": {"risk": "normal", "implementer": "builder"},
+                },
+            })
+            store.apply({
+                "schema_version": 1, "command_id": uuid.uuid4().hex,
+                "expected_revision": store.status()["revision"], "action": "evidence.record",
+                "payload": {
+                    "id": "EVID-INFO", "kind": "test", "subject": "task",
+                    "status": "valid", "task_id": "TASK-INFO",
+                    "covers": {"tasks": ["TASK-INFO"]},
+                },
+            })
+            document.write_text("# Background changed\n", encoding="utf-8")
+
+            gate = open_store(project).gate_task("TASK-INFO")
+            self.assertEqual(gate["decision"], "allowed", gate["blocking"])
+            diagnostics = open_store(project).validate()
+            self.assertTrue(
+                any("informational" in problem for problem in diagnostics), diagnostics
+            )
 
 
 if __name__ == "__main__":

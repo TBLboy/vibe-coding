@@ -174,16 +174,70 @@ def _reject_long_form_text(value, path: str = "payload") -> None:
     )
 
 
+REFERENCE_TYPES = ("informational_ref", "bound_document")
+
+
 def _iter_doc_refs(value, path: str = "payload"):
-    """Yield ``doc_ref`` objects anywhere in a record payload."""
+    """Yield document references anywhere in a record payload.
+
+    A reference carries a ``path``; the legacy shape is recognised by its ``sha256`` and
+    the typed shapes by ``type``. How a reference is treated is decided by
+    ``_reference_kind``, not here.
+    """
     if type(value) is dict:
-        if set(value) >= {"path", "sha256"} and type(value.get("path")) is str:
+        if type(value.get("path")) is str and (
+            type(value.get("sha256")) is str or value.get("type") in REFERENCE_TYPES
+        ):
             yield path, value
         for key, item in value.items():
             yield from _iter_doc_refs(item, f"{path}.{key}")
     elif type(value) is list:
         for index, item in enumerate(value):
             yield from _iter_doc_refs(item, f"{path}[{index}]")
+
+
+def _reference_kind(reference) -> str:
+    """Classify a document reference as ``bound`` (controlled) or ``informational``.
+
+    ``bound_document`` names the subject it constrains, so that subject's gate must fail
+    closed while the document no longer matches. Everything else is informational.
+
+    An untyped legacy ``doc_ref`` counts as informational on purpose. It declares neither
+    a subject nor a binding, and inferring "required for every task in the project" from
+    its mere presence is exactly the global block this classification removes.
+    """
+    if reference.get("type") != "bound_document":
+        return "informational"
+    return "informational" if reference.get("binding") == "advisory" else "bound"
+
+
+def _reference_subject(reference):
+    """The ``(kind, id)`` a controlled reference declares, or ``None`` when malformed."""
+    subject = reference.get("subject")
+    if type(subject) is not dict:
+        return None
+    kind, identifier = subject.get("kind"), subject.get("id")
+    if kind not in {"task", "goal"} or type(identifier) is not str or not identifier:
+        return None
+    return kind, identifier
+
+
+def _reference_applies(reference, subject) -> bool:
+    """Whether a controlled reference gates ``subject``.
+
+    ``subject`` is ``("task", id)`` or ``("goal", id, {task ids})``: a goal is constrained
+    by documents bound to the goal itself and by documents bound to its own tasks.
+    """
+    if _reference_kind(reference) != "bound":
+        return False
+    declared = _reference_subject(reference)
+    if declared is None:
+        return False
+    if subject[0] == "task":
+        return declared == ("task", subject[1])
+    if declared == ("goal", subject[1]):
+        return True
+    return declared[0] == "task" and declared[1] in subject[2]
 
 
 def relocated_legacy_path(path) -> str | None:
@@ -239,23 +293,33 @@ def _covered_digest(base: Path, path: str) -> tuple[str | None, str]:
         return None, f"covered input is unreadable: {path}: {error}"
 
 
-def _doc_ref_issues(root: Path | None, payload) -> list[dict]:
-    """Re-evaluate every ``doc_ref`` recorded in a record payload.
+def _doc_ref_issues(root: Path | None, payload, subject=None) -> list[dict]:
+    """Re-evaluate every document reference recorded in a record payload.
 
     The stored hash is what makes a reference load-bearing: without re-computing it
     a long document can drift while the structured record still claims to describe it.
+    When ``subject`` is given, only controlled references for that subject are reported,
+    so an unrelated document cannot block work that does not depend on it.
     """
     if root is None:
         return []
     base = Path(root)
     issues: list[dict] = []
     for reference_path, reference in _iter_doc_refs(payload):
+        kind = _reference_kind(reference)
+        if subject is not None and not _reference_applies(reference, subject):
+            continue
+        label = reference.get("type") if reference.get("type") in REFERENCE_TYPES else "doc_ref"
         path = reference.get("path")
         expected = reference.get("sha256")
         if type(path) is not str or type(expected) is not str or not expected:
+            if kind == "informational" and subject is None:
+                # An informational pointer may legitimately omit the hash: there is
+                # nothing to compare, so it is a description, not an integrity problem.
+                continue
             issues.append({
-                "reference": reference_path, "path": path,
-                "reason": "doc_ref must carry path and sha256",
+                "reference": reference_path, "path": path, "kind": kind,
+                "reason": f"{label} must carry path and sha256",
             })
             continue
         target = Path(path)
@@ -267,14 +331,18 @@ def _doc_ref_issues(root: Path | None, payload) -> list[dict]:
             actual = hashlib.sha256(target.read_bytes()).hexdigest()
         except OSError as error:
             issues.append({
-                "reference": reference_path, "path": path,
-                "reason": f"doc_ref is unreadable: {error}",
+                "reference": reference_path, "path": path, "kind": kind,
+                "reason": f"{label} is unreadable: {error}",
             })
             continue
         if actual != expected:
+            prefix = "unclassified legacy doc_ref" if label == "doc_ref" else label
             issues.append({
-                "reference": reference_path, "path": path,
-                "reason": f"doc_ref changed: recorded {expected[:12]}, current {actual[:12]}",
+                "reference": reference_path, "path": path, "kind": kind,
+                "reason": (
+                    f"{prefix} doc_ref changed: {path} recorded {expected[:12]}, "
+                    f"current {actual[:12]}"
+                ),
             })
     return issues
 
@@ -1011,11 +1079,13 @@ class Store:
         return result
 
     def stale_documents(self, root: Path | None = None) -> list[dict]:
-        """Read-only list of record ``doc_ref`` entries whose recorded hash no longer matches.
+        """Read-only list of record references whose recorded hash no longer matches.
 
         Section 4 of the production contract stores long-form text by reference and
         records the hash at write time; re-computing it is the only way the reference
-        stays load-bearing instead of decorative.
+        stays load-bearing instead of decorative. Classification follows
+        ``_reference_kind``: an unclassified legacy reference is listed here so it stays
+        visible, but it does not gate any task.
         """
         base = Path(root) if root is not None else self.root
         if base is None:
@@ -1030,34 +1100,12 @@ class Store:
             ).fetchall()
         for row in rows:
             payload = _decode_json(row["payload"], "record payload")
-            for reference_path, reference in _iter_doc_refs(payload):
-                path = reference.get("path")
-                expected = reference.get("sha256")
-                if type(path) is not str or type(expected) is not str or not expected:
-                    result.append({
-                        "kind": row["kind"], "id": row["id"], "reference": reference_path,
-                        "path": path, "reason": "doc_ref must carry path and sha256",
-                    })
-                    continue
-                target = Path(path)
-                if not target.is_absolute():
-                    target = base / target
-                try:
-                    if target.is_symlink() or not target.is_file():
-                        raise OSError("missing")
-                    actual = hashlib.sha256(target.read_bytes()).hexdigest()
-                except OSError as error:
-                    result.append({
-                        "kind": row["kind"], "id": row["id"], "reference": reference_path,
-                        "path": path, "reason": f"doc_ref is unreadable: {error}",
-                    })
-                    continue
-                if actual != expected:
-                    result.append({
-                        "kind": row["kind"], "id": row["id"], "reference": reference_path,
-                        "path": path,
-                        "reason": f"doc_ref changed: recorded {expected[:12]}, current {actual[:12]}",
-                    })
+            for issue in _doc_ref_issues(base, payload):
+                result.append({
+                    "kind": row["kind"], "id": row["id"],
+                    "reference": issue["reference"], "path": issue.get("path"),
+                    "reason": issue["reason"],
+                })
         return result
 
     def gate_task(self, task_id: str) -> dict:
@@ -1348,7 +1396,16 @@ class Store:
                 return "stale"
             return "valid"
 
-        problems: list[str] = Store._document_drift_problems(connection, root)
+        # The goal is constrained only by documents bound to the goal itself or to one of
+        # its own tasks, so drift is evaluated in that scope rather than project-wide.
+        scoped_tasks = {
+            item["id"] for item in connection.execute(
+                "SELECT id FROM tasks WHERE goal_id = ?", (goal_id,)
+            )
+        }
+        problems: list[str] = Store._document_drift_problems(
+            connection, root, ("goal", goal_id, scoped_tasks)
+        )
         conditions = extensions.get("success_conditions", [])
         if type(conditions) is not list:
             problems.append("success_conditions must be a list")
@@ -1412,12 +1469,7 @@ class Store:
             # A review may only complete the goal it belongs to: either a review of
             # the goal itself or a review of one of the goal's own tasks. Reviews that
             # belong to another goal/task must never satisfy this gate (N01), and the
-            # evidence they cite has to sit inside the same scope.
-            scoped_tasks = {
-                item["id"] for item in connection.execute(
-                    "SELECT id FROM tasks WHERE goal_id = ?", (goal_id,)
-                )
-            }
+            # evidence they cite has to sit inside the same scope (``scoped_tasks``).
             every_review = [
                 dict(item) for item in connection.execute(
                     "SELECT * FROM reviews ORDER BY created_sequence DESC"
@@ -1491,14 +1543,16 @@ class Store:
         return list(verdict["reasons"])
 
     @staticmethod
-    def _document_drift_problems(connection, root: Path | None) -> list[str]:
-        """Re-evaluate every record ``doc_ref`` and fail closed on drift.
+    def _document_drift_problems(connection, root: Path | None, subject=None) -> list[str]:
+        """Re-evaluate document references and fail closed on the ones that bind.
 
-        A ``doc_ref`` records the hash of the long-form document at write time. Once
-        the referenced bytes change, the structured record no longer faithfully
-        describes its document, so any completion gate must block until the record is
-        refreshed. Reporting the drift only in ``validate`` is not enough: the same
-        check has to reach the evidence and completion gates.
+        A controlled ``bound_document`` records the hash of the long-form document at
+        write time and names the subject it constrains. Once the referenced bytes change
+        the record no longer faithfully describes its document, so that subject's
+        completion gate must block until the record is refreshed. An informational
+        reference (including an unclassified legacy ``doc_ref``) is reported by
+        ``validate`` but never gates anything, because nothing declares it load-bearing
+        for a particular task.
         """
         if root is None:
             return []
@@ -1508,7 +1562,7 @@ class Store:
         ).fetchall()
         for row in rows:
             payload = _decode_json(row["payload"], "record payload")
-            for issue in _doc_ref_issues(root, payload):
+            for issue in _doc_ref_issues(root, payload, subject):
                 problems.append(
                     f"record {row['kind']}/{row['id']} {issue['reference']}: {issue['reason']}"
                 )
@@ -1550,7 +1604,9 @@ class Store:
         extensions = task.get("extensions")
         if type(extensions) is not dict:
             extensions = {}
-        problems: list[str] = Store._document_drift_problems(connection, root)
+        problems: list[str] = Store._document_drift_problems(
+            connection, root, ("task", task["id"])
+        )
         valid = []
         covered = Store._evidence_covers_task(connection, task["id"])
         for row in covered:
