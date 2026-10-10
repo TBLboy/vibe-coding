@@ -582,43 +582,54 @@ class GateStoreTests(unittest.TestCase):
             "evidence_refs": ["EVID-" + task_id],
         })
 
-    @unittest.expectedFailure
     def test_high_risk_goal_rejects_foreign_task_review(self) -> None:
-        """N01: another goal's task review must not complete this goal.
+        """N01 / T01: another goal's task review must not complete this goal.
 
-        Target behaviour (V3 PR-01): review evidence and review rows are scoped to the
-        goal under evaluation, so GOAL-A reports a scope mismatch and stays incomplete.
-        Today ``_goal_completion_problems`` reads the whole evidence table and iterates
-        every row of ``reviews`` without a target filter, so GOAL-A completes on
-        GOAL-B's task review.
+        Fixed in V3 PR-01: reviews are scoped to the goal under evaluation (directly
+        or through one of its own tasks), so GOAL-B's review cannot complete GOAL-A.
+        Before the fix the gate iterated every row of ``reviews`` with no target filter.
         """
         self._high_risk_goal("GOAL-A", implementer="builder-a")
         self.apply("goal.create", {"id": "GOAL-B", "title": "Goal B"})
         self._task_with_review_evidence("TASK-B", "GOAL-B", reviewer="reviewer-b")
 
         result = self.store.evaluate_goal("GOAL-A")
-        self.assertFalse(
-            result["passed"],
-            "GOAL-A was completed by a review belonging to TASK-B/GOAL-B: " + repr(result),
+        self.assertFalse(result["passed"], result)
+        self.assertTrue(
+            any("review_scope_mismatch" in reason for reason in result["reasons"]),
+            result["reasons"],
         )
 
-    @unittest.expectedFailure
     def test_high_risk_goal_without_implementer_fails_closed(self) -> None:
-        """N01: a high-risk goal with no implementer must not skip independence.
+        """N01 / T02: a high-risk goal with no implementer must fail closed.
 
-        Target behaviour (V3 PR-01): report ``missing_implementer``. Today the whole
-        independence check sits inside ``if implementer:`` with no else branch, so an
-        unregistered implementer silently satisfies the high-risk review requirement
-        (the task gate already fails closed here; the goal gate does not).
+        Fixed in V3 PR-01: the independence check no longer sits inside ``if
+        implementer:`` with no else branch, so an unregistered implementer cannot
+        silently satisfy the high-risk review requirement.
         """
         self._high_risk_goal("GOAL-A")
         self._task_with_review_evidence("TASK-A", "GOAL-A", reviewer="reviewer-a")
 
         result = self.store.evaluate_goal("GOAL-A")
-        self.assertFalse(
-            result["passed"],
-            "GOAL-A has no implementer yet passed the high-risk review gate: " + repr(result),
+        self.assertFalse(result["passed"], result)
+        self.assertTrue(
+            any("missing_implementer" in reason for reason in result["reasons"]),
+            result["reasons"],
         )
+
+    def test_high_risk_goal_accepts_its_own_task_review(self) -> None:
+        """N01 positive control: the fix must not reject every high-risk goal.
+
+        GOAL-A owns TASK-A; TASK-A carries a go review from someone other than the
+        goal's implementer, bound to valid evidence covering TASK-A. That is exactly
+        the aggregation the gate is meant to allow, so GOAL-A must still complete.
+        """
+        self._high_risk_goal("GOAL-A", implementer="builder-a")
+        self._task_with_review_evidence("TASK-A", "GOAL-A", reviewer="reviewer-a")
+
+        result = self.store.evaluate_goal("GOAL-A")
+        self.assertTrue(result["passed"], result)
+        self.assertEqual(result["reasons"], [])
 
     @unittest.expectedFailure
     def test_unrelated_doc_ref_drift_does_not_block_an_unrelated_task(self) -> None:

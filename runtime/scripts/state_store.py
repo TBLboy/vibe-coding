@@ -1101,6 +1101,24 @@ class Store:
         return matches
 
     @staticmethod
+    def _evidence_in_goal_scope(connection, reference: str, scoped_tasks: set) -> bool:
+        """Whether evidence may be used by a goal.
+
+        ``covers`` has no ``goals`` key, so the only scope a goal can claim today is
+        its own tasks. Evidence that covers nothing inside the goal is not applicable
+        merely because its stored status happens to be ``valid``.
+        """
+        row = connection.execute("SELECT * FROM evidence WHERE id = ?", (reference,)).fetchone()
+        if row is None:
+            return False
+        covers = _decode_json(row["covers"], "evidence covers")
+        tasks = covers.get("tasks") if type(covers) is dict else None
+        if type(tasks) is list and scoped_tasks.intersection(tasks):
+            return True
+        task_id = row["task_id"]
+        return bool(task_id) and task_id in scoped_tasks
+
+    @staticmethod
     def _goal_completion_problems(connection, goal_id: str, root: Path | None = None) -> list[str]:
         row = connection.execute("SELECT * FROM goals WHERE id = ?", (goal_id,)).fetchone()
         if row is None:
@@ -1186,31 +1204,75 @@ class Store:
                 problems.append(f"required evidence missing: {label}")
         risk = extensions.get("risk_level")
         if risk in {"high", "critical"}:
-            reviews = [
-                item for item in evidence.values()
-                if item["kind"] == "review" and evidence_status(item["id"]) == "valid"
+            # A review may only complete the goal it belongs to: either a review of
+            # the goal itself or a review of one of the goal's own tasks. Reviews that
+            # belong to another goal/task must never satisfy this gate (N01), and the
+            # evidence they cite has to sit inside the same scope.
+            scoped_tasks = {
+                item["id"] for item in connection.execute(
+                    "SELECT id FROM tasks WHERE goal_id = ?", (goal_id,)
+                )
+            }
+            every_review = [
+                dict(item) for item in connection.execute(
+                    "SELECT * FROM reviews ORDER BY created_sequence DESC"
+                )
             ]
+            reviews = [item for item in every_review if item["task_id"] in scoped_tasks]
             if not reviews:
-                problems.append("high-risk goal lacks a valid independent review")
+                if every_review:
+                    problems.append(
+                        f"review_scope_mismatch: high-risk goal {goal_id} has reviews, but "
+                        "none belongs to this goal or one of its tasks"
+                    )
+                else:
+                    problems.append(
+                        f"review_missing: high-risk goal {goal_id} has no independent review"
+                    )
             else:
                 implementer = extensions.get("implementer") or extensions.get("owner")
-                if type(implementer) is str and implementer.strip():
-                    review_ids = {item["id"] for item in reviews}
-                    independent = False
-                    for review in connection.execute("SELECT * FROM reviews"):
+                if type(implementer) is not str or not implementer.strip():
+                    # Without a recorded implementer, reviewer independence cannot be
+                    # established; fail closed instead of accepting any reviewer (N01).
+                    problems.append(
+                        f"missing_implementer: high-risk goal {goal_id} has no recorded "
+                        "implementer, so reviewer independence cannot be established"
+                    )
+                    accepted = []
+                else:
+                    accepted = [
+                        review for review in reviews
+                        if review["verdict"] == "go"
+                        and type(review["reviewer"]) is str
+                        and review["reviewer"].strip()
+                        and review["reviewer"] != implementer
+                    ]
+                if not accepted:
+                    problems.append(
+                        f"review_not_independent: high-risk goal {goal_id} lacks a go review "
+                        "from a reviewer other than its implementer"
+                    )
+                else:
+                    bound = []
+                    for review in accepted:
                         references = _decode_json(review["evidence_refs"], "review evidence refs")
-                        if (
-                            review["verdict"] == "go"
-                            and type(review["reviewer"]) is str
-                            and review["reviewer"].strip()
-                            and review["reviewer"] != implementer
-                            and type(references) is list
-                            and review_ids.intersection(references)
-                        ):
-                            independent = True
+                        if type(references) is not list:
+                            continue
+                        for reference in references:
+                            if evidence_status(reference) != "valid":
+                                continue
+                            if not Store._evidence_in_goal_scope(
+                                connection, reference, scoped_tasks
+                            ):
+                                continue
+                            bound.append(review)
                             break
-                    if not independent:
-                        problems.append("high-risk goal review does not name an independent reviewer")
+                    if not bound:
+                        problems.append(
+                            f"review_evidence_stale: high-risk goal {goal_id} has no go review "
+                            "bound to current evidence inside the goal's scope "
+                            "(review evidence_refs must name valid, non-stale evidence)"
+                        )
         return problems
 
     @staticmethod
