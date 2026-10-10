@@ -183,11 +183,14 @@ on this platform advertises a capability the reviewer cannot actually use. Indep
 fails explicitly rather than silently falling back to a possibly older `python3` on `PATH`.
 Read-only `git` inspection is allowlisted as a small set of exact forms (`git status`, `git diff`,
 `git log`, `git show`, `git rev-parse`, `git ls-files`), plus explicit `git log --format=` /
-`git log --pretty=` entries because the matcher was observed to be inconsistent for
-`--flag=value` history queries; the quirk cannot be re-tested from inside a running session
-(the allowlist is read at start-up), so those two entries are a best-effort addition and
-`git log --oneline` / `git show` / `git rev-parse` remain the forms that always match. A command
-the matcher denies is a capability gap to report, never a reason to widen the allowlist.
+`git log --pretty=` entries. Those two were added after an earlier session reported the matcher
+mishandling `--flag=value` history queries; in the session that added them the plain `git log*`
+already matched `git log --format=%H -1`, so they are redundant-but-harmless insurance rather than
+a fix. Whether the allowlist is read once at start-up — and therefore cannot be re-tested inside a
+running session — is an **assumption** about OpenCode, not something this repository verifies: no
+test or document here establishes the permission-loading lifecycle. The forms observed to match
+are `git log --oneline`, `git show`, `git rev-parse`; a command the matcher denies is a capability
+gap to report, never a reason to widen the allowlist.
 Research, onboarding, paper-reading, `business-analyst` and `workflow-distiller` roles have Bash
 fully denied and rely on built-in read/search tools or web tools. `business-analyst` and
 `workflow-distiller` may write draft records under `.project-log/**`; they cannot edit product
