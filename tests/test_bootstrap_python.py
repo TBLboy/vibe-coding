@@ -98,7 +98,7 @@ class BootstrapTests(unittest.TestCase):
             self.skipTest("bootstrap integration requires Python 3.11+")
         with tempfile.TemporaryDirectory() as temporary:
             workspace = Path(temporary)
-            home = workspace / "config-home"
+            home = workspace / "codex-home"
             created = workspace / "created"
             manager = write_test_executable(
                 workspace,
@@ -119,7 +119,7 @@ class BootstrapTests(unittest.TestCase):
             result = subprocess.run(
                 [
                     sys.executable, str(BOOTSTRAP),
-                    "--config-home", str(home),
+                    "--codex-home", str(home),
                     "--requirements", str(ROOT / "runtime/scripts/requirements.txt"),
                     "--print-python",
                 ],
@@ -132,7 +132,7 @@ class BootstrapTests(unittest.TestCase):
     def test_bootstrap_repairs_configured_interpreter_in_place(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             workspace = Path(temporary)
-            home = workspace / "config-home"
+            home = workspace / "codex-home"
             home.mkdir(parents=True)
             marker = workspace / "pip-ran"
             interpreter = write_fake_interpreter(workspace, "configured-python", marker)
@@ -147,7 +147,7 @@ class BootstrapTests(unittest.TestCase):
             result = subprocess.run(
                 [
                     sys.executable, str(BOOTSTRAP),
-                    "--config-home", str(home),
+                    "--codex-home", str(home),
                     "--requirements", str(ROOT / "runtime/scripts/requirements.txt"),
                     "--print-python",
                 ],
@@ -166,7 +166,7 @@ class BootstrapTests(unittest.TestCase):
     def test_bootstrap_switches_environment_only_when_explicitly_opted_in(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             workspace = Path(temporary)
-            home = workspace / "config-home"
+            home = workspace / "codex-home"
             home.mkdir(parents=True)
             marker = workspace / "pip-ran"
             interpreter = write_fake_interpreter(workspace, "configured-python", marker, pip_succeeds=False)
@@ -185,7 +185,7 @@ class BootstrapTests(unittest.TestCase):
                 return subprocess.run(
                     [
                         sys.executable, str(BOOTSTRAP),
-                        "--config-home", str(home),
+                        "--codex-home", str(home),
                         "--requirements", str(ROOT / "runtime/scripts/requirements.txt"),
                         "--print-python",
                     ],
@@ -214,7 +214,7 @@ class BootstrapTests(unittest.TestCase):
     def test_bootstrap_refuses_to_rewrite_while_vibe_python_env_var_is_set(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             workspace = Path(temporary)
-            home = workspace / "config-home"
+            home = workspace / "codex-home"
             home.mkdir(parents=True)
             marker = workspace / "pip-ran"
             interpreter = write_fake_interpreter(workspace, "env-python", marker, pip_succeeds=False)
@@ -230,7 +230,7 @@ class BootstrapTests(unittest.TestCase):
             result = subprocess.run(
                 [
                     sys.executable, str(BOOTSTRAP),
-                    "--config-home", str(home),
+                    "--codex-home", str(home),
                     "--requirements", str(ROOT / "runtime/scripts/requirements.txt"),
                     "--print-python",
                 ],
@@ -246,7 +246,7 @@ class BootstrapTests(unittest.TestCase):
     def test_bootstrap_does_not_invent_an_environment_for_a_missing_configured_interpreter(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             workspace = Path(temporary)
-            home = workspace / "config-home"
+            home = workspace / "codex-home"
             home.mkdir(parents=True)
             missing = workspace / "gone-python"
             config = home / "vibe-python"
@@ -260,7 +260,7 @@ class BootstrapTests(unittest.TestCase):
             result = subprocess.run(
                 [
                     sys.executable, str(BOOTSTRAP),
-                    "--config-home", str(home),
+                    "--codex-home", str(home),
                     "--requirements", str(ROOT / "runtime/scripts/requirements.txt"),
                     "--print-python",
                 ],
@@ -275,7 +275,7 @@ class BootstrapTests(unittest.TestCase):
     def test_bootstrap_does_not_treat_a_falsy_repair_value_as_opt_in(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             workspace = Path(temporary)
-            home = workspace / "config-home"
+            home = workspace / "codex-home"
             home.mkdir(parents=True)
             marker = workspace / "pip-ran"
             interpreter = write_fake_interpreter(workspace, "configured-python", marker, pip_succeeds=False)
@@ -292,7 +292,7 @@ class BootstrapTests(unittest.TestCase):
                 result = subprocess.run(
                     [
                         sys.executable, str(BOOTSTRAP),
-                        "--config-home", str(home),
+                        "--codex-home", str(home),
                         "--requirements", str(ROOT / "runtime/scripts/requirements.txt"),
                         "--print-python",
                     ],
@@ -310,7 +310,7 @@ class BootstrapTests(unittest.TestCase):
     def test_bootstrap_opt_in_switches_when_the_configured_path_is_unusable(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             workspace = Path(temporary)
-            home = workspace / "config-home"
+            home = workspace / "codex-home"
             home.mkdir(parents=True)
             missing = workspace / "gone-python"
             config = home / "vibe-python"
@@ -324,7 +324,7 @@ class BootstrapTests(unittest.TestCase):
             result = subprocess.run(
                 [
                     sys.executable, str(BOOTSTRAP),
-                    "--config-home", str(home),
+                    "--codex-home", str(home),
                     "--requirements", str(ROOT / "runtime/scripts/requirements.txt"),
                     "--print-python",
                 ],
@@ -342,7 +342,7 @@ class BootstrapTests(unittest.TestCase):
     def test_bootstrap_reports_the_vibe_python_source_for_a_blank_value(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             workspace = Path(temporary)
-            home = workspace / "config-home"
+            home = workspace / "codex-home"
             home.mkdir(parents=True)
             config = home / "vibe-python"
             config.write_text(str(workspace / "untouched") + "\n", encoding="utf-8")
@@ -355,7 +355,7 @@ class BootstrapTests(unittest.TestCase):
             result = subprocess.run(
                 [
                     sys.executable, str(BOOTSTRAP),
-                    "--config-home", str(home),
+                    "--codex-home", str(home),
                     "--requirements", str(ROOT / "runtime/scripts/requirements.txt"),
                     "--print-python",
                 ],
@@ -417,7 +417,7 @@ class BootstrapInterpreterResolutionTests(unittest.TestCase):
     def test_bootstrap_surfaces_manager_output_instead_of_a_spawn_error(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             workspace = Path(temporary)
-            home = workspace / "config-home"
+            home = workspace / "codex-home"
             home.mkdir(parents=True)
             config = home / "vibe-python"
             config.write_text(str(workspace / "gone-python") + "\n", encoding="utf-8")
@@ -435,7 +435,7 @@ class BootstrapInterpreterResolutionTests(unittest.TestCase):
             result = subprocess.run(
                 [
                     sys.executable, str(BOOTSTRAP),
-                    "--config-home", str(home),
+                    "--codex-home", str(home),
                     "--requirements", str(ROOT / "runtime/scripts/requirements.txt"),
                     "--print-python",
                 ],

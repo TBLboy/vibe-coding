@@ -211,17 +211,20 @@ class HashActionTests(unittest.TestCase):
             runner.build_argv("hash", self.root, paths=["."])
         self.assertEqual(caught.exception.code, "invalid_input")
 
-    def test_reviewer_allowlists_carry_no_posix_only_hashing_tool(self) -> None:
-        """A permission entry for a command that cannot exist is a broken capability.
+    def test_reviewer_role_specs_route_digests_through_the_runner(self) -> None:
+        """A reviewer capability must not depend on a tool that cannot exist here.
 
-        The allowlist is a contract about what a reviewer can do here, so it must not
-        advertise a tool that is missing on this platform; the registry action is the
-        supported way to re-derive a digest.
+        The OpenCode face states this as a bash allowlist inside
+        `runtime/opencode/agents/*.md`. The codex face has no per-agent allowlist --
+        permissions there are `approval_policy`/`sandbox_mode` in config.toml -- so the
+        invariant is asserted where the codex face can carry it: the role specs must not
+        advertise a host-specific hashing tool, and must route digest work through the
+        trusted registry entry (TASK-136).
         """
         for name in ("verification-reviewer.md", "alignment-reviewer.md"):
-            text = (ROOT / "runtime" / "opencode" / "agents" / name).read_text(encoding="utf-8")
+            text = (ROOT / "runtime" / "agents" / name).read_text(encoding="utf-8")
             self.assertNotIn("sha256sum", text, name)
-            self.assertIn("*verification_runner.py run*", text, name)
+            self.assertIn("verification_runner.py run", text, name)
 
 
 class RunnerEntryPointTests(unittest.TestCase):
@@ -256,8 +259,10 @@ class TargetedRunTests(unittest.TestCase):
 
     def test_unittest_file_actually_runs_the_named_file(self) -> None:
         # Deliberately *not* this file: `unittest-file` on test_verification_runner.py
-        # would re-run this very test and recurse.
-        report = runner.run("unittest-file", ROOT, path="tests/test_docs_consistency.py")
+        # would re-run this very test and recurse. The target is a file that is green
+        # on its own, so this test proves the action ran the named file and did not
+        # depend on the state of any other suite (TASK-136).
+        report = runner.run("unittest-file", ROOT, path="tests/test_release_surface.py")
         self.assertEqual(report["exit_code"], 0, report["output_tail"])
         self.assertIn("Ran ", report["output_tail"])
         self.assertNotIn("Ran 0 tests", report["output_tail"])

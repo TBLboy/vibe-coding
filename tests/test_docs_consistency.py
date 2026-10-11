@@ -36,14 +36,14 @@ class DocumentationConsistencyTests(unittest.TestCase):
         self.assertNotIn("migrate preview|apply|resume|rollback", text)
         self.assertNotIn("loopctl", text)
 
-    def test_opencode_global_prompt_initializes_format_two_through_vibe(self) -> None:
+    def test_global_prompt_initializes_format_two_through_vibe(self) -> None:
         """The shipped global prompt must send the agent through the formal entry.
 
-        This used to read `prompts/vibe-global-agent.md`, the codex prompt. That prompt
-        and the rest of the codex delivery face were removed; the OpenCode surface's
-        global prompt is `runtime/opencode/AGENTS.md`.
+        This test was written for the OpenCode surface, whose global prompt lives at
+        `runtime/opencode/AGENTS.md`. This branch ships the codex surface, so the
+        prompt under test is `prompts/vibe-global-agent.md` (TASK-136).
         """
-        text = (ROOT / "runtime/opencode/AGENTS.md").read_text(encoding="utf-8")
+        text = (ROOT / "prompts/vibe-global-agent.md").read_text(encoding="utf-8")
         self.assertIn("scripts/vibe.py", text)
         self.assertIn("init", text)
         self.assertIn("format 2", text)
@@ -58,26 +58,23 @@ class DocumentationConsistencyTests(unittest.TestCase):
         self.assertIn("format 2", reference)
         self.assertNotIn("migration window", reference)
 
-    def test_user_docs_point_at_the_opencode_entry(self) -> None:
-        """The OpenCode entry must be the only installer a reader can reach.
+    def test_user_docs_point_at_the_codex_entry(self) -> None:
+        """The codex entry must be the installer a reader can reach.
 
-        A review of TASK-076 found docs/USAGE.md still telling readers to run the
-        root ./install.sh, which installed the *codex* client to ~/.codex. The same
-        class of drift had already slipped through once (TASK-080 B-b), so the entry
-        point is asserted here instead of being trusted to stay correct. The codex
-        delivery face has since been removed outright (TASK-126), so the assertion is
-        now also that the misleading files are gone rather than merely unmentioned.
+        This test was written for the OpenCode face, where the codex delivery face had
+        been removed outright (TASK-126): it asserted `runtime/opencode/install.sh` in
+        the user docs and that the codex files were gone. This branch *is* the codex
+        face, so the assertion is inverted (TASK-136) — the reader is directed at the
+        root codex installer, the delivery-face files exist, and the OpenCode surface
+        is the one that is absent.
         """
-        entry = "runtime/opencode/install.sh"
-        for relative in ("README.md", "docs/USAGE.md", "AI_INSTALL.md", "AI_UPGRADE.md"):
+        for relative in ("README.md", "docs/USAGE.md", "AI_INSTALL.md"):
             text = (ROOT / relative).read_text(encoding="utf-8")
-            self.assertIn(entry, text, relative)
-            self.assertNotIn("global_installer.py verify", text, relative)
-            self.assertNotIn("codex mcp list", text, relative)
-            self.assertIsNone(
-                re.search(r"(?m)^\s*\./install\.sh\b", text),
-                f"{relative} still directs the reader at the codex-surface root installer",
-            )
+            self.assertIn("./install.sh", text, relative)
+            self.assertNotIn("runtime/opencode/install.sh", text, relative)
+        upgrade = (ROOT / "AI_UPGRADE.md").read_text(encoding="utf-8")
+        self.assertIn("global_installer.py", upgrade)
+        self.assertNotIn("runtime/opencode/install.sh", upgrade)
         for relative in (
             "install.sh", "install.ps1", "update.sh", "update.ps1",
             "uninstall.sh", "uninstall.ps1", "scripts/global_installer.py",
@@ -87,10 +84,14 @@ class DocumentationConsistencyTests(unittest.TestCase):
             "plugins/vibe-toolbelt/.codex-plugin/plugin.json",
             ".agents/plugins/marketplace.json",
         ):
-            self.assertFalse(
+            self.assertTrue(
                 (ROOT / relative).exists(),
-                f"{relative} is part of the removed codex delivery face",
+                f"{relative} is part of the codex delivery face",
             )
+        self.assertFalse(
+            (ROOT / "runtime" / "opencode").exists(),
+            "the OpenCode surface is not part of this branch",
+        )
 
     def test_no_bare_format_number_naming(self) -> None:
         """Bare `Format N` must not reappear anywhere in the shipped surface.
