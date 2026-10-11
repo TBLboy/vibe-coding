@@ -13,7 +13,7 @@ from urllib.parse import quote
 
 SCHEMA_VERSION = 1
 # 3 adds the lifecycle record/evidence/review tables of the promoted format.
-STORE_SCHEMA = 3
+STORE_SCHEMA = 4
 MAX_LIMIT = 100
 MAX_REQUEST_BYTES = 65536
 MAX_REVISION = 9223372036854775806
@@ -41,6 +41,10 @@ RECORD_KINDS = {
     "architecture": ("draft", "active", "superseded", "archived"),
     "research": ("draft", "complete", "superseded", "archived"),
     "alignment": ("open", "resolved", "accepted", "archived"),
+    # Clarification may hold open questions without promoting them to a formal task.
+    # This is a real persisted kind with its own lifecycle: `deferred` is the recorded
+    # exit for a low-impact question that does not block the increment.
+    "open-question": ("open", "answered", "deferred", "archived"),
     "retrospective": ("draft", "complete", "archived"),
     "distillation": ("candidate", "approved", "rejected", "encoded", "archived"),
 }
@@ -48,8 +52,27 @@ RECORD_RELATIONS = (
     "references", "depends-on", "supersedes", "implements",
     "verifies", "derived-from", "blocks", "aligns",
 )
+# `tasks.status` stays the single stored lifecycle field. These are read-only
+# projections of it, so an operator can see "finished but not verified" without
+# re-deriving it by hand, and without rewriting historical `implemented-unverified`
+# records to make the display simpler.
+EXECUTION_STATES = {
+    "ready": "not-started",
+    "in-progress": "active",
+    "waiting-user": "paused",
+    "blocked": "paused",
+    "handed-off": "paused",
+    "implemented-unverified": "finished",
+    "complete": "finished",
+    "cancelled": "cancelled",
+}
 EVIDENCE_STATES = ("candidate", "valid", "failed", "stale", "superseded", "invalid")
 REVIEW_VERDICTS = ("go", "no-go", "conditional")
+# Strict work is named in two vocabularies: tasks carry the routing words
+# (`quick`/`standard`/`strict`) while goals carry `risk_level` (`high`/`critical`).
+# Both mean "strict" wherever a gate has to be strict, and a task may also declare it
+# through `extensions.verification.level`.
+STRICT_RISKS = ("strict", "high", "critical")
 DOCUMENT_BODY_KEYS = ("body", "content", "markdown")
 
 
@@ -174,16 +197,70 @@ def _reject_long_form_text(value, path: str = "payload") -> None:
     )
 
 
+REFERENCE_TYPES = ("informational_ref", "bound_document")
+
+
 def _iter_doc_refs(value, path: str = "payload"):
-    """Yield ``doc_ref`` objects anywhere in a record payload."""
+    """Yield document references anywhere in a record payload.
+
+    A reference carries a ``path``; the legacy shape is recognised by its ``sha256`` and
+    the typed shapes by ``type``. How a reference is treated is decided by
+    ``_reference_kind``, not here.
+    """
     if type(value) is dict:
-        if set(value) >= {"path", "sha256"} and type(value.get("path")) is str:
+        if type(value.get("path")) is str and (
+            type(value.get("sha256")) is str or value.get("type") in REFERENCE_TYPES
+        ):
             yield path, value
         for key, item in value.items():
             yield from _iter_doc_refs(item, f"{path}.{key}")
     elif type(value) is list:
         for index, item in enumerate(value):
             yield from _iter_doc_refs(item, f"{path}[{index}]")
+
+
+def _reference_kind(reference) -> str:
+    """Classify a document reference as ``bound`` (controlled) or ``informational``.
+
+    ``bound_document`` names the subject it constrains, so that subject's gate must fail
+    closed while the document no longer matches. Everything else is informational.
+
+    An untyped legacy ``doc_ref`` counts as informational on purpose. It declares neither
+    a subject nor a binding, and inferring "required for every task in the project" from
+    its mere presence is exactly the global block this classification removes.
+    """
+    if reference.get("type") != "bound_document":
+        return "informational"
+    return "informational" if reference.get("binding") == "advisory" else "bound"
+
+
+def _reference_subject(reference):
+    """The ``(kind, id)`` a controlled reference declares, or ``None`` when malformed."""
+    subject = reference.get("subject")
+    if type(subject) is not dict:
+        return None
+    kind, identifier = subject.get("kind"), subject.get("id")
+    if kind not in {"task", "goal"} or type(identifier) is not str or not identifier:
+        return None
+    return kind, identifier
+
+
+def _reference_applies(reference, subject) -> bool:
+    """Whether a controlled reference gates ``subject``.
+
+    ``subject`` is ``("task", id)`` or ``("goal", id, {task ids})``: a goal is constrained
+    by documents bound to the goal itself and by documents bound to its own tasks.
+    """
+    if _reference_kind(reference) != "bound":
+        return False
+    declared = _reference_subject(reference)
+    if declared is None:
+        return False
+    if subject[0] == "task":
+        return declared == ("task", subject[1])
+    if declared == ("goal", subject[1]):
+        return True
+    return declared[0] == "task" and declared[1] in subject[2]
 
 
 def relocated_legacy_path(path) -> str | None:
@@ -239,23 +316,33 @@ def _covered_digest(base: Path, path: str) -> tuple[str | None, str]:
         return None, f"covered input is unreadable: {path}: {error}"
 
 
-def _doc_ref_issues(root: Path | None, payload) -> list[dict]:
-    """Re-evaluate every ``doc_ref`` recorded in a record payload.
+def _doc_ref_issues(root: Path | None, payload, subject=None) -> list[dict]:
+    """Re-evaluate every document reference recorded in a record payload.
 
     The stored hash is what makes a reference load-bearing: without re-computing it
     a long document can drift while the structured record still claims to describe it.
+    When ``subject`` is given, only controlled references for that subject are reported,
+    so an unrelated document cannot block work that does not depend on it.
     """
     if root is None:
         return []
     base = Path(root)
     issues: list[dict] = []
     for reference_path, reference in _iter_doc_refs(payload):
+        kind = _reference_kind(reference)
+        if subject is not None and not _reference_applies(reference, subject):
+            continue
+        label = reference.get("type") if reference.get("type") in REFERENCE_TYPES else "doc_ref"
         path = reference.get("path")
         expected = reference.get("sha256")
         if type(path) is not str or type(expected) is not str or not expected:
+            if kind == "informational" and subject is None:
+                # An informational pointer may legitimately omit the hash: there is
+                # nothing to compare, so it is a description, not an integrity problem.
+                continue
             issues.append({
-                "reference": reference_path, "path": path,
-                "reason": "doc_ref must carry path and sha256",
+                "reference": reference_path, "path": path, "kind": kind,
+                "reason": f"{label} must carry path and sha256",
             })
             continue
         target = Path(path)
@@ -267,14 +354,18 @@ def _doc_ref_issues(root: Path | None, payload) -> list[dict]:
             actual = hashlib.sha256(target.read_bytes()).hexdigest()
         except OSError as error:
             issues.append({
-                "reference": reference_path, "path": path,
-                "reason": f"doc_ref is unreadable: {error}",
+                "reference": reference_path, "path": path, "kind": kind,
+                "reason": f"{label} is unreadable: {error}",
             })
             continue
         if actual != expected:
+            prefix = "unclassified legacy doc_ref" if label == "doc_ref" else label
             issues.append({
-                "reference": reference_path, "path": path,
-                "reason": f"doc_ref changed: recorded {expected[:12]}, current {actual[:12]}",
+                "reference": reference_path, "path": path, "kind": kind,
+                "reason": (
+                    f"{prefix} doc_ref changed: {path} recorded {expected[:12]}, "
+                    f"current {actual[:12]}"
+                ),
             })
     return issues
 
@@ -344,8 +435,15 @@ def _decode_json(value: str, name: str):
 
 def _request(envelope: dict) -> tuple[dict, str, str]:
     fields = {"schema_version", "command_id", "expected_revision", "action", "payload"}
-    if type(envelope) is not dict or set(envelope) != fields:
+    # `expected_generation` is an optional fencing token: an executor that restored a
+    # session records the workspace generation it observed and passes it back on every
+    # write, so a writer that survived a `workspace.clear` cannot resurrect the old
+    # workspace or mutate the new one.
+    optional = {"expected_generation"}
+    if type(envelope) is not dict or not fields <= set(envelope) or not set(envelope) <= fields | optional:
         raise StateError("invalid_input", "Operation envelope has missing or unknown fields")
+    if "expected_generation" in envelope:
+        _integer(envelope["expected_generation"], "expected_generation")
     _integer(envelope["schema_version"], "schema_version", 1)
     if envelope["schema_version"] != SCHEMA_VERSION:
         raise StateError("invalid_input", "Unsupported schema_version")
@@ -356,7 +454,10 @@ def _request(envelope: dict) -> tuple[dict, str, str]:
         "goal.create": ({"id", "title"}, {"extensions"}),
         "goal.update": ({"id"}, {"success_conditions", "required_evidence"}),
         "goal.complete": ({"id"}, set()),
+        "goal.cancel": ({"id", "reason"}, {"child_policy"}),
+        "workspace.clear": ({"reason", "plan_digest"}, {"scope"}),
         "task.create": ({"id", "title", "goal_id"}, {"extensions"}),
+        "task.reopen": ({"task_id", "new_task_id", "reason"}, {"title", "extensions"}),
         "task.update": ({"task_id"}, {"implementer", "owner"}),
         "task.begin": ({"task_id", "run_id", "next_action"}, set()),
         "task.wait": ({"task_id", "kind", "reason", "resume_when"}, {"question_ref"}),
@@ -379,7 +480,11 @@ def _request(envelope: dict) -> tuple[dict, str, str]:
         raise StateError("invalid_input", f"{action} payload has missing or unknown fields")
     for key, value in payload.items():
         if key in {"extensions", "payload", "covers", "version_binding", "scope"}:
-            if type(value) is not dict:
+            if key == "scope" and action == "workspace.clear":
+                # workspace.clear records the scope *name* ("active"), while
+                # review.record's scope is an object; one rule cannot cover both.
+                _text(value, key, 64)
+            elif type(value) is not dict:
                 raise StateError("invalid_input", f"{key} must be an object")
         elif key == "evidence_refs":
             _evidence_refs(value)
@@ -510,13 +615,13 @@ def _validate_bundle(bundle) -> dict:
 _DDL = (
     """CREATE TABLE metadata (
         singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
-        store_schema INTEGER NOT NULL CHECK(store_schema = 3),
+        store_schema INTEGER NOT NULL CHECK(store_schema = 4),
         schema_version INTEGER NOT NULL CHECK(schema_version = 1),
         project_id TEXT NOT NULL, context_id TEXT NOT NULL,
         local_revision INTEGER NOT NULL CHECK(local_revision >= 0))""",
     """CREATE TABLE goals (
         id TEXT PRIMARY KEY, title TEXT NOT NULL,
-        status TEXT NOT NULL CHECK(status IN ('draft','active','waiting-user','blocked','complete')),
+        status TEXT NOT NULL CHECK(status IN ('draft','active','waiting-user','blocked','complete','cancelled')),
         extensions TEXT NOT NULL,
         created_sequence INTEGER NOT NULL, updated_sequence INTEGER NOT NULL)""",
     """CREATE TABLE tasks (
@@ -628,7 +733,7 @@ class Store:
         return project_ledger_path(self.root)
 
     @contextmanager
-    def _connection(self, write: bool = False):
+    def _connection(self, write: bool = False, foreign_keys: bool = True):
         if not self.path.is_file():
             raise StateError("missing_store", f"State database does not exist: {self.path}")
         connection = None
@@ -640,7 +745,9 @@ class Store:
                 timeout=BUSY_TIMEOUT_MS / 1000, isolation_level=None,
             )
             connection.row_factory = sqlite3.Row
-            connection.execute("PRAGMA foreign_keys = ON")
+            # SQLite cannot toggle foreign_keys inside a transaction, so a caller that
+            # has to rebuild a referenced table (schema upgrade) must decide here.
+            connection.execute(f"PRAGMA foreign_keys = {'ON' if foreign_keys else 'OFF'}")
             connection.execute(f"PRAGMA busy_timeout = {BUSY_TIMEOUT_MS}")
             if not write:
                 connection.execute("PRAGMA query_only = ON")
@@ -685,6 +792,80 @@ class Store:
             connection.commit()
         return self.status()
 
+    def upgrade(self) -> dict:
+        """Bring an older projection up to ``STORE_SCHEMA``.
+
+        The ledger is the fact source, so this only rebuilds projection tables: an
+        interrupted migration can always be re-derived from the ledger. Store schema 3
+        locked ``goals.status`` to the pre-cancellation set, so the table is rebuilt
+        with the wider CHECK. SQLite cannot toggle foreign keys inside a transaction,
+        so the rebuild runs with them off and re-checks integrity before committing.
+        """
+        if not self.path.is_file():
+            return {"status": "absent", "store_schema": None}
+        with self._connection(write=True, foreign_keys=False) as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                "SELECT store_schema FROM metadata WHERE singleton = 1"
+            ).fetchone()
+            if row is None:
+                raise StateError("state_conflict", "Missing store metadata")
+            current = row["store_schema"]
+            if current == STORE_SCHEMA:
+                connection.rollback()
+                return {"status": "current", "store_schema": current}
+            if current != 3:
+                raise StateError(
+                    "state_conflict",
+                    f"Unsupported store schema {current}; expected {STORE_SCHEMA}",
+                )
+            connection.execute(
+                """CREATE TABLE metadata_upgrade (
+                    singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
+                    store_schema INTEGER NOT NULL CHECK(store_schema = 4),
+                    schema_version INTEGER NOT NULL CHECK(schema_version = 1),
+                    project_id TEXT NOT NULL, context_id TEXT NOT NULL,
+                    local_revision INTEGER NOT NULL CHECK(local_revision >= 0))"""
+            )
+            connection.execute(
+                """INSERT INTO metadata_upgrade
+                       (singleton, store_schema, schema_version, project_id, context_id,
+                        local_revision)
+                   SELECT singleton, ?, schema_version, project_id, context_id, local_revision
+                   FROM metadata""",
+                (STORE_SCHEMA,),
+            )
+            connection.execute("DROP TABLE metadata")
+            connection.execute("ALTER TABLE metadata_upgrade RENAME TO metadata")
+            connection.execute(
+                """CREATE TABLE goals_upgrade (
+                    id TEXT PRIMARY KEY, title TEXT NOT NULL,
+                    status TEXT NOT NULL CHECK(status IN
+                        ('draft','active','waiting-user','blocked','complete','cancelled')),
+                    extensions TEXT NOT NULL,
+                    created_sequence INTEGER NOT NULL, updated_sequence INTEGER NOT NULL)"""
+            )
+            connection.execute(
+                """INSERT INTO goals_upgrade
+                       (id, title, status, extensions, created_sequence, updated_sequence)
+                   SELECT id, title, status, extensions, created_sequence, updated_sequence
+                   FROM goals"""
+            )
+            connection.execute("DROP TABLE goals")
+            connection.execute("ALTER TABLE goals_upgrade RENAME TO goals")
+            violations = connection.execute("PRAGMA foreign_key_check").fetchall()
+            if violations:
+                raise StateError(
+                    "state_conflict",
+                    f"Schema upgrade would break foreign keys: {len(violations)} violation(s)",
+                )
+            connection.commit()
+        with self._connection() as connection:
+            verdict = connection.execute("PRAGMA integrity_check").fetchone()[0]
+        if verdict != "ok":
+            raise StateError("state_conflict", f"Schema upgrade left a damaged store: {verdict}")
+        return {"status": "upgraded", "store_schema": STORE_SCHEMA}
+
     @staticmethod
     def _task(connection, task_id: str) -> dict:
         row = connection.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
@@ -698,7 +879,41 @@ class Store:
         ).fetchone()
         task["run"] = dict(run) if run else None
         task["blocker"] = dict(blocker) if blocker else None
+        task.update(Store._derived_states(connection, task))
         return task
+
+    @staticmethod
+    def _derived_states(connection, task: dict) -> dict:
+        """Project one task into the two execution dimensions and the review verdict.
+
+        These are display projections over stored facts, never a second source of truth:
+        `tasks.status` and the evidence/review rows remain what the gates read. A task can
+        therefore read `finished` while verification is still `pending`, which is the
+        state the old single status field could not express.
+        """
+        execution = EXECUTION_STATES.get(task["status"], "unknown")
+        covered = Store._evidence_covers_task(connection, task["id"])
+        states = [row["status"] for row in covered]
+        if execution == "cancelled":
+            verification = "not-applicable"
+        elif "valid" in states:
+            verification = "passed"
+        elif "failed" in states:
+            verification = "failed"
+        elif "stale" in states:
+            verification = "stale"
+        else:
+            verification = "pending"
+        review = connection.execute(
+            "SELECT verdict FROM reviews WHERE task_id = ? "
+            "ORDER BY created_sequence DESC, id DESC LIMIT 1",
+            (task["id"],),
+        ).fetchone()
+        return {
+            "execution_state": execution,
+            "verification_state": verification,
+            "review_verdict": review["verdict"] if review else "missing",
+        }
 
     def get_task(self, task_id: str) -> dict:
         _text(task_id, "task_id", 256)
@@ -707,16 +922,63 @@ class Store:
             self._metadata(connection)
             return self._task(connection, task_id)
 
-    def active_goal_id(self) -> str:
+    def active_goal_ids(self) -> list[str]:
+        """Every active goal, earliest first — the order active_goal_id() relies on."""
         with self._connection() as connection:
             connection.execute("BEGIN")
             self._metadata(connection)
-            row = connection.execute(
-                "SELECT id FROM goals WHERE status = 'active' ORDER BY created_sequence LIMIT 1"
-            ).fetchone()
-            if row is None:
-                raise StateError("not_found", "No active goal")
-            return row["id"]
+            return [
+                row["id"] for row in connection.execute(
+                    "SELECT id FROM goals WHERE status = 'active' ORDER BY created_sequence"
+                )
+            ]
+
+    def active_goal_id(self) -> str:
+        # Answering with the earliest active goal is how a second active goal
+        # silently misdirects every default target (vibe goal, compact_context).
+        # Fail closed so the caller must name the goal
+        # instead of having the framework guess which one is current.
+        active = self.active_goal_ids()
+        if not active:
+            raise StateError("not_found", "No active goal")
+        if len(active) > 1:
+            raise StateError(
+                "state_conflict",
+                "Multiple active goals: " + ", ".join(active)
+                + "; pass an explicit goal id instead of relying on the default",
+            )
+        return active[0]
+
+    def workspace_plan(self) -> dict:
+        """The read-only dry-run plan that ``workspace.clear`` must be committed with."""
+        with self._connection() as connection:
+            connection.execute("BEGIN")
+            metadata = self._metadata(connection)
+            plan = Store._workspace_plan(connection)
+        plan["revision"] = metadata["local_revision"]
+        plan["warnings"] = []
+        if plan["active_run_ids"]:
+            plan["warnings"].append(
+                "active run(s) will be cancelled: " + ", ".join(plan["active_run_ids"])
+                + "; stop or isolate the executor first"
+            )
+        return plan
+
+    def workspace_history(self) -> dict:
+        """Every goal and task, including terminal and cancelled ones."""
+        with self._connection() as connection:
+            connection.execute("BEGIN")
+            self._metadata(connection)
+            goals = [dict(row) for row in connection.execute(
+                "SELECT id, title, status, created_sequence, updated_sequence "
+                "FROM goals ORDER BY created_sequence"
+            )]
+            tasks = [dict(row) for row in connection.execute(
+                "SELECT id, title, goal_id, status, run_id, cancel_reason, "
+                "created_sequence, updated_sequence FROM tasks ORDER BY created_sequence"
+            )]
+            generation = Store._workspace_generation(connection)
+        return {"generation": generation, "goals": goals, "tasks": tasks}
 
     def get_goal(self, goal_id: str) -> dict:
         _text(goal_id, "goal_id", 256)
@@ -868,6 +1130,55 @@ class Store:
             "reasons": reasons,
         }
 
+    @staticmethod
+    def _claims_version_binding(evidence: dict) -> bool:
+        """True when the record asserts that its result belongs to specific bytes."""
+        binding = evidence.get("version_binding")
+        return type(binding) is dict and bool(binding)
+
+    @staticmethod
+    def _applicability(root: Path | None, evidence: dict) -> str:
+        """Applicability of one evidence record: ``current``, ``stale`` or ``unknown``.
+
+        ``unknown`` means the record carries no file hashes, so its applicability can
+        never be re-evaluated. That is a property of the record itself and is
+        therefore detected without a worktree, which keeps the verdict identical in
+        rootless stores and in `vibe status`.
+        """
+        binding = evidence.get("version_binding")
+        hashes = binding.get("file_hashes") if type(binding) is dict else None
+        if type(hashes) is not dict or not hashes:
+            return "unknown"
+        if root is None:
+            return "current"
+        return Store.evidence_applicability(root, evidence)["applicability"]
+
+    @staticmethod
+    def _unresolvable_hash_paths(root: Path | None, binding: dict | None) -> list[str]:
+        """Hash keys in a version binding that resolve to no file under ``root``.
+
+        A relative key is resolved against the project root, not against the repository
+        that happens to hold the code. A key written relative to the repository inside a
+        nested project therefore names nothing: the record is permanently unverifiable and
+        later reads exactly like "the covered artifact changed", even though its digest was
+        correct. Refusing such a key at write time is the only point where the mistake is
+        still cheap to correct.
+
+        A rootless store cannot resolve relative keys at all, so it is left alone.
+        """
+        hashes = (binding or {}).get("file_hashes") if type(binding) is dict else None
+        if type(hashes) is not dict or not hashes or root is None:
+            return []
+        base = Path(root)
+        unresolved = []
+        for key in hashes:
+            candidate = Path(key)
+            if not candidate.is_absolute():
+                candidate = base / candidate
+            if not candidate.is_file():
+                unresolved.append(key)
+        return unresolved
+
     def stale_evidence(self, root: Path) -> list[dict]:
         """Read-only list of active evidence whose recorded bytes changed."""
         result = []
@@ -880,11 +1191,13 @@ class Store:
         return result
 
     def stale_documents(self, root: Path | None = None) -> list[dict]:
-        """Read-only list of record ``doc_ref`` entries whose recorded hash no longer matches.
+        """Read-only list of record references whose recorded hash no longer matches.
 
         Section 4 of the production contract stores long-form text by reference and
         records the hash at write time; re-computing it is the only way the reference
-        stays load-bearing instead of decorative.
+        stays load-bearing instead of decorative. Classification follows
+        ``_reference_kind``: an unclassified legacy reference is listed here so it stays
+        visible, but it does not gate any task.
         """
         base = Path(root) if root is not None else self.root
         if base is None:
@@ -899,35 +1212,54 @@ class Store:
             ).fetchall()
         for row in rows:
             payload = _decode_json(row["payload"], "record payload")
-            for reference_path, reference in _iter_doc_refs(payload):
-                path = reference.get("path")
-                expected = reference.get("sha256")
-                if type(path) is not str or type(expected) is not str or not expected:
-                    result.append({
-                        "kind": row["kind"], "id": row["id"], "reference": reference_path,
-                        "path": path, "reason": "doc_ref must carry path and sha256",
-                    })
-                    continue
-                target = Path(path)
-                if not target.is_absolute():
-                    target = base / target
-                try:
-                    if target.is_symlink() or not target.is_file():
-                        raise OSError("missing")
-                    actual = hashlib.sha256(target.read_bytes()).hexdigest()
-                except OSError as error:
-                    result.append({
-                        "kind": row["kind"], "id": row["id"], "reference": reference_path,
-                        "path": path, "reason": f"doc_ref is unreadable: {error}",
-                    })
-                    continue
-                if actual != expected:
-                    result.append({
-                        "kind": row["kind"], "id": row["id"], "reference": reference_path,
-                        "path": path,
-                        "reason": f"doc_ref changed: recorded {expected[:12]}, current {actual[:12]}",
-                    })
+            for issue in _doc_ref_issues(base, payload):
+                result.append({
+                    "kind": row["kind"], "id": row["id"],
+                    "reference": issue["reference"], "path": issue.get("path"),
+                    "reason": issue["reason"],
+                })
         return result
+
+    @staticmethod
+    def _is_strict(extensions: dict) -> bool:
+        """Whether a task counts as strict, in either risk vocabulary."""
+        verification = extensions.get("verification")
+        level = verification.get("level") if type(verification) is dict else None
+        return (extensions.get("risk") in STRICT_RISKS
+                or (type(level) is int and level >= 3))
+
+    @staticmethod
+    def _task_notes(connection, task: dict, root: Path | None) -> list[str]:
+        """Non-blocking observations about how a task's completion was evidenced.
+
+        T22/N04: a strict task whose covering evidence cannot be re-evaluated must never
+        have mechanical reproduction *silently* assumed. Evidence that claims a version
+        binding without file hashes is already a gate failure; this records the wider
+        case — evidence that never claimed a binding at all — as an explicit note rather
+        than a blocker, because a manual or external check legitimately cannot carry a
+        worktree hash.
+        """
+        extensions = task.get("extensions")
+        if type(extensions) is not dict:
+            extensions = {}
+        if not Store._is_strict(extensions):
+            return []
+        covered = [
+            Store._evidence(row)
+            for row in Store._evidence_covers_task(connection, task["id"])
+            if row["status"] == "valid"
+        ]
+        covered = [entry for entry in covered if not Store._stale_reasons(root, entry)]
+        unknown = [entry for entry in covered if Store._applicability(root, entry) == "unknown"]
+        unclaimed = [entry for entry in unknown if not Store._claims_version_binding(entry)]
+        if covered and len(unknown) == len(covered) and unclaimed:
+            return [
+                f"strict task {task['id']} is covered only by evidence with unknown "
+                "applicability (no recorded file hashes), so mechanical reproduction is "
+                "not confirmed by re-derivation: "
+                + ", ".join(entry["id"] for entry in unknown)
+            ]
+        return []
 
     def gate_task(self, task_id: str) -> dict:
         _text(task_id, "task_id", 256)
@@ -940,6 +1272,7 @@ class Store:
                 "task_id": task_id,
                 "decision": "blocked" if problems else "allowed",
                 "blocking": problems,
+                "notes": Store._task_notes(connection, task, self.root),
             }
 
     def evaluate_goal(self, goal_id: str) -> dict:
@@ -960,6 +1293,21 @@ class Store:
         with self._connection() as connection:
             connection.execute("BEGIN")
             self._metadata(connection)
+            # ``active_goal_id()`` fails closed on more than one active goal, so
+            # every default target (``vibe goal`` / ``compact_context``) refuses
+            # to answer until exactly one remains.
+            # Report the conflicting set here too, so a static audit names them.
+            active_goals = [
+                row["id"] for row in connection.execute(
+                    "SELECT id FROM goals WHERE status = 'active' "
+                    "ORDER BY created_sequence"
+                )
+            ]
+            if len(active_goals) > 1:
+                errors.append(
+                    "multiple active goals: " + ", ".join(active_goals)
+                    + "; active_goal_id() fails closed until exactly one remains"
+                )
             for row in connection.execute(
                 "SELECT * FROM tasks WHERE status = 'implemented-unverified' ORDER BY id"
             ):
@@ -1017,12 +1365,16 @@ class Store:
         ).fetchone()
         pending = connection.execute("SELECT local_revision FROM projection_jobs WHERE singleton = 1").fetchone()
         task_ids = connection.execute(
-            "SELECT id FROM tasks ORDER BY updated_sequence DESC, id LIMIT ?", (limit,)
+            "SELECT id FROM tasks WHERE status IN "
+            "('ready','in-progress','waiting-user','blocked','handed-off') "
+            "ORDER BY updated_sequence DESC, id LIMIT ?", (limit,)
         ).fetchall()
+        generation = Store._workspace_generation(connection)
         return {
             "schema_version": SCHEMA_VERSION, "project_id": metadata["project_id"],
             "store_schema": metadata["store_schema"], "context_id": metadata["context_id"],
             "revision": metadata["local_revision"], "local_revision": metadata["local_revision"],
+            "workspace_generation": generation,
             "current_run": dict(active) if active else None,
             "current_task": self._task(connection, active["task_id"]) if active else None,
             "latest_run": dict(latest) if latest else None,
@@ -1070,6 +1422,114 @@ class Store:
         return matches
 
     @staticmethod
+    def _evidence_in_goal_scope(connection, reference: str, scoped_tasks: set) -> bool:
+        """Whether evidence may be used by a goal.
+
+        ``covers`` has no ``goals`` key, so the only scope a goal can claim today is
+        its own tasks. Evidence that covers nothing inside the goal is not applicable
+        merely because its stored status happens to be ``valid``.
+        """
+        row = connection.execute("SELECT * FROM evidence WHERE id = ?", (reference,)).fetchone()
+        if row is None:
+            return False
+        covers = _decode_json(row["covers"], "evidence covers")
+        tasks = covers.get("tasks") if type(covers) is dict else None
+        if type(tasks) is list and scoped_tasks.intersection(tasks):
+            return True
+        task_id = row["task_id"]
+        return bool(task_id) and task_id in scoped_tasks
+
+    def _cancel_open_tasks(connection, goal_ids, policy: str, sequence: int,
+                           reason: str = "open work cancelled with its goal") -> list[str]:
+        """Cancel every open task of the given goals, in a deterministic order.
+
+        Only tasks that have not reached a terminal state move. ``implemented-unverified``
+        is deliberately left alone: it records an implementation that really happened, and
+        cancellation must not rewrite that history (it is hidden from the active view by
+        status instead).
+
+        ``reason`` distinguishes why the goal ended: a cancelled goal and a completed one
+        close the same rows for different reasons, and the reason is what a reader has to
+        go on later.
+        """
+        if policy != "cancel_open":
+            return []
+        open_statuses = {"ready", "in-progress", "waiting-user", "blocked", "handed-off"}
+        cancelled: list[str] = []
+        for goal_id in goal_ids:
+            rows = connection.execute(
+                "SELECT id, status FROM tasks WHERE goal_id = ? ORDER BY created_sequence",
+                (goal_id,),
+            ).fetchall()
+            for row in rows:
+                if row["status"] not in open_statuses:
+                    continue
+                connection.execute(
+                    """UPDATE tasks SET status = 'cancelled', cancel_reason = ?,
+                       updated_sequence = ? WHERE id = ?""",
+                    (reason, sequence, row["id"]),
+                )
+                connection.execute(
+                    """UPDATE runs SET status = 'cancelled', updated_sequence = ?
+                       WHERE task_id = ? AND status != 'finished'""",
+                    (sequence, row["id"]),
+                )
+                cancelled.append(row["id"])
+        return cancelled
+
+    @staticmethod
+    def _workspace_generation(connection) -> int:
+        """Number of effective ``workspace.clear`` events recorded in the ledger.
+
+        A clear of an already empty workspace is a no-op and must not invent a
+        generation, so the count follows the receipts rather than the commands.
+        """
+        generation = 0
+        for row in connection.execute(
+            "SELECT receipt_json FROM commands WHERE action = 'workspace.clear'"
+        ):
+            receipt = _decode_json(row["receipt_json"], "command receipt")
+            result = receipt.get("result") if type(receipt) is dict else None
+            if type(result) is dict and result.get("cleared"):
+                generation += 1
+        return generation
+
+    def _workspace_plan(connection) -> dict:
+        """Read-only description of what ``workspace.clear`` would affect.
+
+        The generation is derived from the ledger (the number of ``workspace.clear``
+        events) instead of being materialised, so a rebuilt or healed projection
+        agrees without an extra table to keep in sync.
+        """
+        generation = Store._workspace_generation(connection)
+        goals = [
+            row["id"] for row in connection.execute(
+                "SELECT id FROM goals WHERE status IN "
+                "('draft','active','waiting-user','blocked') ORDER BY created_sequence"
+            )
+        ]
+        tasks = [
+            row["id"] for row in connection.execute(
+                "SELECT id FROM tasks WHERE status IN "
+                "('ready','in-progress','waiting-user','blocked','handed-off') "
+                "ORDER BY created_sequence"
+            )
+        ]
+        runs = [
+            row["id"] for row in connection.execute(
+                "SELECT id FROM runs WHERE status = 'active' ORDER BY created_sequence"
+            )
+        ]
+        from state_replay import workspace_plan_digest
+
+        return {
+            "scope": "active", "generation": generation,
+            "affected_goal_ids": goals, "affected_task_ids": tasks,
+            "active_run_ids": runs,
+            "plan_digest": workspace_plan_digest(generation, goals, tasks, runs),
+        }
+
+    @staticmethod
     def _goal_completion_problems(connection, goal_id: str, root: Path | None = None) -> list[str]:
         row = connection.execute("SELECT * FROM goals WHERE id = ?", (goal_id,)).fetchone()
         if row is None:
@@ -1094,7 +1554,16 @@ class Store:
                 return "stale"
             return "valid"
 
-        problems: list[str] = Store._document_drift_problems(connection, root)
+        # The goal is constrained only by documents bound to the goal itself or to one of
+        # its own tasks, so drift is evaluated in that scope rather than project-wide.
+        scoped_tasks = {
+            item["id"] for item in connection.execute(
+                "SELECT id FROM tasks WHERE goal_id = ?", (goal_id,)
+            )
+        }
+        problems: list[str] = Store._document_drift_problems(
+            connection, root, ("goal", goal_id, scoped_tasks)
+        )
         conditions = extensions.get("success_conditions", [])
         if type(conditions) is not list:
             problems.append("success_conditions must be a list")
@@ -1155,31 +1624,70 @@ class Store:
                 problems.append(f"required evidence missing: {label}")
         risk = extensions.get("risk_level")
         if risk in {"high", "critical"}:
-            reviews = [
-                item for item in evidence.values()
-                if item["kind"] == "review" and evidence_status(item["id"]) == "valid"
+            # A review may only complete the goal it belongs to: either a review of
+            # the goal itself or a review of one of the goal's own tasks. Reviews that
+            # belong to another goal/task must never satisfy this gate (N01), and the
+            # evidence they cite has to sit inside the same scope (``scoped_tasks``).
+            every_review = [
+                dict(item) for item in connection.execute(
+                    "SELECT * FROM reviews ORDER BY created_sequence DESC"
+                )
             ]
+            reviews = [item for item in every_review if item["task_id"] in scoped_tasks]
             if not reviews:
-                problems.append("high-risk goal lacks a valid independent review")
+                if every_review:
+                    problems.append(
+                        f"review_scope_mismatch: high-risk goal {goal_id} has reviews, but "
+                        "none belongs to this goal or one of its tasks"
+                    )
+                else:
+                    problems.append(
+                        f"review_missing: high-risk goal {goal_id} has no independent review"
+                    )
             else:
                 implementer = extensions.get("implementer") or extensions.get("owner")
-                if type(implementer) is str and implementer.strip():
-                    review_ids = {item["id"] for item in reviews}
-                    independent = False
-                    for review in connection.execute("SELECT * FROM reviews"):
+                if type(implementer) is not str or not implementer.strip():
+                    # Without a recorded implementer, reviewer independence cannot be
+                    # established; fail closed instead of accepting any reviewer (N01).
+                    problems.append(
+                        f"missing_implementer: high-risk goal {goal_id} has no recorded "
+                        "implementer, so reviewer independence cannot be established"
+                    )
+                    accepted = []
+                else:
+                    accepted = [
+                        review for review in reviews
+                        if review["verdict"] == "go"
+                        and type(review["reviewer"]) is str
+                        and review["reviewer"].strip()
+                        and review["reviewer"] != implementer
+                    ]
+                if not accepted:
+                    problems.append(
+                        f"review_not_independent: high-risk goal {goal_id} lacks a go review "
+                        "from a reviewer other than its implementer"
+                    )
+                else:
+                    bound = []
+                    for review in accepted:
                         references = _decode_json(review["evidence_refs"], "review evidence refs")
-                        if (
-                            review["verdict"] == "go"
-                            and type(review["reviewer"]) is str
-                            and review["reviewer"].strip()
-                            and review["reviewer"] != implementer
-                            and type(references) is list
-                            and review_ids.intersection(references)
-                        ):
-                            independent = True
+                        if type(references) is not list:
+                            continue
+                        for reference in references:
+                            if evidence_status(reference) != "valid":
+                                continue
+                            if not Store._evidence_in_goal_scope(
+                                connection, reference, scoped_tasks
+                            ):
+                                continue
+                            bound.append(review)
                             break
-                    if not independent:
-                        problems.append("high-risk goal review does not name an independent reviewer")
+                    if not bound:
+                        problems.append(
+                            f"review_evidence_stale: high-risk goal {goal_id} has no go review "
+                            "bound to current evidence inside the goal's scope "
+                            "(review evidence_refs must name valid, non-stale evidence)"
+                        )
         return problems
 
     @staticmethod
@@ -1193,14 +1701,16 @@ class Store:
         return list(verdict["reasons"])
 
     @staticmethod
-    def _document_drift_problems(connection, root: Path | None) -> list[str]:
-        """Re-evaluate every record ``doc_ref`` and fail closed on drift.
+    def _document_drift_problems(connection, root: Path | None, subject=None) -> list[str]:
+        """Re-evaluate document references and fail closed on the ones that bind.
 
-        A ``doc_ref`` records the hash of the long-form document at write time. Once
-        the referenced bytes change, the structured record no longer faithfully
-        describes its document, so any completion gate must block until the record is
-        refreshed. Reporting the drift only in ``validate`` is not enough: the same
-        check has to reach the evidence and completion gates.
+        A controlled ``bound_document`` records the hash of the long-form document at
+        write time and names the subject it constrains. Once the referenced bytes change
+        the record no longer faithfully describes its document, so that subject's
+        completion gate must block until the record is refreshed. An informational
+        reference (including an unclassified legacy ``doc_ref``) is reported by
+        ``validate`` but never gates anything, because nothing declares it load-bearing
+        for a particular task.
         """
         if root is None:
             return []
@@ -1210,7 +1720,7 @@ class Store:
         ).fetchall()
         for row in rows:
             payload = _decode_json(row["payload"], "record payload")
-            for issue in _doc_ref_issues(root, payload):
+            for issue in _doc_ref_issues(root, payload, subject):
                 problems.append(
                     f"record {row['kind']}/{row['id']} {issue['reference']}: {issue['reason']}"
                 )
@@ -1252,13 +1762,17 @@ class Store:
         extensions = task.get("extensions")
         if type(extensions) is not dict:
             extensions = {}
-        problems: list[str] = Store._document_drift_problems(connection, root)
+        problems: list[str] = Store._document_drift_problems(
+            connection, root, ("task", task["id"])
+        )
         valid = []
+        unverifiable = []
         covered = Store._evidence_covers_task(connection, task["id"])
         for row in covered:
             if row["status"] != "valid":
                 continue
-            stale = Store._stale_reasons(root, Store._evidence(row))
+            entry = Store._evidence(row)
+            stale = Store._stale_reasons(root, entry)
             if stale:
                 # A covered artifact changed after verification: the evidence is
                 # stale whether or not anyone refreshed the stored status yet.
@@ -1267,6 +1781,12 @@ class Store:
                     + "; ".join(stale)
                 )
                 continue
+            if (Store._claims_version_binding(entry)
+                    and Store._applicability(root, entry) == "unknown"):
+                # The record claims to be bound to a version but carries no file hashes,
+                # so its applicability can never be re-evaluated. It must not be what
+                # proves mechanical verification for a strict task. (T22)
+                unverifiable.append(row["id"])
             valid.append(row)
         if not valid:
             problems.append(
@@ -1275,7 +1795,17 @@ class Store:
         risk = extensions.get("risk")
         verification = extensions.get("verification")
         level = verification.get("level") if type(verification) is dict else None
-        if risk in {"high", "critical"} or (type(level) is int and level >= 3):
+        strict = Store._is_strict(extensions)
+        if strict and valid and len(unverifiable) == len(valid):
+            # T22: a strict task covered only by records that claim a version binding but
+            # carry no file hashes must never be reported as mechanically verified. Fail
+            # closed and ask for evidence bound to the bytes it claims to cover.
+            problems.append(
+                f"strict task {task['id']} is covered only by evidence whose claimed binding "
+                "cannot be re-evaluated (version_binding without file hashes), so mechanical "
+                "verification is not confirmed: " + ", ".join(unverifiable)
+            )
+        if strict:
             reviews = [
                 dict(row) for row in connection.execute(
                     "SELECT * FROM reviews WHERE task_id = ? ORDER BY created_sequence DESC",
@@ -1360,11 +1890,91 @@ class Store:
             problems = self._goal_completion_problems(connection, payload["id"], self.root)
             if problems:
                 raise StateError("goal_gate", "Goal completion rejected: " + "; ".join(problems))
+            # A completed goal must not leave its never-started tasks behind as open work:
+            # `task.begin` refuses once the goal is no longer active, so such a task could
+            # never reach a terminal state and would linger in the active view forever.
+            # They are cancelled with a reason that says *why*, which is the same mechanism
+            # a cancelled goal uses -- only the reason differs.
+            # The receipt deliberately keeps its original shape. A ledger event's receipt is
+            # recomputed from the reducer and compared with the stored one, so widening this
+            # return value would make every *existing* `goal.complete` event fail to reduce --
+            # the live ledger becomes unwritable ("Ledger header mismatch"). The evidence of
+            # what was closed lives on the tasks themselves, in `cancel_reason`.
+            Store._cancel_open_tasks(
+                connection, [payload["id"]], "cancel_open", sequence,
+                reason="open work closed when its goal completed",
+            )
             connection.execute(
                 "UPDATE goals SET status = 'complete', updated_sequence = ? WHERE id = ?",
                 (sequence, payload["id"]),
             )
             return {"goal_id": payload["id"], "status": "complete"}
+        if action == "goal.cancel":
+            # Cancellation is not completion: it must never run
+            # _goal_completion_problems, because the user is allowed to abandon a goal
+            # whose success conditions are unmet. It still validates the target, the
+            # reason and the transaction.
+            row = connection.execute("SELECT * FROM goals WHERE id = ?", (payload["id"],)).fetchone()
+            if row is None:
+                raise StateError("not_found", f"Unknown goal: {payload['id']}")
+            if row["status"] in {"complete", "cancelled"}:
+                raise StateError(
+                    "state_conflict",
+                    f"Cannot cancel a {row['status']} goal; archive or clear the view instead",
+                )
+            reason = payload.get("reason")
+            if type(reason) is not str or not reason.strip():
+                raise StateError("invalid_input", "goal.cancel requires a reason")
+            policy = payload.get("child_policy", "cancel_open")
+            if policy not in {"cancel_open", "keep"}:
+                raise StateError("invalid_input", f"Unsupported child_policy: {policy!r}")
+            cancelled = Store._cancel_open_tasks(connection, [payload["id"]], policy, sequence)
+            connection.execute(
+                "UPDATE goals SET status = 'cancelled', updated_sequence = ? WHERE id = ?",
+                (sequence, payload["id"]),
+            )
+            return {
+                "goal_id": payload["id"], "status": "cancelled",
+                "cancelled_task_ids": cancelled,
+            }
+        if action == "workspace.clear":
+            reason = payload.get("reason")
+            if type(reason) is not str or not reason.strip():
+                raise StateError("invalid_input", "workspace.clear requires a reason")
+            scope = payload.get("scope", "active")
+            if scope != "active":
+                raise StateError("invalid_input", f"Unsupported workspace scope: {scope!r}")
+            before = Store._workspace_plan(connection)
+            # The caller commits the plan it inspected; a digest mismatch means another
+            # writer moved the workspace between dry-run and commit (TOCTOU).
+            if payload.get("plan_digest") != before["plan_digest"]:
+                raise StateError(
+                    "plan_mismatch",
+                    "workspace.clear plan digest does not match the current active workspace",
+                )
+            if not before["affected_goal_ids"] and not before["affected_task_ids"]:
+                # An already empty workspace stays logically idempotent: no new
+                # generation is invented for work that does not exist.
+                return {
+                    "cleared": False, "generation_before": before["generation"],
+                    "generation_after": before["generation"],
+                    "cancelled_goal_ids": [], "cancelled_task_ids": [],
+                }
+            cancelled_tasks = Store._cancel_open_tasks(
+                connection, before["affected_goal_ids"], "cancel_open", sequence
+            )
+            for goal_id in before["affected_goal_ids"]:
+                connection.execute(
+                    "UPDATE goals SET status = 'cancelled', updated_sequence = ? WHERE id = ?",
+                    (sequence, goal_id),
+                )
+            return {
+                "cleared": True,
+                "generation_before": before["generation"],
+                "generation_after": before["generation"] + 1,
+                "cancelled_goal_ids": before["affected_goal_ids"],
+                "cancelled_task_ids": cancelled_tasks,
+            }
         if action == "task.create":
             self._active_goal(connection, payload["goal_id"])
             connection.execute(
@@ -1374,6 +1984,40 @@ class Store:
                  _json(payload.get("extensions", {})), sequence, sequence),
             )
             return {"task_id": payload["id"], "run_id": None, "status": "ready"}
+        if action == "task.reopen":
+            old = connection.execute(
+                "SELECT * FROM tasks WHERE id = ?", (payload["task_id"],)
+            ).fetchone()
+            if old is None:
+                raise StateError("not_found", f"Unknown task: {payload['task_id']}")
+            if old["status"] in {"ready", "in-progress", "waiting-user", "blocked", "handed-off"}:
+                raise StateError(
+                    "state_conflict",
+                    f"Task {payload['task_id']} is still {old['status']}; reopen applies to "
+                    "a finished or cancelled task",
+                )
+            if connection.execute(
+                "SELECT 1 FROM tasks WHERE id = ?", (payload["new_task_id"],)
+            ).fetchone():
+                raise StateError(
+                    "state_conflict", f"Task already exists: {payload['new_task_id']}"
+                )
+            self._active_goal(connection, old["goal_id"])
+            extensions = dict(payload.get("extensions", {}))
+            # The old task and its run are left exactly as they were: a reopen is a new
+            # attempt with its own history, not a rewrite of what already happened.
+            extensions["reopens"] = old["id"]
+            extensions["reopen_reason"] = payload["reason"]
+            connection.execute(
+                """INSERT INTO tasks (id, title, goal_id, status, extensions, created_sequence, updated_sequence)
+                   VALUES (?, ?, ?, 'ready', ?, ?, ?)""",
+                (payload["new_task_id"], payload.get("title", old["title"]), old["goal_id"],
+                 _json(extensions), sequence, sequence),
+            )
+            return {
+                "task_id": payload["new_task_id"], "run_id": None, "status": "ready",
+                "reopens": old["id"],
+            }
         if action == "record.create":
             kind = payload["kind"]
             record_id = payload["id"]
@@ -1464,13 +2108,25 @@ class Store:
                 "SELECT 1 FROM tasks WHERE id = ?", (task_id,)
             ).fetchone() is None:
                 raise StateError("not_found", f"Unknown task: {task_id}")
+            binding = _version_binding(payload.get("version_binding"))
+            # Check the raw payload: `_version_binding` returns canonical JSON *text*, so
+            # passing its result here would silently resolve nothing.
+            unresolved = Store._unresolvable_hash_paths(
+                self.root, payload.get("version_binding")
+            )
+            if unresolved:
+                raise StateError(
+                    "invalid_input",
+                    "version_binding.file_hashes keys must name existing files, given as an "
+                    "absolute path or relative to the project root; unresolvable: "
+                    + ", ".join(sorted(unresolved)),
+                )
             connection.execute(
                 """INSERT INTO evidence
                    (id, task_id, kind, subject, status, covers, version_binding, recorded_sequence)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                 (evidence_id, task_id, payload["kind"], payload["subject"], payload["status"],
-                 _evidence_covers(payload.get("covers")), _version_binding(payload.get("version_binding")),
-                 sequence),
+                 _evidence_covers(payload.get("covers")), binding, sequence),
             )
             return {"evidence_id": evidence_id, "status": payload["status"]}
         if action == "evidence.invalidate":
@@ -1623,6 +2279,18 @@ class Store:
                 )
             if metadata["local_revision"] >= MAX_REVISION:
                 raise StateError("state_conflict", "Revision limit reached")
+            if "expected_generation" in request:
+                # Fencing token (T13): an executor that restored a session states the
+                # workspace generation it believes is current. After a clear, a stale
+                # writer is rejected instead of resurrecting the old workspace or
+                # mutating the new one.
+                generation = Store._workspace_generation(connection)
+                if request["expected_generation"] != generation:
+                    raise StateError(
+                        "state_conflict",
+                        f"Expected workspace generation {request['expected_generation']}; "
+                        f"current is {generation}",
+                    )
             sequence = metadata["local_revision"] + 1
             result = self._transition(connection, request["action"], request["payload"], sequence)
             origin_context = self.context_id
@@ -2442,7 +3110,8 @@ class Store:
                    WHERE (tasks.status = 'ready' AND tasks.run_id IS NOT NULL)
                    OR (tasks.status NOT IN ('ready','cancelled') AND runs.id IS NULL)
                    OR (runs.id IS NOT NULL AND (runs.task_id != tasks.id OR runs.status != CASE tasks.status
-                       WHEN 'in-progress' THEN 'active' WHEN 'implemented-unverified' THEN 'finished'
+                       WHEN 'in-progress' THEN 'active'
+                       WHEN 'implemented-unverified' THEN 'finished'
                        ELSE tasks.status END))
                    OR (tasks.status IN ('waiting-user','blocked') AND blockers.id IS NULL)
                    OR (tasks.status NOT IN ('waiting-user','blocked') AND blockers.id IS NOT NULL)

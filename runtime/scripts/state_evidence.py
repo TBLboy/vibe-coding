@@ -28,14 +28,6 @@ from state_store import StateError
 SELECTORS = ("raw-file", "text-lf", "json-field")
 RESULTS = ("passed", "failed", "partial", "unknown", "superseded", "invalid")
 APPLICABILITY = ("current", "stale", "unknown")
-LEGACY_RESULTS = {
-    "valid": "passed",
-    "failed": "failed",
-    "candidate": "unknown",
-    "stale": "unknown",
-    "superseded": "superseded",
-    "invalid": "invalid",
-}
 MAX_FILE_BYTES = 64 * 1024 * 1024
 
 
@@ -238,63 +230,6 @@ def applicability(evidence: dict, root) -> dict:
         "selectors": details,
         "historical_result_preserved": True,
     }
-
-
-def from_legacy(entry: dict, root=None) -> dict:
-    """Convert one legacy evidence entry without discarding its original hashes."""
-    if type(entry) is not dict:
-        raise StateError("invalid_input", "legacy evidence entry must be an object")
-    for key in ("id", "kind", "subject"):
-        if type(entry.get(key)) is not str or not entry[key].strip():
-            raise StateError("invalid_input", f"legacy entry needs {key}")
-    legacy_status = entry.get("status")
-    if legacy_status not in LEGACY_RESULTS:
-        raise StateError("invalid_input", f"unknown legacy status: {legacy_status!r}")
-    binding = entry.get("version_binding") or {}
-    if type(binding) is not dict:
-        raise StateError("invalid_input", "legacy version_binding must be an object")
-    hashes = binding.get("file_hashes") or {}
-    if type(hashes) is not dict:
-        raise StateError("invalid_input", "legacy version_binding.file_hashes must be an object")
-    covers = entry.get("covers") or {}
-    if type(covers) is not dict:
-        raise StateError("invalid_input", "legacy covers must be an object")
-    files = covers.get("files") or []
-    if type(files) is not list or any(type(path) is not str or not path.strip() for path in files):
-        raise StateError("invalid_input", "legacy covers.files must be a list of non-empty paths")
-    selectors = []
-    for path in files:
-        recorded = hashes.get(path)
-        selectors.append({"selector": "raw-file", "path": path, "digest": recorded})
-    if not selectors:
-        selectors = [{"selector": "raw-file", "path": entry["id"], "digest": None}]
-    converted = record(
-        evidence_id=entry["id"],
-        kind=entry["kind"],
-        subject=entry["subject"],
-        result=LEGACY_RESULTS[legacy_status],
-        selectors=selectors,
-        command=entry.get("command"),
-        result_ref=entry.get("result_ref"),
-    )
-    converted["legacy_status"] = legacy_status
-    converted["recorded_at"] = entry.get("recorded_at") or converted["recorded_at"]
-    for key in ("tasks", "requirements"):
-        values = covers.get(key) or []
-        if type(values) is not list or any(type(item) is not str or not item.strip() for item in values):
-            raise StateError("invalid_input", f"legacy covers.{key} must be a list of ids")
-        if values:
-            converted[key] = list(values)
-    for key in ("git_commit", "diff_hash"):
-        value = binding.get(key)
-        if value is None:
-            continue
-        if type(value) is not str or not value.strip():
-            raise StateError("invalid_input", f"legacy version_binding.{key} must be text or null")
-        converted[key] = value
-    if root is not None:
-        converted["applicability"] = applicability(converted, root)["applicability"]
-    return converted
 
 
 def summarize(records) -> dict:

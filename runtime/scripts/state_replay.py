@@ -50,6 +50,51 @@ def _resolve_open_blocker(open_blockers: dict, task_id: str, sequence: int) -> N
         blocker["resolved_sequence"] = sequence
 
 
+GOAL_OPEN_STATUSES = ("draft", "active", "waiting-user", "blocked")
+TASK_OPEN_STATUSES = ("ready", "in-progress", "waiting-user", "blocked", "handed-off")
+
+
+def workspace_plan_digest(generation: int, goal_ids, task_ids, run_ids) -> str:
+    """Stable digest of a ``workspace.clear`` plan.
+
+    Shared by the live transition and by replay, so the two can never disagree about
+    which plan a committed command was allowed to clear. The live side builds the
+    lists with SQL, the replay side in memory, but the encoding is one function.
+    """
+    encoded = json.dumps(
+        {
+            "generation": generation, "goals": list(goal_ids),
+            "tasks": list(task_ids), "runs": list(run_ids),
+        },
+        ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+    )
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def _active_workspace(goals: dict, tasks: dict, runs: dict, generation: int) -> dict:
+    """The same view ``Store._workspace_plan`` derives from SQL, in created order."""
+    ordered_goals = sorted(
+        (row for row in goals.values() if row["status"] in GOAL_OPEN_STATUSES),
+        key=lambda row: row["created_sequence"],
+    )
+    ordered_tasks = sorted(
+        (row for row in tasks.values() if row["status"] in TASK_OPEN_STATUSES),
+        key=lambda row: row["created_sequence"],
+    )
+    ordered_runs = sorted(
+        (row for row in runs.values() if row["status"] == "active"),
+        key=lambda row: row["created_sequence"],
+    )
+    goal_ids = [row["id"] for row in ordered_goals]
+    task_ids = [row["id"] for row in ordered_tasks]
+    run_ids = [row["id"] for row in ordered_runs]
+    return {
+        "generation": generation, "affected_goal_ids": goal_ids,
+        "affected_task_ids": task_ids, "active_run_ids": run_ids,
+        "plan_digest": workspace_plan_digest(generation, goal_ids, task_ids, run_ids),
+    }
+
+
 def reduce_ledger(entries, with_results: bool = False):
     """Rebuild every entity row from ordered ledger entries.
 
@@ -74,6 +119,7 @@ def reduce_ledger(entries, with_results: bool = False):
     open_blockers: dict[str, dict] = {}
     blocker_id = 0
     results: dict[int, dict] = {}
+    clear_count = 0
 
     for entry in entries:
         request = _entry_request(entry)
@@ -101,9 +147,96 @@ def reduce_ledger(entries, with_results: bool = False):
             result = {"goal_id": payload["id"], "updated": True}
         elif action == "goal.complete":
             goal = _require(goals, payload["id"], "goal")
+            # A completed goal closes its never-started tasks, exactly as the live
+            # transition does: `task.begin` refuses once the goal is not active, so such a
+            # task could never reach a terminal state and would linger forever.
+            # `implemented-unverified` is left alone -- it records an implementation that
+            # really happened. Insertion order is creation order, matching the live
+            # transition.
+            for task in tasks.values():
+                if task["goal_id"] != payload["id"]:
+                    continue
+                if task["status"] not in TASK_OPEN_STATUSES:
+                    continue
+                task["status"] = "cancelled"
+                task["cancel_reason"] = "open work closed when its goal completed"
+                task["updated_sequence"] = sequence
+                for run in runs.values():
+                    if run["task_id"] == task["id"] and run["status"] != "finished":
+                        run["status"] = "cancelled"
+                        run["updated_sequence"] = sequence
             goal["status"] = "complete"
             goal["updated_sequence"] = sequence
+            # Same receipt shape as before: the reducer's result must match what the live
+            # transition returned for *historical* events too, or the ledger stops reducing.
             result = {"goal_id": payload["id"], "status": "complete"}
+        elif action == "goal.cancel":
+            goal = _require(goals, payload["id"], "goal")
+            if goal["status"] in {"complete", "cancelled"}:
+                raise StateError(
+                    "invalid_ledger", f"Cannot cancel a {goal['status']} goal"
+                )
+            policy = payload.get("child_policy", "cancel_open")
+            cancelled: list[str] = []
+            if policy == "cancel_open":
+                # Insertion order is creation order, which is the order the live
+                # transition uses, so the receipt's id list is reproducible.
+                for task in tasks.values():
+                    if task["goal_id"] != payload["id"]:
+                        continue
+                    if task["status"] not in TASK_OPEN_STATUSES:
+                        continue
+                    task["status"] = "cancelled"
+                    task["cancel_reason"] = "open work cancelled with its goal"
+                    task["updated_sequence"] = sequence
+                    for run in runs.values():
+                        if run["task_id"] == task["id"] and run["status"] != "finished":
+                            run["status"] = "cancelled"
+                            run["updated_sequence"] = sequence
+                    cancelled.append(task["id"])
+            goal["status"] = "cancelled"
+            goal["updated_sequence"] = sequence
+            result = {
+                "goal_id": payload["id"], "status": "cancelled",
+                "cancelled_task_ids": cancelled,
+            }
+        elif action == "workspace.clear":
+            before = _active_workspace(goals, tasks, runs, clear_count)
+            if payload.get("plan_digest") != before["plan_digest"]:
+                raise StateError("invalid_ledger", "workspace.clear plan digest mismatch")
+            if not before["affected_goal_ids"] and not before["affected_task_ids"]:
+                result = {
+                    "cleared": False, "generation_before": before["generation"],
+                    "generation_after": before["generation"],
+                    "cancelled_goal_ids": [], "cancelled_task_ids": [],
+                }
+            else:
+                cancelled_tasks: list[str] = []
+                affected = set(before["affected_goal_ids"])
+                for task in tasks.values():
+                    if task["goal_id"] not in affected:
+                        continue
+                    if task["status"] not in TASK_OPEN_STATUSES:
+                        continue
+                    task["status"] = "cancelled"
+                    task["cancel_reason"] = "open work cancelled with its goal"
+                    task["updated_sequence"] = sequence
+                    for run in runs.values():
+                        if run["task_id"] == task["id"] and run["status"] != "finished":
+                            run["status"] = "cancelled"
+                            run["updated_sequence"] = sequence
+                    cancelled_tasks.append(task["id"])
+                for goal_id in before["affected_goal_ids"]:
+                    goals[goal_id]["status"] = "cancelled"
+                    goals[goal_id]["updated_sequence"] = sequence
+                clear_count += 1
+                result = {
+                    "cleared": True,
+                    "generation_before": before["generation"],
+                    "generation_after": before["generation"] + 1,
+                    "cancelled_goal_ids": before["affected_goal_ids"],
+                    "cancelled_task_ids": cancelled_tasks,
+                }
         elif action == "task.create":
             tasks[payload["id"]] = {
                 "id": payload["id"], "title": payload["title"], "goal_id": payload["goal_id"],
@@ -113,6 +246,23 @@ def reduce_ledger(entries, with_results: bool = False):
                 "created_sequence": sequence, "updated_sequence": sequence,
             }
             result = {"task_id": payload["id"], "run_id": None, "status": "ready"}
+        elif action == "task.reopen":
+            old = _require(tasks, payload["task_id"], "task")
+            extensions = dict(payload.get("extensions", {}))
+            extensions["reopens"] = old["id"]
+            extensions["reopen_reason"] = payload["reason"]
+            tasks[payload["new_task_id"]] = {
+                "id": payload["new_task_id"],
+                "title": payload.get("title", old["title"]),
+                "goal_id": old["goal_id"], "status": "ready", "run_id": None,
+                "next_action": None, "summary": None, "cancel_reason": None,
+                "extensions": _json(extensions),
+                "created_sequence": sequence, "updated_sequence": sequence,
+            }
+            result = {
+                "task_id": payload["new_task_id"], "run_id": None, "status": "ready",
+                "reopens": old["id"],
+            }
         elif action == "task.update":
             task = _require(tasks, payload["task_id"], "task")
             extensions = json.loads(task["extensions"])

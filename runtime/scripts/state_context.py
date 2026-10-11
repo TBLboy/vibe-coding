@@ -12,25 +12,22 @@ from state_store import StateError, Store
 
 
 MARKER = "state-format.json"
+# The Project Log is authoritative data. The archive compares the ledger byte-for-byte,
+# so Git must never rewrite the log through end-of-line or clean/smudge conversion.
+# `-text` stores the working-tree bytes exactly as they are, which keeps an Ubuntu and a
+# Windows checkout identical instead of drifting with core.autocrlf.
+GITATTRIBUTES = (
+    "# The Project Log is authoritative: the ledger is archived byte-for-byte, so Git\n"
+    "# must never apply end-of-line or clean/smudge conversion to it. One byte form on\n"
+    "# every platform keeps an Ubuntu and a Windows checkout identical.\n"
+    "* -text\n"
+)
 
 
 def is_transactional(root: Path) -> bool:
     path = root / ".project-log" / MARKER
     private = root / ".project-log" / ".state"
     return path.exists() or path.is_symlink() or private.exists() or private.is_symlink()
-
-
-def reject_legacy(root: Path) -> None:
-    if is_transactional(root):
-        raise ValueError("state_format_conflict: legacy writes are disabled; use the formal vibe command surface")
-
-
-def reject_legacy_path(path: Path) -> None:
-    for candidate in (path.absolute(), path.resolve()):
-        for parent in candidate.parents:
-            if os.path.normcase(parent.name) == os.path.normcase(".project-log"):
-                reject_legacy(parent.parent)
-                break
 
 
 def read_marker(root: Path) -> dict:
@@ -78,21 +75,32 @@ def _git_marker(path: Path) -> Path | None:
     return None
 
 
-def git_context(root: Path) -> tuple[str, Path]:
-    """Return the project-scoped state identity and the local state directory.
+WORK_LAYOUT_CONTRACT = (
+    "Project Log must live in a plain work folder: the work folder itself must not be a "
+    "Git worktree root, and it must not sit inside another Git worktree.\n"
+    "\n"
+    "Expected:\n"
+    "\n"
+    "  work/                 a plain directory (no .git here)\n"
+    "    .project-log/       a plain directory\n"
+    "    repo-a/.git/        code repositories live below it\n"
+    "    repo-b/.git/\n"
+    "\n"
+    "Remote durability comes from the knowledge-base archive, not from the work folder "
+    "being a Git repository."
+)
 
-    The identity is deliberately branch-independent: one Project Log covers every
-    branch of a worktree, so switching branches never hides or forks the log. In a
-    Git worktree the SQLite cache lives under the repository's Git directory, so it
-    is never tracked or archived; a plain work directory keeps it in
-    ``.project-log/.state``.
 
-    A plain work directory is the supported layout for a Project Log that owns
-    several nested repositories: the log sits beside them and reaches Git through
-    the knowledge-base archive. Detection looks for a real ``.git`` marker rather
-    than any directory named ``.git``, so an empty stray ``.git`` in an ancestor
-    (a common accident in a home directory) does not turn the work directory into
-    a false repository and abort every command.
+def detect_layout(root: Path) -> str:
+    """Classify the work directory's layout.
+
+    The only supported layout for a Project Log is a plain work folder: a directory
+    that is neither a Git worktree root nor inside one. Code repositories live
+    *below* it, and remote durability comes from the knowledge-base archive.
+
+    Detection looks for a real ``.git`` marker rather than any directory named
+    ``.git``, so an empty stray ``.git`` in an ancestor (a common accident in a home
+    directory) does not turn the work directory into a false repository.
     """
     root = root.resolve()
     marker = next(
@@ -100,31 +108,30 @@ def git_context(root: Path) -> tuple[str, Path]:
         None,
     )
     if marker is None:
-        identity = {"root": str(root), "branch": "local"}
-        directory = root / ".project-log" / ".state"
-    else:
-        environment = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+        return "plain_work_folder"
+    if marker == root:
+        return "git_worktree_root"
+    return "nested_in_git_worktree"
 
-        def git(*arguments: str, optional: bool = False) -> bytes:
-            try:
-                result = subprocess.run(
-                    ["git", "-C", str(root), *arguments], env=environment,
-                    capture_output=True, timeout=10,
-                )
-            except (OSError, subprocess.TimeoutExpired) as exc:
-                raise StateError("git_context_error", str(exc)) from exc
-            if result.returncode and not (optional and result.returncode == 1):
-                raise StateError("git_context_error", result.stderr.decode("utf-8", errors="replace"))
-            return result.stdout.rstrip(b"\r\n")
 
-        try:
-            top = Path(os.fsdecode(git("rev-parse", "--show-toplevel"))).resolve()
-            if top != root:
-                raise StateError("git_context_error", "format 2 state requires the Git worktree root")
-            directory = Path(os.fsdecode(git("rev-parse", "--absolute-git-dir"))).resolve() / "vibe-state"
-            identity = {"root": str(root), "git_dir": str(directory)}
-        except UnicodeError as exc:
-            raise StateError("git_context_error", "Git path encoding cannot be represented") from exc
+def git_context(root: Path) -> tuple[str, Path]:
+    """Return the project-scoped state identity and the local state directory.
+
+    A plain work folder is the only supported layout: the Project Log sits beside the
+    code repositories and reaches Git through the knowledge-base archive. A Git
+    worktree root, or a directory inside one, is rejected *before any write*, so
+    ``vibe init`` cannot silently create a Project Log under an unsupported layout.
+
+    The identity is deliberately branch-independent and path-only, so switching
+    branches never hides or forks the log and moving a log between branches of the
+    same work folder keeps the same store.
+    """
+    root = root.resolve()
+    layout = detect_layout(root)
+    if layout != "plain_work_folder":
+        raise StateError("unsupported_work_layout", WORK_LAYOUT_CONTRACT)
+    identity = {"root": str(root), "branch": "local"}
+    directory = root / ".project-log" / ".state"
     context_id = hashlib.sha256(json.dumps(identity, sort_keys=True).encode("utf-8")).hexdigest()
     return context_id, directory
 
@@ -142,6 +149,10 @@ def open_store(root: Path, heal: bool = False) -> Store:
     context_id, directory = git_context(root)
     path = directory / marker["project_id"] / context_id / "state.sqlite3"
     store = Store(path, marker["project_id"], context_id, root)
+    # A store written by an older release is migrated here, before anything reads
+    # it: the ledger is the fact source, so the rebuild is projection-only and can
+    # always be re-derived if it is interrupted.
+    store.upgrade()
     if heal:
         store.heal_from_ledger()
     return store
@@ -156,7 +167,7 @@ def initialize(root: Path) -> Store:
     try:
         log.mkdir()
     except FileExistsError as exc:
-        raise StateError("migration_required", "refusing existing Project Log; migration is not available") from exc
+        raise StateError("existing_project_log", "refusing to overwrite an existing Project Log") from exc
     (log / ".state").mkdir()
     marker = {"format": 2, "project_id": uuid.uuid4().hex}
     with (log / MARKER).open("x", encoding="utf-8", newline="\n") as stream:
@@ -164,10 +175,10 @@ def initialize(root: Path) -> Store:
         stream.write("\n")
         stream.flush()
         os.fsync(stream.fileno())
-    (log / ".gitignore").write_text(".state/\n", encoding="utf-8")
-    exchange_directory = log / "exchange"
-    exchange_directory.mkdir()
-    (exchange_directory / ".gitattributes").write_text("* -text\n", encoding="utf-8")
+    (log / ".gitignore").write_text(".state/\n", encoding="utf-8", newline="\n")
+    # Explicit LF: the byte form of every Project Log file must be identical on Ubuntu and
+    # Windows, so no writer may inherit the platform's default newline translation.
+    (log / ".gitattributes").write_text(GITATTRIBUTES, encoding="utf-8", newline="\n")
     store = Store(
         directory / marker["project_id"] / context_id / "state.sqlite3",
         marker["project_id"],
@@ -210,7 +221,7 @@ def attach_with_report(root: Path) -> tuple[Store, dict]:
 def apply_command(root: Path, envelope: dict) -> dict:
     store = open_store(root)
     receipt = store.apply(envelope)
-    result = {"receipt": receipt, "projection": "pending", "exchange": "not-implemented"}
+    result = {"receipt": receipt, "projection": "pending"}
     try:
         from state_views import publish
 
@@ -282,56 +293,35 @@ def refresh_evidence(root: Path, reason: str | None = None, changed_paths=None) 
     return result
 
 
-def publish_snapshot(root: Path) -> dict:
-    from state_exchange import publish
-
-    store = open_store(root)
-    result = publish(store, root)
-    try:
-        result["view"] = refresh_views(root)
-        result["projection"] = "published"
-    except Exception as exc:
-        result["projection_error"] = {"code": getattr(exc, "code", "projection_failed"), "message": str(exc)}
-    return result
-
-
-def import_snapshot(root: Path) -> dict:
-    from state_exchange import import_snapshot as apply_snapshot
-
-    store = open_store(root)
-    result = apply_snapshot(store, root)
-    try:
-        result["view"] = refresh_views(root)
-        result["projection"] = "published"
-    except Exception as exc:
-        result["projection_error"] = {"code": getattr(exc, "code", "projection_failed"), "message": str(exc)}
-    return result
-
-
-def exchange_status(root: Path) -> dict:
-    from state_exchange import status
-
-    return status(open_store(root), root)
-
-
-def acknowledge_export(root: Path) -> dict:
-    from state_exchange import acknowledge_export as confirm
-
-    return confirm(open_store(root), root)
-
-
-def abandon_export(root: Path, reason: str) -> dict:
-    return {"status": "abandoned", "exchange": open_store(root).abandon_export(reason)}
-
-
 def compact_context(root: Path) -> str:
     store = open_store(root, heal=True)
     state = store.status(limit=5)
-    task = state.get("current_task") or state.get("latest_task")
+    # Work in hand is the active run's task, or — when a run is not active — the latest
+    # task while it is still open (a blocked or handed-off task is paused, not history).
+    # Only genuinely finished work is shown separately, and cancelled work is never
+    # presented at all: falling back to it is how a resumed session revives what a
+    # workspace clear already dropped.
+    task = state.get("current_task")
+    last = state.get("latest_task")
+    if task is None and last is not None and last.get("execution_state") in {
+        "not-started", "active", "paused",
+    }:
+        task = last
+        last = None
+    if last is not None and last.get("execution_state") != "finished":
+        last = None
     try:
         goal = store.get_goal(store.active_goal_id())
+        goal_label = goal["id"]
     except StateError:
         goal = None
+        active = store.active_goal_ids()
+        # A second active goal turns the default target into a guess; surface the
+        # ambiguity here instead of letting the session believe one of them.
+        goal_label = (
+            f"ambiguous ({', '.join(active)}); pass an explicit goal id"
+            if len(active) > 1 else "-"
+        )
     evidence = store.list_evidence()
     counts = {
         name: sum(item["status"] == name for item in evidence)
@@ -341,19 +331,30 @@ def compact_context(root: Path) -> str:
         "Vibe transactional context (read-only restore).",
         f"Project: {state['project_id']}",
         f"Revision: {state['revision']}",
-        f"Project goal: {goal['id'] if goal else '-'}",
+        f"Workspace generation: {state['workspace_generation']}",
+        f"Project goal: {goal_label}",
         f"Run status: {(state.get('current_run') or state.get('latest_run') or {}).get('status', '-')}",
-        f"Task: {task['id'] if task else '-'} [{task['status'] if task else '-'}]",
+        f"Task: {task['id'] if task else '- (no active work)'} "
+        f"[{task['status'] if task else '-'}]",
         f"Next action: {task.get('next_action') if task and task.get('next_action') else '-'}",
         "Evidence: " + ", ".join(f"{name}={counts[name]}" for name in counts),
     ]
+    if task is None and last is not None:
+        lines.append(
+            f"Last task: {last['id']} [{last['status']}] — finished history, not current work"
+        )
     if task and task.get("blocker"):
         blocker = task["blocker"]
         lines.append(
             f"Blocker: {blocker['kind']} / {blocker['reason']} / resume when: {blocker['resume_when']}"
         )
     lines.append(
+        "A workspace clear starts a new generation: work from an earlier generation is "
+        "cancelled and cannot be resumed (task.begin needs ready, task.resume needs a paused "
+        "task), so a restored session must not try to revive it."
+    )
+    lines.append(
         "Completion requires valid evidence; high-risk work also requires an independent go review. "
-        "Use the formal vibe command surface; do not initialize or write legacy YAML."
+        "Use the formal vibe command surface; the Project Log is the transactional format 2 store."
     )
     return "\n".join(lines) + "\n"

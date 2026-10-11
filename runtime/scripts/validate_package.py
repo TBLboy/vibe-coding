@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the Codex Vibe Coding package before installation or release."""
+"""Validate the Vibe Coding package (Codex client surface) before installation or release."""
 from __future__ import annotations
 
 import argparse
@@ -27,35 +27,26 @@ REQUIRED_RUNTIME = {
     "scripts/state_ledger.py",
     "scripts/state_views.py",
     "scripts/state_context.py",
-    "scripts/state_exchange.py",
     "scripts/state_routing.py",
     "scripts/state_evidence.py",
     "scripts/state_gate.py",
-    "scripts/state_migrate.py",
     "vibe.ps1",
     "vibe.sh",
     "scripts/vibe_python.ps1",
     "scripts/vibe_python.sh",
     "scripts/init_project.py",
-    "scripts/loop_state.py",
-    "scripts/loopctl.py",
-    "scripts/render_subagent_prompt.py",
     "scripts/validate_package.py",
     "scripts/validate_project.py",
+    "scripts/render_subagent_prompt.py",
     "hooks/hook_common.py",
     "hooks/session_start.py",
     "hooks/post_tool_use.py",
     "hooks/pre_compact.py",
     "agents/roles.json",
     "mcp/optional-mcps.json",
-    "project-log-template/workflow.yaml",
     "project-log-template/current-session.md",
     "project-log-template/progress.md",
     "project-log-template/docs/archive/README.md",
-    "project-log-template/business-logic/clarification.yaml",
-    "project-log-template/goals/active-goal.yaml",
-    "project-log-template/loop/active-run.yaml",
-    "project-log-template/loop/evidence-index.yaml",
 }
 REQUIRED_PACKAGE_FILES = {
     "AI_INSTALL.md",

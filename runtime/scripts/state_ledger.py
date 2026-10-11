@@ -1,4 +1,4 @@
-"""Format 3 ledger: an append-only, Git-tracked, single linear event stream.
+"""Git-tracked Project Log ledger: append-only, single linear event stream.
 
 The ledger is the durable fact source for a project; the SQLite store is a
 projection that can be deleted and rebuilt by replaying it. Every event carries
@@ -18,6 +18,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import uuid
 
 from state_replay import logical_state_hash, reduce_ledger
 from state_store import StateError, _json
@@ -220,7 +221,12 @@ def append_event(
     }
     sealed = _seal(body)
     line = (_json(sealed) + "\n").encode("utf-8")
-    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o644)
+    flags = os.O_WRONLY | os.O_CREAT | os.O_APPEND
+    if hasattr(os, "O_BINARY"):
+        # Windows opens a descriptor in text mode by default, which would turn the event's
+        # trailing LF into CRLF and break the archive's byte-for-byte ledger comparison.
+        flags |= os.O_BINARY
+    descriptor = os.open(path, flags, 0o644)
     try:
         written = os.write(descriptor, line)
         if written != len(line):
@@ -284,6 +290,33 @@ def _command_rows(store) -> list[dict]:
         ]
 
 
+LEDGER_TEMP_SUFFIX = ".tmp-"
+
+
+def _ensure_ledger_ignore(path: Path) -> None:
+    """Keep a killed ledger rewrite's temporary file out of the repository index.
+
+    The rewrite writes a sibling temporary file and renames it into place; a
+    SIGKILL between those two steps cannot run the cleanup, so the ledger
+    directory carries an ignore rule for whatever is left behind. The rule is
+    appended when absent rather than only created with the file, so a ledger
+    directory that already had a ``.gitignore`` still gets it.
+    """
+    ignore = path.parent / ".gitignore"
+    rule = f"*{LEDGER_TEMP_SUFFIX}*"
+    try:
+        existing = ignore.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        existing = ""
+    if rule in existing.splitlines():
+        return
+    separator = "" if not existing or existing.endswith("\n") else "\n"
+    with ignore.open("a", encoding="utf-8", newline="\n") as stream:
+        stream.write(f"{separator}{rule}\n")
+        stream.flush()
+        os.fsync(stream.fileno())
+
+
 def export_ledger(store, path: Path | None = None, rows=None) -> dict:
     """Write every accepted command to the Git-tracked ledger, idempotently.
 
@@ -303,12 +336,19 @@ def export_ledger(store, path: Path | None = None, rows=None) -> dict:
     unchanged = existing == text
     if not unchanged:
         path.parent.mkdir(parents=True, exist_ok=True)
-        temporary = path.with_name(path.name + ".tmp")
-        with temporary.open("w", encoding="utf-8", newline="\n") as stream:
-            stream.write(text)
-            stream.flush()
-            os.fsync(stream.fileno())
-        os.replace(temporary, path)
+        _ensure_ledger_ignore(path)
+        temporary = path.with_name(f"{path.name}{LEDGER_TEMP_SUFFIX}{uuid.uuid4().hex}")
+        try:
+            with temporary.open("w", encoding="utf-8", newline="\n") as stream:
+                stream.write(text)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temporary, path)
+        finally:
+            try:
+                temporary.unlink()
+            except FileNotFoundError:
+                pass
     return {
         "path": str(path),
         "events": len(rows),
@@ -429,13 +469,44 @@ def _git(root: Path, *arguments: str) -> tuple[bool, str]:
     return completed.returncode == 0, completed.stdout.strip()
 
 
-def portability_status(root: Path) -> dict:
-    """Report whether local history is durably captured by the Git-tracked ledger.
+def archive_status(kb_path: str | None = None) -> dict:
+    """Whether a knowledge-base archive is configured for this machine.
 
-    "Tracked by Git" is not the same as "safe": the ledger can be stale (the store
-    holds commands it never exported), modified but uncommitted, or committed but
-    unpushed. This reports each of those so a finishing session can refuse to call
-    the work portable while history is still only on this machine.
+    A plain work folder carries no remote of its own, so the knowledge-base archive is
+    the transport that makes a log durable beyond this machine. Local ledger freshness
+    says nothing about that: without a configured archive the remote durability is
+    *unknown*, not satisfied. This reports the configuration so a finishing session
+    cannot quietly call the work portable while the only copy is on this machine.
+    """
+    configured = (kb_path if kb_path is not None else os.environ.get("VIBE_KB_PATH", "")).strip()
+    if not configured:
+        return {
+            "configured": False,
+            "status": "archive_not_configured",
+            "detail": "no knowledge-base path is configured; set VIBE_KB_PATH or configure "
+                      "the a-project-log-archive skill",
+        }
+    candidate = Path(configured).expanduser()
+    if not candidate.is_dir():
+        return {
+            "configured": True,
+            "status": "archive_not_configured",
+            "detail": f"configured knowledge base is not a directory: {candidate}",
+            "kb_path": str(candidate),
+        }
+    return {"configured": True, "status": "configured", "kb_path": str(candidate)}
+
+
+def portability_status(root: Path) -> dict:
+    """Report local consistency and remote durability as two separate things.
+
+    A fresh local ledger is not portable on its own: ``plain`` is the only supported
+    layout, and a plain work folder carries no remote of its own, so the knowledge-base
+    archive is the transport. This reports (a) whether the on-disk ledger is a faithful,
+    current capture of this machine's store, and (b) whether an archive is even
+    configured. There is deliberately no single ``portable`` boolean — it conflated
+    "locally consistent" with "durable beyond this machine", which reported ``true``
+    while the only copy was on one disk.
     """
     root = Path(root).resolve()
     path = ledger_path(root)
@@ -469,27 +540,25 @@ def portability_status(root: Path) -> dict:
         "store_revision": revision,
         "unexported_commands": unexported,
         "history_rewritten": rewritten,
-        "in_sync": in_sync,
-        "git": None,
+        # Local consistency: is the on-disk ledger a faithful, current capture of this
+        # machine's store? It says nothing about whether another machine can get it.
+        "local_consistency": {
+            "in_sync": in_sync,
+            "unexported_commands": unexported,
+            "history_rewritten": rewritten,
+            "status": (
+                "unknown" if in_sync is None
+                else "consistent" if in_sync
+                else "out_of_sync"
+            ),
+        },
+        # Remote durability: has that ledger been archived somewhere another machine can
+        # fetch? The knowledge-base archive is the transport, so a fresh local ledger is
+        # NOT portable on its own.
+        "archive_status": archive_status(),
     }
-    inside, _ = _git(root, "rev-parse", "--show-toplevel")
-    if inside:
-        relative = path.relative_to(root).as_posix()
-        tracked, _ = _git(root, "ls-files", "--error-unmatch", "--", relative)
-        _, changes = _git(root, "status", "--porcelain", "--", relative)
-        known, ahead = _git(root, "rev-list", "--count", "@{upstream}..HEAD")
-        report["git"] = {
-            "ledger_tracked": tracked,
-            "uncommitted_ledger_changes": bool(changes),
-            "upstream_known": known,
-            "unpushed_commits": int(ahead) if known and ahead.isdigit() else 0,
-        }
-        report["portable"] = bool(
-            report["in_sync"] and tracked and not changes and known
-            and report["git"]["unpushed_commits"] == 0
-        )
-    else:
-        # A plain work directory carries no remote of its own; the KB is the
-        # transport, so the only signal available here is ledger freshness.
-        report["portable"] = report["in_sync"]
+    report["remote_durability"] = {
+        "archive_not_configured": "unknown",
+        "configured": "unverified",
+    }.get(report["archive_status"]["status"], "unknown")
     return report
