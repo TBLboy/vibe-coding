@@ -803,6 +803,49 @@ class GateStoreTests(unittest.TestCase):
         self.assert_error("invalid_input", "goal.update", {"id": "GOAL-001", "risk_level": "high"})
         self.assert_error("invalid_input", "goal.update", {"id": "GOAL-001"})
 
+    def test_goal_update_records_implementer_and_unblocks_the_high_risk_gate(self) -> None:
+        self.apply("goal.create", {
+            "id": "GOAL-001", "title": "Goal",
+            "extensions": {
+                "risk_level": "high",
+                "success_conditions": [
+                    {"id": "SC-1", "statement": "x", "status": "pending", "evidence_refs": []},
+                ],
+                "required_evidence": [],
+            },
+        })
+        self.apply("task.create", {
+            "id": "TASK-001", "title": "Task", "goal_id": "GOAL-001",
+            "extensions": {"risk": "high"},
+        })
+        self.apply("task.begin", {
+            "task_id": "TASK-001", "run_id": "RUN-001", "next_action": "review",
+        })
+        self.apply("evidence.record", {
+            "id": "EVID-001", "kind": "test", "subject": "artifact",
+            "status": "valid", "task_id": "TASK-001",
+            "covers": {"tasks": ["TASK-001"]},
+        })
+        self.apply("review.record", {
+            "id": "REV-001", "task_id": "TASK-001", "reviewer": "reviewer-a",
+            "verdict": "go", "scope": {}, "evidence_refs": ["EVID-001"],
+        })
+        # DEC-070: the high-risk completion gate has to fail closed without goal-level
+        # attribution, and `goal.update` used to be unable to supply it, so such a goal
+        # could never be completed.
+        self.assertIn(
+            "missing_implementer", " ".join(self.store.evaluate_goal("GOAL-001")["reasons"])
+        )
+        self.apply("goal.update", {"id": "GOAL-001", "implementer": "implementation-builder"})
+        self.assertNotIn(
+            "missing_implementer", " ".join(self.store.evaluate_goal("GOAL-001")["reasons"])
+        )
+        # Attribution only: risk stays frozen so goal.update cannot loosen a gate, and a
+        # blank attribution is refused instead of stored as an unusable value.
+        self.assert_error("invalid_input", "goal.update", {"id": "GOAL-001", "risk_level": "normal"})
+        self.assert_error("invalid_input", "goal.update", {"id": "GOAL-001", "implementer": "   "})
+        self.assert_error("invalid_input", "goal.update", {"id": "GOAL-001", "owner": None})
+
     def test_multiple_active_goals_fail_closed_instead_of_picking_the_earliest(self) -> None:
         self.apply("goal.create", {"id": "GOAL-001", "title": "Earlier"})
         self.apply("goal.create", {"id": "GOAL-002", "title": "Later"})

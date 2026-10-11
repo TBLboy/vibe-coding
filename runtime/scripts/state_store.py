@@ -34,6 +34,28 @@ EVENT_FIELDS = (
     "action", "request_hash", "created_at",
 )
 
+# The goal extensions `goal.update` may change. The key set and the merge live in one place
+# because both the live transition (`Store._apply`) and the ledger replay
+# (`state_replay.reduce_ledger`) need them: they used to hard-code the same tuple
+# separately, so a fix applied to only one of them was silently ignored by the completion
+# gate, which reads replayed state rather than the projection (DEC-071).
+GOAL_UPDATE_EXTENSION_KEYS = (
+    "success_conditions", "required_evidence", "implementer", "owner",
+)
+
+
+def merge_goal_update_extensions(extensions: object, payload: dict) -> dict:
+    """Apply a `goal.update` payload to goal extensions.
+
+    Only fields that legitimately accrue over a goal's life may change; `risk_level`
+    stays frozen so this action cannot drop the independent-review requirement.
+    """
+    merged = dict(extensions) if isinstance(extensions, dict) else {}
+    for key in GOAL_UPDATE_EXTENSION_KEYS:
+        if key in payload:
+            merged[key] = payload[key]
+    return merged
+
 RECORD_KINDS = {
     "business-atom": ("draft", "active", "experimental", "deprecated", "archived", "conflict"),
     "requirement": ("draft", "active", "superseded", "archived"),
@@ -452,7 +474,7 @@ def _request(envelope: dict) -> tuple[dict, str, str]:
     action = _text(envelope["action"], "action", 64)
     shapes = {
         "goal.create": ({"id", "title"}, {"extensions"}),
-        "goal.update": ({"id"}, {"success_conditions", "required_evidence"}),
+        "goal.update": ({"id"}, set(GOAL_UPDATE_EXTENSION_KEYS)),
         "goal.complete": ({"id"}, set()),
         "goal.cancel": ({"id", "reason"}, {"child_policy"}),
         "workspace.clear": ({"reason", "plan_digest"}, {"scope"}),
@@ -491,6 +513,10 @@ def _request(envelope: dict) -> tuple[dict, str, str]:
         elif key in {"success_conditions", "required_evidence"}:
             if type(value) is not list:
                 raise StateError("invalid_input", f"{key} must be a list")
+        elif key in {"implementer", "owner"}:
+            # Attribution only, and never blank: the completion gate refuses a high-risk
+            # goal whose implementer is empty, so storing one would be a silent trap.
+            _text(value, key, 256)
         elif key == "expected_record_revision":
             _integer(value, key)
         elif key in {"goal_id", "task_id"} and value is None:
@@ -538,9 +564,11 @@ def _request(envelope: dict) -> tuple[dict, str, str]:
         if not ({"implementer", "owner"} & set(payload)):
             raise StateError("invalid_input", "task.update requires implementer or owner")
     elif action == "goal.update":
-        if not ({"success_conditions", "required_evidence"} & set(payload)):
+        if not (set(GOAL_UPDATE_EXTENSION_KEYS) & set(payload)):
             raise StateError(
-                "invalid_input", "goal.update requires success_conditions or required_evidence"
+                "invalid_input",
+                "goal.update requires success_conditions, required_evidence, "
+                "implementer or owner",
             )
     _json_tree(envelope)
     canonical = _json(envelope)
@@ -1868,14 +1896,9 @@ class Store:
             if row is None:
                 raise StateError("not_found", f"Unknown goal: {payload['id']}")
             extensions = _decode_json(row["extensions"], "goal extensions")
-            if type(extensions) is not dict:
-                extensions = {}
-            for key in ("success_conditions", "required_evidence"):
-                if key in payload:
-                    # Only the fields that legitimately accrue evidence over the
-                    # goal's life may change; risk_level stays frozen so this
-                    # action cannot drop the independent-review requirement.
-                    extensions[key] = payload[key]
+            # One shared merge, also used by the ledger replay: a change here can no longer
+            # be silently ignored by a gate that reads replayed state (DEC-071).
+            extensions = merge_goal_update_extensions(extensions, payload)
             connection.execute(
                 "UPDATE goals SET extensions = ?, updated_sequence = ? WHERE id = ?",
                 (_json(extensions), sequence, payload["id"]),

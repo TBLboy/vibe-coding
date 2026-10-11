@@ -27,6 +27,7 @@ from state_store import (
     _json,
     _record_payload,
     _version_binding,
+    merge_goal_update_extensions,
 )
 
 
@@ -136,13 +137,11 @@ def reduce_ledger(entries, with_results: bool = False):
             result = {"goal_id": payload["id"], "status": "active"}
         elif action == "goal.update":
             goal = _require(goals, payload["id"], "goal")
-            extensions = json.loads(goal["extensions"])
-            if not isinstance(extensions, dict):
-                extensions = {}
-            for key in ("success_conditions", "required_evidence"):
-                if key in payload:
-                    extensions[key] = payload[key]
-            goal["extensions"] = _json(extensions)
+            # The live transition calls the same merge, so the two reducers cannot drift
+            # apart on which goal fields `goal.update` may change (DEC-071).
+            goal["extensions"] = _json(
+                merge_goal_update_extensions(json.loads(goal["extensions"]), payload)
+            )
             goal["updated_sequence"] = sequence
             result = {"goal_id": payload["id"], "updated": True}
         elif action == "goal.complete":

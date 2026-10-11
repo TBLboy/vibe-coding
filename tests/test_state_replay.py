@@ -58,6 +58,9 @@ class GoldenReplayTests(unittest.TestCase):
             "success_conditions": [
                 {"id": "SC-1", "status": "passed", "evidence_refs": ["EVID-001"]},
             ],
+            # Goal-level attribution travels through the same reducer as the evidence
+            # fields, so the golden replay below locks both paths to one merge (DEC-071).
+            "implementer": "ledger-author",
         })
         self.apply("task.create", {
             "id": "TASK-001", "title": "Implement replay", "goal_id": "GOAL-001",
@@ -165,6 +168,23 @@ class GoldenReplayTests(unittest.TestCase):
             rebuilt = replayed._entity_rows(connection)
 
         self.assertEqual(rebuilt, original)
+
+    def test_goal_update_attribution_survives_replay(self) -> None:
+        """The replay path must carry goal attribution, not just evidence fields."""
+        self.apply("goal.create", {
+            "id": "GOAL-001", "title": "Goal", "extensions": {"risk_level": "high"},
+        })
+        self.apply("goal.update", {
+            "id": "GOAL-001", "implementer": "implementation-builder", "owner": "vibe-main",
+        })
+
+        reduced = reduce_ledger(self.ledger())
+        goal = next(item for item in reduced["goals"] if item["id"] == "GOAL-001")
+        extensions = json.loads(goal["extensions"])
+        self.assertEqual(extensions["implementer"], "implementation-builder")
+        self.assertEqual(extensions["owner"], "vibe-main")
+        self.assertEqual(extensions["risk_level"], "high")
+        self.assertEqual(reduced["goals"], self.live_entities()["goals"])
 
     def test_logical_state_hash_is_stable_and_reproducible(self) -> None:
         self.build_ledger()
