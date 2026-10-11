@@ -150,10 +150,10 @@ Project Log format 2 是唯一受支持的格式；日常操作与文档示例�
 
 ## 平台范围
 
-| 平台 | 最近一次实测（命令见下） | 状态 |
+| 平台 | 实测（命令见下） | 状态 |
 |---|---|---|
 | Linux（`ubuntu-latest`） | `Ran 252 tests in 27.5s` / `OK (skipped=2)`（上次 CI 实测；本轮改动后尚未重跑 CI） | 支持 |
-| Windows（`windows-latest` + Python 3.11） | `Ran 334 tests in 164.6s` / `OK (skipped=7)`（本机 Windows 实测 2026-10-11；CI 运行同一条命令） | 支持（见下列限制） |
+| Windows（`windows-latest` + Python 3.11） | `Ran 334 tests` / `OK (skipped=7)`（本机 Windows 实测 2026-10-11，两次约 165s / 175s，时长随负载波动；CI 运行同一条命令） | 支持（见下列限制） |
 
 跳过的数量取决于宿主能力，三种实测情形都是 `OK`、0 failures / 0 errors（下表数字取自各自最近一次实测；测试增删会改变总数与跳过数，跳过原因不变）：
 
