@@ -75,7 +75,7 @@ def find_project_root(start: Path) -> Path:
 def ensure_project(payload: dict[str, Any]) -> Path:
     """Attach the transactional store, creating it when the directory has none.
 
-    Format 2 is the only supported layout, so there is no legacy fallback: a directory
+    format 2 is the only supported layout, so there is no legacy fallback: a directory
     without a Project Log gets a fresh format 2 store, and a directory that already has
     one is used as-is.
     """
@@ -143,7 +143,7 @@ def maybe_probe(root: Path, hook_name: str, payload: dict[str, Any]) -> None:
 def compact_context(root: Path, refresh_handoff: bool = False) -> str:
     """Restore the transactional (format 2) context, optionally refreshing the views.
 
-    Format 2 is the only supported layout; a directory without a store gets an explicit
+    format 2 is the only supported layout; a directory without a store gets an explicit
     "no store attached" note instead of a legacy fallback.
     """
     from state_context import compact_context as transactional_context, is_transactional, refresh_views

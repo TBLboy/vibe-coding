@@ -1,4 +1,4 @@
-# Vibe Coding - Codex Global Core 0.5.0
+# Vibe Coding - Codex Global Core 0.6.0
 
 面向 Codex CLI、VS Code 插件、桌面端与 ACP 外部协议连接端等 Codex 客户端的用户级全局 Vibe Coding 工作流。
 
@@ -15,7 +15,7 @@
 - 提供宿主无关的 `.project-log/`：业务事实、需求基线、技术研究、架构、任务、验证、对齐和长期恢复状态。
 - 在 `business-clarification` 内分别维护功能业务逻辑、技术业务逻辑和双向对齐，不增加新的生命周期阶段。
 - 使用 Codex 原生 `/goal` 作为唯一线程运行和 continuation 控制器。
-- 使用 `loopctl` 管理 Project Goal、证据有效性、失败归因、Retry Contract、有限循环和 Handoff。
+- 使用 `vibe` 管理 Project Goal、证据有效性、失败归因、Retry Contract、有限循环和 Handoff。
 - 安装三个低风险 command Hooks：`SessionStart`、`PostToolUse`、`PreCompact`。
 - 逐文件三方升级，保护用户本地修改；升级冲突在写入前停止。
 - 通过声明式 catalog 管理可选 MCP；新安装默认只安装核心，不强制安装任何 MCP。
@@ -192,10 +192,9 @@ vibe evidence record|invalidate|refresh
 vibe review record
 vibe gate --task TASK-ID
 vibe goal update|complete --id GOAL-ID
-vibe migrate preview|apply|resume|rollback
 ```
 
-`loopctl.py` 保留为底层兼容入口；日常操作与文档示例统一走 `vibe`。原生 `/goal` 显示完成后，仍需通过 `vibe goal complete` 的验收门禁才能完成 Project Goal。
+日常操作与文档示例统一走 `vibe`。原生 `/goal` 显示完成后，仍需通过 `vibe goal complete` 的验收门禁才能完成 Project Goal。
 
 ## 卸载
 

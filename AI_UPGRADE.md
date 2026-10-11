@@ -1,6 +1,6 @@
 # AI 升级指南
 
-适用于已经安装旧版 Vibe Coding Codex Global Core，需要升级到 0.5.0 的电脑。
+适用于已经安装旧版 Vibe Coding Codex Global Core，需要升级到 0.6.0 的电脑。
 
 本版本把新项目默认格式切到 format 2，并把 format 1 的退役分为“停止写入 / 停止读取 /
 停止支持”三个需要用户单独确认的关口。升级前先阅读 [docs/RELEASE-NOTES.md](docs/RELEASE-NOTES.md)。
@@ -105,7 +105,7 @@ AI 应：
 - `a-loop-control` 可发现。
 - `roles.json` 的 8 个角色都能渲染。
 - `.opencode` command/agent 校验已不存在。
-- `loopctl validate` 通过。
+- `vibe validate` 通过。
 - 原生 `/goal` 是唯一 continuation 控制器。
 - Stop Hook 未安装。
 

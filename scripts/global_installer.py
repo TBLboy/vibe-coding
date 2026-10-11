@@ -784,7 +784,7 @@ def install_or_update(
     print(f"[+] Skills: {skills}")
     print(f"[+] Backup: {backup_dir}")
     print("[*] New projects default to project-log format 2.")
-    print("[*] Format 2 is the only supported project-log format; format 1 was retired.")
+    print("[*] format 2 is the only supported project-log format; format 1 was retired.")
 
 
 def verify(root: Path, home: Path, skills: Path, *, check_plugin: bool = False) -> None:

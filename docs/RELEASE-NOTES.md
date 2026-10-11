@@ -1,6 +1,6 @@
 # 发布说明
 
-## 0.6.0 —— Format 3：Git 账本为唯一事实源
+## 0.6.0 —— 0.6 ledger architecture：Git 账本为唯一事实源
 
 ### 一句话
 
@@ -26,8 +26,9 @@
 - 账本领先时只回放缺失尾部、不重写历史；SQLite 领先账本（例如账本被回滚或从未导出）时
   重新导出，且共享命令必须逐字节一致，否则 fail closed 报 `ledger_diverged`。
 - `state-attach` 双向追平：干净克隆从账本重建，账本为空/落后的工作目录从 SQLite 重新导出。
-- `portability-status` 与生成视图的账本新鲜度按命令身份判定，不再只看 revision/事件数；
-  同 revision 的异源账本不会被报告为 portable。
+- `portability-status` 把本地一致性与远端耐久性分开报告：本地新鲜度按命令身份判定（同 revision
+  的异源账本不会被判为一致），远端耐久性由知识库归档配置决定，未配置时报告
+  `archive_not_configured`，而不是继续给出 `portable=true`。
 
 ### 项目级日志
 
@@ -48,10 +49,18 @@
 - 账本目录 `.project-log/ledger/v1/ledger.jsonl` 与 `state-format.json` 结构不变；
   旧的分支级 SQLite 只需一次 `state-attach` 即可从账本重建为项目级。
 - 非 Git 的 work 目录行为不变，identity 仍为 `branch: "local"`。
-- format 1 的只读兼容与分步退役窗口（`stop-writing`、`stop-reading`、`stop-support`）
-  保持不变，仍然每一步都需要用户确认，未获授权时不会改写任何项目的 `.project-log/`。
+- **Project Log format 2 是唯一受支持的格式。** format 1 已完成退役：`SUPPORTED_FORMATS`
+  只含 `2`，`vibe`/Hooks 不再解析或写入 format 1；旧模板、旧解析分支、迁移工具
+  （`state_migrate`）、兼容入口（`loopctl`/`loop_state`）与三个分步退役关口一并移除。
+- format 1 的历史文件完整保留、不被清理：`.project-log/legacy/`（含 `legacy/unmapped/`）
+  与 `.project-log/docs/archive/legacy-format1/`。这些存档只供人工查阅，不参与状态库、
+  校验或门禁。退役过程不改写任何持久化值（`store_schema` 仍为 3、各 `schema_version` 仍为 1），
+  也不追溯改写历史。
 
 ## 0.5.0 —— format 2 转正为新项目默认
+
+> **已在 0.6.0 取代**：format 1 已退役，`loopctl`、迁移工具与三个退役关口均已移除。
+> 本节关于 format 1 只读兼容、显式迁移与退役关口的描述仅作历史记录，不再反映当前行为。
 
 ### 一句话
 

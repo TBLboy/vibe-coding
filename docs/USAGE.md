@@ -1,6 +1,6 @@
 # Vibe Coding 用户使用指南
 
-Vibe Coding 是一套面向 Codex CLI、VS Code 插件、桌面端和 ACP 外部协议连接端的**用户级全局工程工作流**。
+Vibe Coding 是一套面向 **OpenCode** 客户端的**用户级全局工程工作流**（本版按 `opencode 1.18.31` 验证）。
 
 它不只是给 Agent 增加几条提示词，也不只是一个安装脚本。它把一次开发工作串成一条可恢复、可验证、可追溯的链路：
 
@@ -31,10 +31,10 @@ Vibe Coding 是一套面向 Codex CLI、VS Code 插件、桌面端和 ACP 外部
 
 ### 1.1 全局安装层
 
-全局安装层位于用户目录，负责让多个项目共享同一套 Agent 规则、Skills、Hooks 和 Loop 运行时，典型内容包括：
+全局安装层位于用户目录，负责让多个项目共享同一套 Agent 规则、Skills、插件和 Loop 运行时，典型内容包括：
 
 - 用户级 `AGENTS.md` 中的 Vibe 主 Agent 规则。
-- `CODEX_HOME` 下的 Hooks、配置和备份。
+- `OPENCODE_CONFIG_DIR` 下的 Agent、Commands、Skills、插件、配置和备份。
 - 用户级 Skills 目录。
 - 全局 `vibe-coding` Python 环境及其路径记录。
 - 可选 MCP 和本地插件配置。
@@ -70,13 +70,13 @@ Vibe Coding 是一套面向 Codex CLI、VS Code 插件、桌面端和 ACP 外部
 - **最新在最上**：最新会话区块或最新阶段段落位于文件顶部，旧内容依次向下。
 - **头部快照**：顶部维护简短稳定的“当前状态”区块，每次更新时覆盖而不是追加，方便不翻页即可恢复。
 - **超限归档**：`current-session.md` 超过约 50-100 KB 或会话区块达到约 10 条时，把旧区块移到 `docs/archive/`；`progress.md` 超过约 50-100 KB 时做同样处理。归档保留全部历史，不删除事实。
-- **单一事实源**：精确当前状态和下一步以 `loop/active-run.yaml`、`loop/handoff.md` 为权威状态源；两个 md 摘要不得与之矛盾。机器维护的 `loop/` 与 `verification/evidence.yaml` 文件不要手工重排。
+- **单一事实源**：精确当前状态和下一步以 Project Log format 2 状态库、Git 账本与生成的 `handoff.md` 为权威状态源；两个 md 摘要不得与之矛盾。状态库、账本与生成视图不要手工重排。
 
 ### 1.3 当前对话层
 
-当前 Codex 对话负责执行一个有限工作单元。它可以被压缩、暂停、切换或重启，因此不能把聊天上下文当作唯一状态。
+当前 OpenCode 对话负责执行一个有限工作单元。它可以被压缩、暂停、切换或重启，因此不能把聊天上下文当作唯一状态。
 
-SessionStart 和 PreCompact Hook 会从项目日志恢复紧凑上下文。恢复只是让 Agent 重新获得事实状态，不代表任务已经完成；有未完成任务时，Agent 应继续执行具体下一步。
+OpenCode 插件在会话开始与压缩时会从项目日志恢复紧凑上下文。恢复只是让 Agent 重新获得事实状态，不代表任务已经完成；有未完成任务时，Agent 应继续执行具体下一步。
 
 ---
 
@@ -86,7 +86,7 @@ SessionStart 和 PreCompact Hook 会从项目日志恢复紧凑上下文。恢�
 
 建议准备：
 
-- 当前可用的 Codex 客户端。
+- 当前可用的 OpenCode 客户端。
 - Python 3.11 或更高版本。
 - Conda、Miniforge 或 Miniconda，用于创建统一的 `vibe-coding` 环境。
 - 如需拉取可选 MCP 或访问 GitHub 远端，准备可用的网络代理。
@@ -102,10 +102,10 @@ export HTTPS_PROXY=http://127.0.0.1:10808
 
 ### 2.2 统一 Vibe Python
 
-安装器、Hooks、`loopctl`、项目校验和包校验使用统一的用户级 Python。安装器会优先使用：
+安装器、插件、项目校验和包校验使用统一的用户级 Python。安装器会优先使用：
 
 ```text
-${CODEX_HOME:-$HOME/.codex}/vibe-python
+${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/vibe-python
 ```
 
 如果该文件不存在，包装脚本会尝试寻找 Conda/Miniforge/Miniconda，创建或修复名为 `vibe-coding` 的 Python 3.11 环境，并安装：
@@ -161,7 +161,7 @@ Windows PowerShell：
 安装完成后建议验证：
 
 ```bash
-${CODEX_HOME:-$HOME/.codex}/vibe-workflow/scripts/loopctl.py --help
+"$(cat "${CODEX_HOME:-$HOME/.codex}/vibe-python")" "${CODEX_HOME:-$HOME/.codex}/vibe-workflow/scripts/vibe.py" --help
 python scripts/global_installer.py verify
 ```
 
@@ -195,11 +195,9 @@ PY="$(cat "${CODEX_HOME:-$HOME/.codex}/vibe-python")"
 
 > Windows 上如果 Codex 报告 Hook 启动失败，请参考 `AI_INSTALL.md` 的“Windows Hook 命令适配（Codex 0.147.0+）”。Linux/macOS 不需要该适配。
 
----
-
 ## 3. 第一次接入一个项目
 
-在项目根目录打开 Codex，然后直接告诉 Agent：
+在项目根目录打开 OpenCode，然后直接告诉 Agent：
 
 ```text
 初始化这个工程
@@ -242,13 +240,13 @@ Agent 应完成以下检查：
 也可以手动运行：
 
 ```bash
-PY="$(cat "${CODEX_HOME:-$HOME/.codex}/vibe-python")"
-"$PY" runtime/scripts/validate_project.py --root .
-"$PY" "$HOME/.codex/vibe-workflow/scripts/loopctl.py" --root . --json restore
-"$PY" "$HOME/.codex/vibe-workflow/scripts/loopctl.py" --root . validate
+PY="$(cat "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/vibe-python")"
+VIBE="$HOME/.config/opencode/vibe-workflow/scripts/vibe.py"
+"$PY" "$VIBE" --root . status
+"$PY" "$VIBE" --root . validate
 ```
 
-新项目的预期结果是：Project Log schema 通过，Loop 状态可读取，且没有错误的 active task。
+新项目的预期结果是：Project Log format 2 状态库结构完整，且没有错误的 active task。
 
 ---
 
@@ -410,6 +408,19 @@ PY="$(cat "${CODEX_HOME:-$HOME/.codex}/vibe-python")"
 
 覆盖对象发生变化后，旧证据应变为 `stale`，不能删除旧证据来掩盖失效。
 
+#### 两个验证入口的分工
+
+框架有两个校验入口，检查范围不同，不能互相替代：
+
+| 入口 | 检查内容 | 何时使用 |
+|---|---|---|
+| `vibe validate` | 状态库结构完整性：账本重放与投影一致、schema、sequence 与生命周期不变量、失效的文档引用 | 日常快速自检；通过只说明事实源本身结构完整 |
+| `validate_project.py --root <项目>` | 在 `vibe validate` 的全部检查之上追加：`implemented-unverified` 任务的证据覆盖、`complete` Goal 的成功条件与必需证据、多 active Goal 的歧义、记录 payload 的长度边界、迁移状态标记 | 宣布里程碑、Goal 完成或交付之前的完整审计 |
+
+`validate_project.py` 比 `vibe validate` 严格；`vibe validate` 通过**不代表**门禁已经满足。
+
+当存在多个 active Goal 时，`active_goal_id()` 会**直接失败**（`state_conflict`）而不是猜测：`vibe goal` 与 `compact_context` 都会给出显式歧义提示，而不是把默认目标指向其中某一个。`validate_project.py` 也会把这个歧义作为诊断报出。需要显式传入 goal id，或者先把 active Goal 收敛到一个。
+
 ### 4.7 对齐、复盘和沉淀
 
 实现后可以继续说：
@@ -440,7 +451,7 @@ Project Goal 保存在项目日志中，描述项目级目标、成功条件和�
 Project Goal = 这个项目/增量要达到什么结果
 ```
 
-没有 Project Goal 时，`loopctl evaluate goal` 会明确报告未定义，而不是假装完成。
+没有 Project Goal 时，`vibe goal complete` 会明确报告未定义，而不是假装完成。
 
 ### 5.2 Codex 原生 Goal
 
@@ -451,6 +462,8 @@ Native Goal = 当前 Codex 线程如何继续运行
 ```
 
 Project Goal 和 Native Goal 可以绑定，但二者不能互相覆盖事实。
+
+原生 Goal 的完成不构成项目完成的证据：宣布完成前仍必须通过 `vibe goal complete` 的证据门禁。
 
 ### 5.3 Vibe Loop 状态
 
@@ -465,16 +478,16 @@ Loop Core 记录阶段、任务、失败计数、证据有效性和 handoff。�
 常用命令：
 
 ```bash
-PY="$(cat "${CODEX_HOME:-$HOME/.codex}/vibe-python")"
-LOOP="$HOME/.codex/vibe-workflow/scripts/loopctl.py"
+PY="$(cat "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/vibe-python")"
+VIBE="$HOME/.config/opencode/vibe-workflow/scripts/vibe.py"
 
-"$PY" "$LOOP" --root . --json restore
-"$PY" "$LOOP" --root . --json status
-"$PY" "$LOOP" --root . validate
-"$PY" "$LOOP" --root . handoff
+"$PY" "$VIBE" --root . status
+"$PY" "$VIBE" --root . context TASK-001
+"$PY" "$VIBE" --root . validate
+"$PY" "$VIBE" --root . render
 ```
 
-通常用户不需要手工编辑 Loop YAML。遇到状态不一致时，优先让 Agent 读取事件、项目日志和当前任务，再决定是继续、handoff、回到上游阶段还是清理残留状态。
+通常用户不需要手工编辑状态库。遇到状态不一致时，优先让 Agent 读取账本、项目日志和当前任务，再决定是继续、handoff、回到上游阶段还是清理残留状态。
 
 ### 5.4 失败和重试
 
@@ -551,8 +564,6 @@ Vibe Coding 的规则和项目日志与接入端无关，以下客户端共享�
 
 多客户端并不意味着多个独立 Loop。项目日志是共享事实源，当前线程的 Native Goal 仍由各自 Codex 会话控制。
 
----
-
 ## 8. cc-switch 与可选 MCP
 
 ### 8.1 cc-switch 通用配置
@@ -609,8 +620,6 @@ python scripts/global_installer.py verify
 - 核心 Hooks 和 Project Log 是否仍然正常。
 
 MCP 是可选增强，不应阻塞没有 MCP 时的核心 Vibe 工作流。
-
----
 
 ## 9. 常见操作速查
 
@@ -684,11 +693,11 @@ vibe 恢复当前项目，先读取 current-session、任务、证据和 Loop �
 只补齐本地缺失的 `docs/` 文件（不覆盖本地文档），最后自动执行 `state-attach` 与 `validate`
 重建并校验本机 SQLite。知识库里没有本项目副本、或两边 `project_id` 不一致时会明确报错。
 
-### 导出与校验 Format 3 账本
+### 导出与校验 Git 账本
 
 ```bash
-PY="$(cat "${CODEX_HOME:-$HOME/.codex}/vibe-python")"
-VIBE="$HOME/.codex/vibe-workflow/scripts/vibe.py"
+PY="$(cat "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/vibe-python")"
+VIBE="$HOME/.config/opencode/vibe-workflow/scripts/vibe.py"
 "$PY" "$VIBE" --root . ledger verify
 ```
 
@@ -710,17 +719,24 @@ VIBE="$HOME/.codex/vibe-workflow/scripts/vibe.py"
 或 `empty`（尚无账本）。如果本机 SQLite 里有账本尚未包含的命令，对账会以 `ledger_behind`
 拒绝重建，避免丢掉未归档的本地进度。
 
-### 检查日志是否可移植
+### 检查本地一致性与远端耐久性
 
 ```bash
 "$PY" "$VIBE" --root . portability-status
 ```
 
-`portable=false` 表示本机历史还没有安全落到 Git 账本里。输出区分几种情况：
-`unexported_commands>0` 表示账本落后于 SQLite（正常情况下不会出现，写入是账本优先）；
-`git.ledger_tracked=false` 表示账本还没被 Git 跟踪；`git.uncommitted_ledger_changes=true`
-表示账本改动尚未提交；`git.unpushed_commits>0` 表示已提交但未推送。handoff 视图也会在
-账本落后时显示 `NOT PORTABLE` 提示。
+输出把两件事**分开**报告：
+
+- `local_consistency.status`：本机账本是否是当前 store 的忠实、最新副本。
+  `consistent` 表示一致；`out_of_sync` 表示账本落后（`unexported_commands>0`，正常情况下
+  不会出现，因为写入是账本优先）；`unknown` 表示无法读取本地 store。
+- `archive_status`：本机是否配置了知识库归档；未配置时报告 `archive_not_configured`。
+- `remote_durability`：两者的实际结论。`archive_not_configured` 时为 `unknown`，已配置但
+  尚未验证归档同步时为 `unverified`。
+
+**本地一致不等于可移植。** plain 工作目录自身没有远端，跨机耐久性由知识库归档提供，所以不再
+有单一的 `portable` 布尔值——它会把"本机账本新鲜"误报成"历史已安全落盘"。要让历史真正耐久，
+运行 `a-project-log-archive` 把 `.project-log` 归档并推送到知识库。
 
 ---
 
@@ -734,56 +750,58 @@ VIBE="$HOME/.codex/vibe-workflow/scripts/vibe.py"
 不要只汇报恢复摘要。根据记录中的 next action 继续执行；如果没有活动任务，就为我的新请求创建一个 run。
 ```
 
-### 10.2 SessionStart 显示了旧任务
+### 10.2 会话恢复显示了旧任务
 
 先运行：
 
 ```bash
-PY="$(cat "${CODEX_HOME:-$HOME/.codex}/vibe-python")"
-"$PY" "$HOME/.codex/vibe-workflow/scripts/loopctl.py" --root . --json restore
-"$PY" "$HOME/.codex/vibe-workflow/scripts/loopctl.py" --root . validate
+PY="$(cat "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/vibe-python")"
+VIBE="$HOME/.config/opencode/vibe-workflow/scripts/vibe.py"
+"$PY" "$VIBE" --root . status
+"$PY" "$VIBE" --root . validate
 ```
 
-检查 `.project-log/loop/active-run.yaml`、`events.jsonl` 和 `handoff.md` 是否一致。不要直接删除事件；应保留清理或完成事件，使状态变化可追溯。
+检查 Git 账本 `.project-log/ledger/v1/ledger.jsonl`、状态库与生成的 `handoff.md` 是否一致。不要直接删除账本事件；应保留清理或完成事件，使状态变化可追溯。
 
 ### 10.3 Project Log 校验失败
 
 先区分：
 
-- YAML 解析失败：检查缩进、冒号、特殊字符和未引用的字符串。
-- schema 失败：检查必填字段、枚举值和字段类型。
+- 账本/投影不一致：运行 `vibe state-attach` 从账本重建本机 SQLite。
+- schema 失败：检查记录必填字段、枚举值和字段类型。
 - 引用失败：检查 task、decision、evidence 和 business logic ID 是否存在。
-- Loop 失败：检查 active run 的最后事件、状态和计数器。
+- 门禁失败：检查任务证据覆盖、Goal 成功条件与独立复核。
 
 运行：
 
 ```bash
-PY="$(cat "${CODEX_HOME:-$HOME/.codex}/vibe-python")"
-"$PY" runtime/scripts/validate_project.py --root .
-"$PY" "$HOME/.codex/vibe-workflow/scripts/loopctl.py" --root . validate
+PY="$(cat "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/vibe-python")"
+VIBE="$HOME/.config/opencode/vibe-workflow/scripts/vibe.py"
+"$PY" "$VIBE" --root . validate
+"$PY" "$VIBE" --root . ledger verify
 ```
 
-### 10.4 Windows Hook 失败
+### 10.4 测试失败但代码可能没有问题
+
+先判断失败来源：实现、需求、技术选择、环境还是验证工具。比如网络不可用导致 MCP 拉取失败，不应被记录为产品实现失败；测试夹具自身不兼容，也不能通过修改业务代码解决。
+
+---
+
+### 10.5 Windows Hook 失败
 
 Codex 0.147.0 及更新版本在部分 Windows 环境下对 Hook 命令的引号解析方式发生变化。如果错误表现为 Hook 进程没有启动，而脚本直接运行正常，按 `AI_INSTALL.md` 中的 Windows 专用适配步骤检查 `commandWindows`；不要修改 Linux/macOS 的 `command`。
 
-### 10.5 cc-switch 切换后 Hooks、插件或 marketplace 消失
+### 10.6 cc-switch 切换后 Hooks、插件或 marketplace 消失
 
 这通常意味着 cc-switch 整写了 `config.toml`。处理顺序：
 
 1. 保留当前配置和安装器备份。
-2. 重新生成当前宿主机的 cc-switch 通用配置。
+2. 重新生成当前宿主机 cc-switch 通用配置。
 3. 确认 Vibe 标记块完整。
 4. 运行安装器 update/verify。
 5. 重启 Codex 会话。
 
 不要把另一台机器生成的配置直接复制过来。
-
-### 10.6 测试失败但代码可能没有问题
-
-先判断失败来源：实现、需求、技术选择、环境还是验证工具。比如网络不可用导致 MCP 拉取失败，不应被记录为产品实现失败；测试夹具自身不兼容，也不能通过修改业务代码解决。
-
----
 
 ## 11. 安全边界和使用习惯
 
@@ -805,17 +823,16 @@ Codex 0.147.0 及更新版本在部分 Windows 环境下对 Hook 命令的引号
 如果重新打开一个旧项目，推荐第一句话是：
 
 ```text
-vibe 恢复。请读取项目根目录的 AGENTS.md、.project-log/current-session.md、workflow、任务清单、需求基线、决策、验证证据和 Loop 状态，然后继续执行精确下一步。
+vibe 恢复。请读取项目根目录的 AGENTS.md、.project-log/current-session.md，用 vibe status / vibe context 读取状态库中的任务、需求基线、决策、证据有效性与 Run 状态，然后继续执行精确下一步。
 ```
 
 恢复后重点查看：
 
 1. `current-session.md`：最近一次会话的结论和下一步。
-2. `tasks/task-list.yaml`：任务状态和 `done_when`。
-3. `loop/active-run.yaml`：当前阶段、任务、状态和计数器。
-4. `loop/handoff.md`：压缩或暂停前的交接摘要。
-5. `verification/evidence.yaml` 与 `loop/evidence-index.yaml`：证据是否仍然有效。
-6. `business-logic/open-questions.yaml`：是否有未解决的 C 级问题。
+2. `vibe status` / `vibe context <task-id>`：当前阶段、任务、状态、阻塞与精确下一步。
+3. 生成的 `handoff.md`：压缩或暂停前的交接摘要。
+4. `vibe gate --task <TASK-ID>`：任务证据覆盖与门禁是否满足。
+5. 开放 C 级问题：是否仍有未解决的 `C` 级问题阻塞推进。
 
 如果状态已经是 `complete`，不要继续恢复旧 run；把用户的新请求作为新的任务，并先创建新的 run。
 
@@ -849,7 +866,7 @@ vibe 恢复。请读取项目根目录的 AGENTS.md、.project-log/current-sessi
 
 ## 14. 事务状态（format 2）与初始化
 
-format 2 是框架的默认格式：新建项目直接生成新格式，不再需要实验开关。任何已有 `.project-log` 都不会被覆盖——初始化报告 `skipped` 并保持原样。存量旧格式项目在迁移窗口内继续可用，迁移路径见本节末尾。生产契约的冻结原文在框架仓库迁移后保存于 `.project-log/legacy/specs/framework-landing-contract.md`。
+format 2 是框架**唯一支持**的格式：新建项目直接生成新格式，不再需要实验开关。任何已有 `.project-log` 都不会被覆盖——初始化报告 `skipped` 并保持原样。format 1 已退役，其历史文件保留在 `.project-log/legacy/` 下，任何命令都不再解析它们。生产契约的冻结原文在框架仓库迁移后保存于 `.project-log/legacy/specs/framework-landing-contract.md`。
 
 通过配置好的原生 `vibe.ps1` / `vibe.sh` 入口调用：
 
@@ -857,17 +874,17 @@ format 2 是框架的默认格式：新建项目直接生成新格式，不再�
 --root <project> init
 --root <project> status
 --root <project> validate
---root <project> task begin|update|wait|resume|handoff|finish|cancel
+--root <project> task create|reopen|begin|update|wait|resume|handoff|finish|cancel
 --root <project> record create|update|link
 --root <project> evidence record|invalidate|refresh
 --root <project> review record
 --root <project> gate --task TASK-001
---root <project> goal update|complete --id GOAL-001
+--root <project> goal create|update|cancel|complete --id GOAL-001
+--root <project> workspace clear|status|history
+--root <project> verification preflight|run --action unittest
 --root <project> route --path <file> --signal <signal>
 --root <project> context TASK-001 --budget-bytes 4096
 --root <project> render
---root <project> migrate preview|apply|resume|rollback
---root <project> exchange status|export|import|finish|abandon
 ```
 
 需要脚本化或批量写入时，仍可使用底层统一信封。`command.json` 是 UTF-8 JSON，而不是需要跨 Shell 转义的内联字符串：
@@ -882,7 +899,7 @@ format 2 是框架的默认格式：新建项目直接生成新格式，不再�
 }
 ```
 
-每个新的业务操作使用新的 `command_id` 和最近观察到的 `revision`。网络或调用中断后，重试原始信封（包括原始 revision），返回原回执；不能修改同一 ID 的载荷或 revision。`goal.create` 显式创建目标；任务不自动继承历史目标。等待用户必须记录问题引用和恢复条件。
+每个新的业务操作使用新的 `command_id` 和最近观察到的 `revision`（包络还可选带 `expected_generation` 围栏令牌，见下文）。网络或调用中断后，重试原始信封（包括原始 revision），返回原回执；不能修改同一 ID 的载荷或 revision。`goal.create` 显式创建目标；任务不自动继承历史目标。等待用户必须记录问题引用和恢复条件。
 
 `--covers`、`--version-binding`、`--payload`、`--scope`、`--success-conditions` 和 `--required-evidence` 接受 JSON。值以 `@` 开头时从文件读取，其余情况按内联 JSON 解析。Windows PowerShell 5.1 在把参数交给原生程序时会破坏内联 JSON 的引号（典型症状是 `covers must be valid JSON`），因此这些参数在 Windows 上一律使用 `@file`：把 `{"tasks":["TASK-001"]}` 写入 `covers.json`，再传 `--covers @covers.json`。
 
@@ -892,89 +909,60 @@ format 2 是框架的默认格式：新建项目直接生成新格式，不再�
 - `evidence`：证据状态、覆盖范围与产物哈希绑定；
 - `reviews`：任务级独立复核、结论与证据引用。
 
-长文档正文只放在 `.project-log/docs/**`，结构化记录只保存 `doc_ref`（路径与内容哈希）。`task.finish` 要求至少一条 `valid` 且覆盖该任务的证据；这里的“覆盖”指证据的 `covers.tasks` 列出该任务 ID，只用 `--task-id` 归属不足以通过 `vibe gate`。高风险任务还要求独立 `go` 复核。`goal.complete` 会逐条检查 `success_conditions`、`required_evidence` 与显式 `not-applicable` 理由。`evidence refresh` 会在覆盖文件字节变化后把证据写成 `stale`，旧证据不会被删除。
+长文档正文只放在 `.project-log/docs/**`，结构化记录只保存 `doc_ref`（路径与内容哈希）。`task.finish` 要求至少一条 `valid` 且覆盖该任务的证据；这里的“覆盖”指证据的 `covers.tasks` 列出该任务 ID，只用 `--task-id` 归属不足以通过 `vibe gate`。高风险任务还要求独立 `go` 复核。风险等级为 `strict`（或 `high`/`critical`）、或 `verification.level >= 3` 的任务还受一条机械验证下限约束：若它仅由“声称绑定版本、却没有文件哈希”的证据覆盖（`version_binding` 存在但没有 `file_hashes`），适用性无法被任何人重算，门禁按失败处理，并要求补上绑定到字节的证据；若覆盖它的证据根本没有声明绑定（例如人工或外部检查），门禁不阻塞，但会在 `gate` 结果的 `notes` 里明说“机械复现未经重算确认”——`unknown` 不会被悄然当作已独立复现。`goal.complete` 会逐条检查 `success_conditions`、`required_evidence` 与显式 `not-applicable` 理由。`evidence refresh` 会在覆盖文件字节变化后把证据写成 `stale`，旧证据不会被删除。证据 `version_binding.file_hashes` 的键必须是**绝对路径**，或**相对项目根**（store 的 `root`，通常就是 `.project-log` 的父目录）；指向不存在文件的键会在写入时以 `invalid_input` 被拒绝，而不是留下一条永远无法复算、事后只表现为“覆盖文件变化”的记录。
 
-新格式标记为 `.project-log/state-format.json`。Git 项目数据库位于该 worktree 的 Git 管理目录下，按项目 ID 和分支上下文隔离；非 Git 测试项目位于 `.project-log/.state/`。不会把 SQLite 文件加入 Git。初次切换到没有本地状态的分支会明确失败，而不是沿用另一分支的状态。跨副本同步只在显式执行 `state-export`/`state-import` 时发生，见下文“显式快照交换”；日常任务命令不会触发同步。普通操作不占用或清理 `index.lock`。
+文档引用分两类。显式的 `{"type": "bound_document", "path": ..., "sha256": ..., "subject": {"kind": "task", "id": "TASK-001"}, "binding": "required"}` 是受控依赖：它声明的那个任务（或目标）在文档变化后必须重新验证。`informational_ref` 以及未标注类型的旧式 `doc_ref` 只作为诊断出现在 `validate` 里，不阻塞任何任务——它们既没声明被评对象也没声明绑定方式。
 
-自动摘要保存在数据库旁的 `generated` 目录。以 `CURRENT.json` 指向的同一版本为一组读取，校验项目、上下文、revision 和内容哈希；不逐文件猜测哪个版本更新。`current-session.md`、`progress.md` 和 `handoff.md` 是派生视图，不是另外三份事实源，也不覆盖项目中的同名用户笔记。投影失败时业务提交仍成立，返回 `projection: pending`，可用 `state-views` 修复，不需要再次登记业务操作。生成内容由 revision 唯一决定，因此生成目录里缺失的文件（含 `manifest.json`）会在下次 `state-views` 或 `state-export` 时原地补写，结果中的 `repaired` 列出补写的文件名；已存在但字节不同的文件属于篡改，仍然失败关闭（`projection_incomplete`），不会被静默覆盖。
+取消和清空是两件不同的事。`goal.cancel` 放弃一个尚未达标的目标，并默认连带取消它的开放子任务，它**不**经过完成门禁，也**不会**把目标改写成 complete；已经 complete 的目标只能归档或清空视图。`workspace.clear` 是两阶段操作：先 `--dry-run` 只读拿到受影响集合、`revision` 和 `plan_digest`，再带着 `--expected-revision` 与 `--plan-digest` 提交；期间有任何写入都会以过期计划被拒绝，不会产生部分效果。清空把当前活动视图归档并取消开放中的工作，历史完整保留在 `workspace history` 中，且不会把旧目标默认为 complete。
 
-新格式下，启动 Hook 与会话恢复从状态库读回目标、任务、阻塞、证据有效性与精确下一步；`PostToolUse` 只按记录哈希精确失效证据，不创建旧 YAML。旧写命令明确拒绝，并提示使用正式 `vibe` 入口。初始化中断、缺失数据库、无法识别的标记或遗留投影锁均需保留现场并调查；不要删除标记、数据库或锁来让旧入口接管。
+每次有效清空都会让工作区进入新一代（空工作区上的重复清空是幂等的，不制造新代次）。恢复会话时先看 `status` 的 `workspace_generation`：被取消的工作无法被旧执行器复活——`task.begin` 只接受 `ready`，`task.resume` 只接受暂停态，`task.finish` 只接受 `in-progress`。恢复文本 `context` 会打印当前代次。执行器可以把恢复到的代次作为**围栏令牌**随写入传回（`state-apply` 包络的可选字段 `expected_generation`）：代次与磁盘不符的写入以 `state_conflict` 被拒绝，因此清空前的旧执行器既不能复活旧任务，也不能在新代次里创建新工作；不传该字段时行为与之前一致。
 
-`.project-log/.state/` 是新格式保留的本机所有权目录，Git 项目也保留此目录用于防止格式标记丢失后回退到旧写入器。目录仍在而标记缺失时（包括切换到不含标记的旧分支），入口保守拒绝恢复，不自动补写旧 YAML；需要后续显式迁移/交换流程处理，不能通过删除目录绕过。Hook 从子目录启动时会识别上层新格式项目，路径别名也不能绕过旧写入保护。
+重开已终结的工作用 `task reopen --task-id OLD --new-task-id NEW --reason ...`：它新建一个 `ready` 任务并记录 `reopens` 关系，继承旧任务的 goal，而旧任务与其 Run 完全不变。这样不会覆盖执行史，也不需要让同一个任务 ID 跨多次执行。
 
-### 显式快照交换
+`status` 里的每个任务同时给出三个派生维度：`execution_state`（not-started/active/paused/finished/cancelled）、`verification_state`（pending/passed/failed/stale/not-applicable）和 `review_verdict`（go/conditional/no-go/missing）。它们是只读投影，`tasks.status` 与证据/复核行才是门禁读取的事实，因此“已完成但未验证”不再被一个字段掩盖。任务没有单独的 stored `complete` 终态：实现事实停在 `implemented-unverified` 且不被改写，是否完成由这三个维度实时表达——这正是“历史完成事实保留、当前适用性可变”的落地方式，`validate` 会重新评估所有 `implemented-unverified` 任务，因此被复核过的任务不会因为状态“冻结”而失去监督。
 
-跨副本同步只在显式执行时发生，日常任务命令永远不占用 Git index 锁。快照对象写入 `.project-log/exchange/`，随 Git 提交分发；它们按内容寻址、不可变，且标记为不转换行尾，因此在不同平台克隆之间字节稳定。
+复核者用受控入口取得验证能力：`verification preflight --action <id>` 先回答该动作在这里能不能跑，缺失时报 `verification_capability_missing` 并列出确切缺失项；`verification run --action <id>` 执行受信动作并产出可追溯的 VerificationRun（argv、环境、退出码、输出摘要、覆盖声明与限制）。不在受信动作清单里的动作以 `verification_action_untrusted` 被拒绝——验证能力不通过放宽 Shell 权限获得。`unittest` 与 `unittest-file` 若“命中 0 个测试”则以 `verification_no_tests` 失败：`unittest discover` 在模式不匹配时退出码仍是 0，而一次什么都没执行的运行不能算证据（`unittest-file` 的 `-p` 按 basename 匹配，正是这里曾经踩过的坑）。重算某个已记录摘要用 `verification run --action hash --paths <相对路径> [--paths ...]`：它以固定脚本加 argv 计算 SHA-256，路径必须留在项目内，因此复核者在任何平台都能在受控入口内完成指纹核对，而不必依赖某个平台特有的哈希命令。
 
-```text
---root <test-project> state-attach                      # 新克隆：为当前 worktree 建立本机状态库
---root <test-project> state-export                      # 发布本机状态为不可变快照
---root <test-project> state-import                      # 校验并导入当前 worktree 已发布的快照
---root <test-project> state-exchange                    # 只读查看本机/已发布版本、共同基线与待恢复状态
---root <test-project> state-exchange-finish             # 崩溃后确认待发布快照就是已写入的指针
---root <test-project> state-exchange-abandon --reason "..."   # 确认未发布后放弃待发布意图
-```
+业务澄清可以只留草稿：`open-question` 是真实的记录类型（`open`/`answered`/`deferred`/`archived`），低影响且可逆的未知可以显式记为 `deferred`，不必为每轮澄清新建 Goal/Task。
 
-典型流程：克隆 A 建立状态并 `state-export`，提交推送；克隆 B `state-attach` 后 `state-import` 取得 A 的状态；B 继续工作并 `state-export`；A 拉取后 `state-import` 取得 B 的新命令。两端各自的 `revision` 是本机提交序号，导入的历史命令保留原始分支上下文和原始 revision，因此本机序号与来源坐标不会互相污染。
+新格式标记为 `.project-log/state-format.json`。Git 项目数据库位于该 worktree 的 Git 管理目录下，按项目 ID 和分支上下文隔离；非 Git 测试项目位于 `.project-log/.state/`。不会把 SQLite 文件加入 Git。初次切换到没有本地状态的分支会明确失败，而不是沿用另一分支的状态。跨副本同步由知识库归档承担（见“快照交换已退役”）。普通操作不占用或清理 `index.lock`。
 
-导入只在下列条件全部成立时接受，否则明确拒绝且不改动任何状态：
+自动摘要保存在数据库旁的 `generated` 目录。以 `CURRENT.json` 指向的同一版本为一组读取，校验项目、上下文、revision 和内容哈希；不逐文件猜测哪个版本更新。`current-session.md`、`progress.md` 和 `handoff.md` 是派生视图，不是另外三份事实源，也不覆盖项目中的同名用户笔记。投影失败时业务提交仍成立，返回 `projection: pending`，可用 `state-views` 修复，不需要再次登记业务操作。生成内容由 revision 唯一决定，因此生成目录里缺失的文件（含 `manifest.json`）会在下次 `state-views` 时原地补写，结果中的 `repaired` 列出补写的文件名；已存在但字节不同的文件属于篡改，仍然失败关闭（`projection_incomplete`），不会被静默覆盖。
 
-- 快照摘要、指针与载荷哈希一致，且清单字段完整；
-- 项目身份相同，快照确实从本机记录的共同基线派生（否则 `snapshot_diverged`）；
-- 本机没有尚未发布的命令（否则 `unexported_changes`，两端版本都保留，不做覆盖式合并）；
-- 双方共享命令的请求与回执字节完全一致（否则 `history_rewritten`）；
-- 快照的实体表与其账本互相一致，不存在没有对应命令的实体行（否则 `invalid_snapshot`）；
-- 快照新增命令的回执与请求、运行和实体语义一致（否则 `invalid_snapshot`）。
+新格式下，会话恢复从状态库读回目标、任务、阻塞、证据有效性与精确下一步；插件在工具执行后只按记录哈希精确失效证据，不创建旧 YAML。已退役的 format 1 写入口不再存在，日常操作统一走正式 `vibe` 入口。初始化中断、缺失数据库或无法识别的标记均需保留现场并调查；不要删除标记或数据库来让旧入口接管。
 
-后两条在写入前重放整个账本，因此“能通过导入”与“能通过 `validate`”不会分离：被拒绝的快照不会改动本机任何字节，也不会把损坏状态再传播给下一个副本。
+`.project-log/.state/` 是格式 2 保留的本机所有权目录。目录仍在而标记缺失时（包括切换到不含标记的旧分支），入口保守拒绝恢复，不自动补写旧 YAML；需要通过显式 `state-attach` 恢复，不能通过删除目录绕过。插件从子目录启动时会识别上层格式 2 项目，路径别名也不能绕过该保护。
 
-普通命令只做本机事务，不读写快照，也不改变交换记录。发布窗口只在写入指针前后短暂持有 Git index 锁：
+### 快照交换已退役
 
-- 锁被别人占用时报 `git_busy`，并保留对方的锁文件；
-- 进程被强杀可能遗留 `index.lock`，同时保留 `pending_kind=export` 与已写入的指针；
-- 恢复步骤是先确认没有其他 Git/Vibe 写入者，再处理遗留锁，然后用 `state-exchange-finish`（指针与待发布快照一致）或 `state-exchange-abandon`（确认未发布）结束待发布状态。Vibe 不会自动删除任何锁或自动清除待发布状态。
+Git 快照交换（`state-export` / `state-import` / `state-exchange*` / `exchange`）**已退役**。
+它硬依赖 Git worktree 根，而本框架的布局契约是一个普通工作目录（见 `docs/TERMINOLOGY.md`），
+因此它在受支持布局下无法工作。
 
-待发布期间仍可接受新的本机命令：`pending_revision` 记录的是发布意图指向的 revision，可以落后于当前 `local_revision`，`state-exchange` 的 `unexported_commands` 会如实显示这些尚未发布的新命令。此时 `validate` 仍然干净，不需要任何修复动作。
+跨机耐久性现在由**知识库归档**承担：`a-project-log-archive` 把 `.project-log` 归档并推送到
+知识库，`a-project-log-align` 从知识库合并回本地。`vibe portability-status` 会分开报告本地
+一致性与归档状态（未配置归档时是 `archive_not_configured`，不是 `portable=true`）。
 
-`state-export` 只有在快照真正发布并确认后才报告成功；如果交换已经完成、只是随后生成派生视图失败，命令返回 `projection_error`（而不是失败退出），指针与 `exported_local_revision` 已经更新，调用方不应据此重试导出。
+日常命令只做本机事务，不读写任何快照，也不占用 Git index 锁。
 
-### 旧格式项目与显式迁移
+### format 1 退役与历史存档
 
-`vibe init` 只用于**新建**项目：目标目录已有 `.project-log` 时报告 `skipped` 并保持原样，绝不原地改写现有记录。存量旧格式项目在迁移窗口内继续可用；要切到 format 2，必须显式执行迁移，不能通过删除标记或状态目录绕过。
+Project Log format 2 是唯一受支持的格式。`vibe init` 只用于**新建**项目：目标目录已有 `.project-log` 时报告 `skipped` 并保持原样，绝不原地改写现有记录。
 
-先只读预演：
+format 1（文件式日志）已退役：`SUPPORTED_FORMATS` 只含 2，任何命令都不再解析或写入 format 1；旧模板、旧解析分支、迁移工具与分步退役关口一并移除。历史文件完整保留，不被清理：
 
-```text
---root <project> migrate preview
-```
+- `.project-log/legacy/`：退役时的 format 1 文件（`workflow.yaml`、`task-list.yaml`、`active-goal.yaml`、`loop/` 等）与 `legacy/unmapped/`；
+- `.project-log/docs/archive/legacy-format1/`：format 1 的文档归档。
 
-预演不读取文件修改时间，也不猜测业务事实。重复 ID、悬空引用、源摘要变化会阻止切换；未知任务字段、无法转换的旧证据、无法复现完成门禁的任务会进入 `.project-log/legacy/unmapped`，不中止迁移也不删除历史。
+这些存档只用于人工查阅，不参与状态库、校验或门禁。
 
-确认预演结果后执行：
+### 版本
 
-```text
---root <project> migrate apply --confirm <preview_hash>
---root <project> migrate resume
---root <project> migrate rollback [--destination <dir>]
-```
-
-`migrate apply` 先备份旧记录，再生成并校验新存储，最后原子切换标记、旧文件与状态库。迁移日志位于 `.project-log/.migration/journal.json`；中断后用 `migrate resume` 从日志继续。`migrate rollback` 恢复旧格式文件，并先把迁移后的新写入导出到 `.project-log/legacy/new-writes/bundle.json`，不会静默丢弃新记录。
-
-### 版本与 format 1 退役关口
-
-查看框架版本、默认格式与退役阶段状态：
+查看框架版本、默认格式与受支持的格式：
 
 ```text
 vibe version
 vibe --version
 ```
 
-format 1 的退役分三步，**每一步都需要用户单独确认**，代理不得自行推进：
-
-| 阶段 | 支持范围变化 |
-|---|---|
-| `stop-writing` | `loopctl`/`vibe` 不再接受 format 1 写入；只读查询与迁移仍可用 |
-| `stop-reading` | `status`/`validate`/`restore` 不再解析 format 1；迁移工具仍可离线运行 |
-| `stop-support` | 移除迁移工具、旧模板与兼容代码 |
-
-在旧格式项目上，只读命令会输出 `legacy format: migrate with vibe migrate` 指引；旧格式写入在迁移窗口内仍然可用，但每次都会在 stderr 输出弃用提示。完整发布说明见 [RELEASE-NOTES.md](RELEASE-NOTES.md)。
+`vibe version` 输出 `framework_version`、`default_format`、`store_schema` 与 `supported_formats`（当前为 `[2]`）。完整发布说明见 [RELEASE-NOTES.md](RELEASE-NOTES.md)。

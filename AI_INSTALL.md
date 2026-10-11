@@ -1,6 +1,6 @@
 # AI 安装指南
 
-本指南用于让 Codex 或其他本机 AI Agent 安装 Vibe Coding Codex Global Core 0.5.0。
+本指南用于让 Codex 或其他本机 AI Agent 安装 Vibe Coding Codex Global Core 0.6.0。
 
 ## 安装目标
 
@@ -23,7 +23,7 @@ AI 必须完成：
 
 ## Vibe Python 环境与安装流程
 
-Vibe Coding 的所有控制层（安装器、Hooks、`loopctl`、项目/包校验）默认运行在统一的 `vibe-coding` Python 3.11 虚拟环境中。完整流程如下：
+Vibe Coding 的所有控制层（安装器、Hooks、`vibe`、项目/包校验）默认运行在统一的 `vibe-coding` Python 3.11 虚拟环境中。完整流程如下：
 
 1. 创建虚拟环境（若还没有 Conda，先安装 Miniforge/Miniconda）：
 
@@ -44,7 +44,7 @@ Vibe Coding 的所有控制层（安装器、Hooks、`loopctl`、项目/包校�
 
 4. 安装器会把该解释器绝对路径写入 `CODEX_HOME/vibe-python`（默认 `~/.codex/vibe-python`），作为框架全局配置；生成的 Hook `command` / `commandWindows` 也绑定该解释器。
 
-5. 后续 Vibe 功能（Hooks、`loopctl`、`validate_project.py`、`validate_package.py` 等）都运行在该环境中，不要用系统 Python 运行它们。
+5. 后续 Vibe 功能（Hooks、`vibe`、`validate_project.py`、`validate_package.py` 等）都运行在该环境中，不要用系统 Python 运行它们。
 
 适配不同用户的场景：
 
@@ -173,7 +173,7 @@ python "$env:CODEX_HOME\vibe-workflow\scripts\vibe.py" --root $TestProject statu
 2. 输入：`vibe 开始：<需求>`。
 3. 完成功能业务逻辑、技术业务逻辑和双向对齐。
 4. 建立 Project Goal。
-5. 使用 Codex 原生 `/goal` 绑定 `loopctl goal-bind` 生成的 objective。
+5. 用 `vibe status` 读取 Project Goal 的成功条件与必需证据，并通过 Codex 原生 `/goal` 建立当前线程 Goal。
 6. 原生 Goal 完成后执行 Project Goal 验收。
 
 首次运行 Hooks 时 Codex 可能要求确认 Hook trust。只在确认安装目录和脚本内容正确后信任。
