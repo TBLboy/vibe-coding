@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""Validate the Codex Vibe Coding package before installation or release."""
+"""Validate the Vibe Coding package (OpenCode client surface) before installation or release."""
 from __future__ import annotations
 
 import argparse
-import json
 from pathlib import Path
 import re
 import sys
@@ -35,15 +34,8 @@ REQUIRED_RUNTIME = {
     "scripts/vibe_python.ps1",
     "scripts/vibe_python.sh",
     "scripts/init_project.py",
-    "scripts/render_subagent_prompt.py",
     "scripts/validate_package.py",
     "scripts/validate_project.py",
-    "hooks/hook_common.py",
-    "hooks/session_start.py",
-    "hooks/post_tool_use.py",
-    "hooks/pre_compact.py",
-    "agents/roles.json",
-    "mcp/optional-mcps.json",
     "project-log-template/current-session.md",
     "project-log-template/progress.md",
     "project-log-template/docs/archive/README.md",
@@ -76,12 +68,6 @@ REQUIRED_PACKAGE_FILES = {
     "README.md",
     "docs/RELEASE-NOTES.md",
     "scripts/opencode_installer.py",
-    "install.ps1",
-    "install.sh",
-    "update.ps1",
-    "update.sh",
-    "uninstall.ps1",
-    "uninstall.sh",
 }
 
 
@@ -134,67 +120,6 @@ def validate(root: Path) -> list[str]:
     for relative in sorted(REQUIRED_OPENCODE):
         if not (root / "runtime" / "opencode" / relative).is_file():
             errors.append(f"missing OpenCode asset: runtime/opencode/{relative}")
-
-    roles_path = root / "runtime/agents/roles.json"
-    if roles_path.is_file():
-        try:
-            roles = json.loads(roles_path.read_text(encoding="utf-8")).get("roles", {})
-            templates = {path.stem for path in (root / "runtime/agents").glob("*.md") if path.name != "README.md"}
-            for role, metadata in roles.items():
-                if role not in templates:
-                    errors.append(f"role has no template: {role}")
-                if metadata.get("skill") not in skill_names:
-                    errors.append(f"role {role} references unknown Skill {metadata.get('skill')!r}")
-            for template in sorted(templates - set(roles)):
-                errors.append(f"role template is not registered: {template}")
-        except Exception as exc:  # noqa: BLE001
-            errors.append(f"failed to validate roles.json: {exc}")
-
-    catalog_path = root / "runtime/mcp/optional-mcps.json"
-    if catalog_path.is_file():
-        try:
-            catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
-            entries = catalog.get("mcps") if isinstance(catalog, dict) else None
-            if not isinstance(entries, list) or not entries:
-                errors.append("optional MCP catalog must contain a non-empty 'mcps' list")
-            else:
-                names: set[str] = set()
-                for entry in entries:
-                    if not isinstance(entry, dict):
-                        errors.append("optional MCP catalog contains a non-object entry")
-                        continue
-                    name = entry.get("name")
-                    kind = entry.get("kind")
-                    if not isinstance(name, str) or not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", name):
-                        errors.append(f"optional MCP catalog has invalid name: {name!r}")
-                    elif name in names:
-                        errors.append(f"optional MCP catalog has duplicate name: {name}")
-                    else:
-                        names.add(name)
-                    if kind == "codex-stdio":
-                        command = entry.get("command")
-                        if not isinstance(command, list) or not command or not all(isinstance(part, str) for part in command):
-                            errors.append(f"optional MCP {name!r} has invalid command")
-                    elif kind == "codex-plugin":
-                        if not isinstance(entry.get("plugin"), str):
-                            errors.append(f"optional MCP {name!r} is missing plugin")
-                    else:
-                        errors.append(f"optional MCP {name!r} has unsupported kind: {kind!r}")
-        except Exception as exc:  # noqa: BLE001
-            errors.append(f"failed to validate optional MCP catalog: {exc}")
-
-    plugin_manifest = root / "plugins/vibe-toolbelt/.codex-plugin/plugin.json"
-    marketplace = root / ".agents/plugins/marketplace.json"
-    if not plugin_manifest.is_file():
-        errors.append("missing optional plugin manifest")
-    if not marketplace.is_file():
-        errors.append("missing local marketplace manifest")
-
-    prompt = root / "prompts/vibe-global-agent.md"
-    if not prompt.is_file():
-        errors.append("missing global agent prompt")
-    elif ".opencode/" in prompt.read_text(encoding="utf-8"):
-        errors.append("global prompt contains obsolete .opencode path")
 
     release_notes = root / "docs/RELEASE-NOTES.md"
     if release_notes.is_file() and VERSION not in release_notes.read_text(encoding="utf-8"):

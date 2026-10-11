@@ -1,6 +1,6 @@
 # Vibe Coding 用户使用指南
 
-Vibe Coding 是一套面向 Codex CLI、VS Code 插件、桌面端和 ACP 外部协议连接端的**用户级全局工程工作流**。
+Vibe Coding 是一套面向 **OpenCode** 客户端的**用户级全局工程工作流**（本版按 `opencode 1.18.31` 验证）。
 
 它不只是给 Agent 增加几条提示词，也不只是一个安装脚本。它把一次开发工作串成一条可恢复、可验证、可追溯的链路：
 
@@ -74,9 +74,9 @@ Vibe Coding 是一套面向 Codex CLI、VS Code 插件、桌面端和 ACP 外部
 
 ### 1.3 当前对话层
 
-当前 Codex 对话负责执行一个有限工作单元。它可以被压缩、暂停、切换或重启，因此不能把聊天上下文当作唯一状态。
+当前 OpenCode 对话负责执行一个有限工作单元。它可以被压缩、暂停、切换或重启，因此不能把聊天上下文当作唯一状态。
 
-SessionStart 和 PreCompact Hook 会从项目日志恢复紧凑上下文。恢复只是让 Agent 重新获得事实状态，不代表任务已经完成；有未完成任务时，Agent 应继续执行具体下一步。
+OpenCode 插件在会话开始与压缩时会从项目日志恢复紧凑上下文。恢复只是让 Agent 重新获得事实状态，不代表任务已经完成；有未完成任务时，Agent 应继续执行具体下一步。
 
 ---
 
@@ -86,7 +86,7 @@ SessionStart 和 PreCompact Hook 会从项目日志恢复紧凑上下文。恢�
 
 建议准备：
 
-- 当前可用的 Codex 客户端。
+- 当前可用的 OpenCode 客户端。
 - Python 3.11 或更高版本。
 - Conda、Miniforge 或 Miniconda，用于创建统一的 `vibe-coding` 环境。
 - 如需拉取可选 MCP 或访问 GitHub 远端，准备可用的网络代理。
@@ -124,8 +124,9 @@ export VIBE_PYTHON=/absolute/path/to/python
 
 ### 2.3 安装方式
 
-OpenCode 版的入口是 `runtime/opencode/install.sh`。仓库根目录的 `install.sh` / `update.sh` /
-`uninstall.sh` 属于 **codex 面**（安装到 `~/.codex`），不要用它们安装 OpenCode 版。
+OpenCode 版的入口是 `runtime/opencode/install.sh`。本分支**不含** codex 交付面（根目录的
+`install.sh` / `update.sh` / `uninstall.sh` 及 `.ps1` 与 `scripts/global_installer.py` 已移除），
+codex 版在 `codex` 分支独立维护。
 
 Linux / WSL：
 
@@ -163,14 +164,14 @@ Windows（PowerShell 5.1/7）实机矩阵尚未验证，本版支持范围为 Li
 
 日常运行可使用平台原生入口，它会读取 `vibe-python`，不要求 PATH 中存在 `py` 或 `python3`。
 
-以下 `vibe.sh` / `vibe.ps1` wrapper 属于 **codex 面**（其配置根默认仍是 `~/.codex`），保留用于 codex 客户端；OpenCode 版请直接使用上文的
-`runtime/opencode/install.sh` 或全局 `vibe` 运行时：
+`vibe.sh` / `vibe.ps1` 是**共享启动器**（安装器把它放到 `<config-home>/vibe-workflow/`）。
+配置根只认 `OPENCODE_CONFIG_DIR`（默认 `~/.config/opencode`），**不再回退 `~/.codex`**。
 
 Windows PowerShell：
 
 ```powershell
-$CodexHome = if ($env:OPENCODE_CONFIG_DIR) { $env:OPENCODE_CONFIG_DIR } else { Join-Path $HOME '.config/opencode' }
-& (Join-Path $CodexHome 'vibe-workflow\vibe.ps1') --root (Get-Location).Path status
+$ConfigHome = if ($env:OPENCODE_CONFIG_DIR) { $env:OPENCODE_CONFIG_DIR } else { Join-Path $HOME '.config/opencode' }
+& (Join-Path $ConfigHome 'vibe-workflow\vibe.ps1') --root (Get-Location).Path status
 ```
 
 Linux/macOS Bash：
@@ -179,7 +180,7 @@ Linux/macOS Bash：
 bash "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/vibe-workflow/vibe.sh" --root "$PWD" status
 ```
 
-该 codex 面 wrapper 也支持 `--codex-home <目录>` 或 `--codex-home=<目录>`。通过 `pwsh -File` 从外部程序启动时，请使用分开的 `--codex-home "D:\配置目录"`：已测试的 PowerShell 7.4.6 宿主会在脚本收到参数前拆开 `--codex-home=D:\配置目录` 中的盘符冒号。入口对这种歧义报错并提示分开传参，不猜测重组路径。直接在 PowerShell 内调用脚本的等号形式不受此限制。
+该启动器也支持 `--config-home <目录>` 或 `--config-home=<目录>`。通过 `pwsh -File` 从外部程序启动时，请使用分开的 `--config-home "D:\配置目录"`：已测试的 PowerShell 7.4.6 宿主会在脚本收到参数前拆开 `--config-home=D:\配置目录` 中的盘符冒号。入口对这种歧义报错并提示分开传参，不猜测重组路径。直接在 PowerShell 内调用脚本的等号形式不受此限制。
 
 解释器优先级为显式 `VIBE_PYTHON`、该目录的 `vibe-python`；配置必须是单行绝对可执行路径，Python 至少为 3.11。配置文件接受 UTF-8 BOM 与 CRLF，但不接受多条路径或相对路径。错误配置明确报错，不静默切换 PATH、WSL 或安装环境；子进程的文本输入输出明确使用 UTF-8。
 
@@ -192,13 +193,11 @@ PY="$(cat "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/vibe-python")"
 "$PY" runtime/scripts/validate_package.py --root .
 ```
 
-> Windows 上的 Codex Hook 适配属于 **codex 面**（见 `codex` 分支文档）；OpenCode 版用插件而非 Hooks，且 Windows 实机矩阵延期。
-
 ---
 
 ## 3. 第一次接入一个项目
 
-在项目根目录打开 Codex，然后直接告诉 Agent：
+在项目根目录打开 OpenCode，然后直接告诉 Agent：
 
 ```text
 初始化这个工程
@@ -454,15 +453,18 @@ Project Goal = 这个项目/增量要达到什么结果
 
 没有 Project Goal 时，`vibe goal complete` 会明确报告未定义，而不是假装完成。
 
-### 5.2 Codex 原生 Goal
+### 5.2 会话 Goal（OpenCode 插件）
 
-Codex 原生 `/goal` 负责当前线程的运行、暂停、恢复、预算和 continuation。它是线程控制器，不应被项目日志中的临时措辞替代。
+会话级 `/goal`、`/pause_goal`、`/resume_goal` 由固定版本的
+`@prevalentware/opencode-goal-plugin@0.1.51` 承担，负责当前会话的运行、暂停、恢复、预算和
+continuation。它是会话控制器，不应被项目日志中的临时措辞替代。
 
 ```text
-Native Goal = 当前 Codex 线程如何继续运行
+会话 Goal = 当前 OpenCode 会话如何继续运行
 ```
 
-Project Goal 和 Native Goal 可以绑定，但二者不能互相覆盖事实。
+Project Goal 和会话 Goal 可以绑定，但二者不能互相覆盖事实；插件状态只是会话控制面，
+**永不作为完成依据**。
 
 ### 5.3 Vibe Loop 状态
 
@@ -546,12 +548,7 @@ Agent 可以推进，但应写入 `decision-log.yaml`，例如：
 
 ## 7. 多客户端使用规则
 
-Vibe Coding 的规则和项目日志与接入端无关，以下客户端共享同一套生命周期：
-
-- Codex CLI。
-- VS Code 插件。
-- Codex 桌面端。
-- ACP 外部协议连接端。
+Vibe Coding 的规则和项目日志与接入端无关；本版面向 OpenCode 客户端（会话 Goal 控制器见 §5.2）。
 
 可以在一个客户端初始化项目，在另一个客户端继续。前提是：
 
@@ -561,47 +558,14 @@ Vibe Coding 的规则和项目日志与接入端无关，以下客户端共享�
 4. 切换客户端后先让 Agent 执行恢复或状态检查。
 5. 不要同时让多个 Agent 修改同一个公共文件或同一个任务的写入范围。
 
-多客户端并不意味着多个独立 Loop。项目日志是共享事实源，当前线程的 Native Goal 仍由各自 Codex 会话控制。
+多客户端并不意味着多个独立 Loop。项目日志是共享事实源，当前会话的运行由各自客户端的
+会话 Goal 控制器掌握。
 
 ---
 
-## 8. cc-switch 与可选 MCP（codex 面）
-
-> 本节描述 **codex 面**的工具（cc-switch、Codex TOML、marketplace）。OpenCode 版不使用
-> cc-switch、也不需要 TOML；可选 MCP 直接在 `opencode.json` 的 `mcp` 段声明（见 §8.2）。
-
-### 8.1 cc-switch 通用配置
-
-如果使用 cc-switch 热切换 Codex 供应商，需要把当前宿主机生成的 Vibe TOML 段放入 cc-switch 的通用配置：
-
-```bash
-python scripts/generate_cc_switch_config.py --output cc-switch-common-config-codex.txt
-```
-
-然后用生成文件中以下标记之间的内容覆盖 cc-switch 通用配置中的对应段：
-
-```text
-# VIBE-CODEX-GLOBAL:CONFIG:BEGIN
-...
-# VIBE-CODEX-GLOBAL:CONFIG:END
-```
-
-注意：
-
-- 生成结果包含绝对路径，**不能跨机器直接复制**。
-- 更换宿主机后重新运行生成脚本。
-- 热切换后建议重新启动 Codex 会话。
-- 若安装器报告配置冲突，不要强行覆盖，先保留备份并比较三方配置。
-
-### 8.2 可选 MCP
+## 8. 可选 MCP
 
 新安装默认只启用核心能力。可选 MCP 需要明确选择，并受网络、代理、Node/uvx/npm 或外部服务影响。
-
-查看 catalog：
-
-```bash
-cat runtime/mcp/optional-mcps.json
-```
 
 OpenCode 版的可选 MCP 直接在 `opencode.json` 的 `mcp` 段声明（`type`、`command`/`url`、
 `enabled`），安装器不强制安装任何一项：
@@ -793,23 +757,7 @@ VIBE="$HOME/.config/opencode/vibe-workflow/scripts/vibe.py"
 "$PY" "$VIBE" --root . ledger verify
 ```
 
-### 10.4 Windows Hook 失败（codex 面）
-
-Codex 0.147.0 及更新版本在部分 Windows 环境下对 Hook 命令的引号解析方式发生变化。如果错误表现为 Hook 进程没有启动，而脚本直接运行正常，按 codex 分支文档中的 Windows 专用适配步骤检查 `commandWindows`；不要修改 Linux/macOS 的 `command`。OpenCode 版使用插件而非 Hooks，不适用该适配。
-
-### 10.5 cc-switch 切换后 Hooks、插件或 marketplace 消失（codex 面）
-
-这通常意味着 cc-switch 整写了 `config.toml`。处理顺序：
-
-1. 保留当前配置和安装器备份。
-2. 重新生成当前宿主机的 cc-switch 通用配置。
-3. 确认 Vibe 标记块完整。
-4. 运行安装器 update/verify。
-5. 重启 Codex 会话。
-
-不要把另一台机器生成的配置直接复制过来。
-
-### 10.6 测试失败但代码可能没有问题
+### 10.4 测试失败但代码可能没有问题
 
 先判断失败来源：实现、需求、技术选择、环境还是验证工具。比如网络不可用导致 MCP 拉取失败，不应被记录为产品实现失败；测试夹具自身不兼容，也不能通过修改业务代码解决。
 

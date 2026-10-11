@@ -1,7 +1,12 @@
-"""TASK-044: release identity and install/upgrade/remove safety."""
+"""TASK-044: release identity and install/upgrade/remove safety.
+
+The two install/update/uninstall tests that used to live here drove the codex
+installer. That installer is gone; the same invariants (a project log is never
+touched, a repeated install is idempotent) are asserted against the OpenCode
+installer in tests/test_opencode_installer.py.
+"""
 from __future__ import annotations
 
-import hashlib
 import json
 from pathlib import Path
 import subprocess
@@ -13,7 +18,6 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "runtime" / "scripts"
 VIBE = SCRIPTS / "vibe.py"
-INSTALLER = ROOT / "scripts" / "global_installer.py"
 if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
@@ -32,14 +36,6 @@ def run(*arguments: str) -> subprocess.CompletedProcess[str]:
 
 def run_vibe(root: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
     return run(str(VIBE), "--root", str(root), *arguments)
-
-
-def tree_digest(root: Path) -> dict[str, str]:
-    return {
-        path.relative_to(root).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
-        for path in sorted(root.rglob("*"))
-        if path.is_file()
-    }
 
 
 class ReleaseSurfaceTests(unittest.TestCase):
@@ -75,46 +71,6 @@ class ReleaseSurfaceTests(unittest.TestCase):
         self.assertIn("format 2", notes)
         self.assertIn("format 2", usage)
         self.assertNotIn("migrate preview|apply|resume|rollback", usage)
-
-    def test_install_update_uninstall_never_touch_project_logs(self) -> None:
-        project = self.root / "work"
-        project.mkdir()
-        created = run_vibe(project, "init")
-        self.assertEqual(created.returncode, 0, created.stdout + created.stderr)
-        before = tree_digest(project)
-        home = self.root / "codex-home"
-        outputs: dict[str, str] = {}
-        for action in ("install", "update", "uninstall"):
-            result = run(
-                str(INSTALLER),
-                action,
-                "--codex-home",
-                str(home),
-                "--without-mcp",
-                "--skip-preflight",
-            )
-            outputs[action] = result.stdout + result.stderr
-            self.assertEqual(result.returncode, 0, outputs[action])
-            self.assertEqual(tree_digest(project), before, action)
-        self.assertIn("format 2", outputs["install"])
-        self.assertIn("format 2", outputs["update"])
-        self.assertIn("not touched", outputs["uninstall"])
-
-    def test_installer_is_repeatable_and_keeps_the_state_file_consistent(self) -> None:
-        home = self.root / "codex-home"
-        first = run(str(INSTALLER), "install", "--codex-home", str(home), "--without-mcp", "--skip-preflight")
-        self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
-        state_file = home / ".vibe-codex-installation-state.json"
-        first_state = json.loads(state_file.read_text(encoding="utf-8"))
-        self.assertEqual(first_state["package_version"], VERSION)
-        self.assertIn("format 2", first.stdout)
-
-        second = run(str(INSTALLER), "install", "--codex-home", str(home), "--without-mcp", "--skip-preflight")
-        self.assertEqual(second.returncode, 0, second.stdout + second.stderr)
-        second_state = json.loads(state_file.read_text(encoding="utf-8"))
-        self.assertEqual(second_state["package_version"], VERSION)
-        self.assertEqual(second_state["installed_at"], first_state["installed_at"])
-
 
 if __name__ == "__main__":
     unittest.main()

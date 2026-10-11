@@ -1,8 +1,8 @@
 function Assert-VibeLauncherArguments {
     param([AllowEmptyCollection()][string[]]$Arguments)
     for ($Index = 0; $Index -lt $Arguments.Count; $Index++) {
-        if ($Arguments[$Index] -match '^--codex-home=[A-Za-z]$' -and ($Index + 1) -lt $Arguments.Count -and $Arguments[$Index + 1] -match '^[\\/]') {
-            throw 'Ambiguous --codex-home argument: PowerShell -File may split drive-qualified equals syntax. Use --codex-home followed by a separate quoted absolute path.'
+        if ($Arguments[$Index] -match '^--config-home=[A-Za-z]$' -and ($Index + 1) -lt $Arguments.Count -and $Arguments[$Index + 1] -match '^[\\/]') {
+            throw 'Ambiguous --config-home argument: PowerShell -File may split drive-qualified equals syntax. Use --config-home followed by a separate quoted absolute path.'
         }
     }
 }

@@ -31,14 +31,13 @@ function resolveRuntime(directory: string, worktree: string): Runtime | null {
     process.env.VIBE_RUNTIME_SCRIPT,
     process.env.VIBE_RUNTIME ? join(process.env.VIBE_RUNTIME, "scripts", "vibe.py") : undefined,
     join(configDir, "vibe-workflow", "scripts", "vibe.py"),
-    join(homedir(), ".codex", "vibe-workflow", "scripts", "vibe.py"),
   ].filter((value): value is string => typeof value === "string" && value.length > 0)
   const script = candidates.find((candidate) => existsSync(candidate))
   if (!script) return null
 
   let python = process.env.VIBE_PYTHON
-  for (const pointer of [join(configDir, "vibe-python"), join(homedir(), ".codex", "vibe-python")]) {
-    if (python) break
+  if (!python) {
+    const pointer = join(configDir, "vibe-python")
     if (existsSync(pointer)) {
       try {
         python = readFileSync(pointer, "utf8").trim()

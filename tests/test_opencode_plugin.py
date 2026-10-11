@@ -182,7 +182,7 @@ class OpenCodePluginTests(unittest.TestCase):
             environment.update({
                 "HOME": str(root / "home"),
                 # node:os homedir() ignores HOME on Windows and reads USERPROFILE,
-                # so pin it too or the probe would resolve the real ~/.codex runtime.
+                # so pin it too or the probe would resolve the real installed runtime.
                 "USERPROFILE": str(root / "home"),
                 "OPENCODE_CONFIG_DIR": str(root / "config"),
             })

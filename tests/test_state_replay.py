@@ -63,7 +63,7 @@ class GoldenReplayTests(unittest.TestCase):
             "id": "TASK-001", "title": "Implement replay", "goal_id": "GOAL-001",
             "extensions": {"risk": "normal"},
         })
-        self.apply("task.update", {"task_id": "TASK-001", "implementer": "codex"})
+        self.apply("task.update", {"task_id": "TASK-001", "implementer": "agent"})
         self.apply("task.begin", {
             "task_id": "TASK-001", "run_id": "RUN-001", "next_action": "write reducer",
         })

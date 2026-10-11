@@ -36,8 +36,14 @@ class DocumentationConsistencyTests(unittest.TestCase):
         self.assertNotIn("migrate preview|apply|resume|rollback", text)
         self.assertNotIn("loopctl", text)
 
-    def test_global_prompt_initializes_format_two_through_vibe(self) -> None:
-        text = (ROOT / "prompts/vibe-global-agent.md").read_text(encoding="utf-8")
+    def test_opencode_global_prompt_initializes_format_two_through_vibe(self) -> None:
+        """The shipped global prompt must send the agent through the formal entry.
+
+        This used to read `prompts/vibe-global-agent.md`, the codex prompt. That prompt
+        and the rest of the codex delivery face were removed; the OpenCode surface's
+        global prompt is `runtime/opencode/AGENTS.md`.
+        """
+        text = (ROOT / "runtime/opencode/AGENTS.md").read_text(encoding="utf-8")
         self.assertIn("scripts/vibe.py", text)
         self.assertIn("init", text)
         self.assertIn("format 2", text)
@@ -53,12 +59,14 @@ class DocumentationConsistencyTests(unittest.TestCase):
         self.assertNotIn("migration window", reference)
 
     def test_user_docs_point_at_the_opencode_entry(self) -> None:
-        """The OpenCode entry must not be displaced by the retained codex surface.
+        """The OpenCode entry must be the only installer a reader can reach.
 
         A review of TASK-076 found docs/USAGE.md still telling readers to run the
-        root ./install.sh, which installs the *codex* client to ~/.codex. The same
+        root ./install.sh, which installed the *codex* client to ~/.codex. The same
         class of drift had already slipped through once (TASK-080 B-b), so the entry
-        point is asserted here instead of being trusted to stay correct.
+        point is asserted here instead of being trusted to stay correct. The codex
+        delivery face has since been removed outright (TASK-126), so the assertion is
+        now also that the misleading files are gone rather than merely unmentioned.
         """
         entry = "runtime/opencode/install.sh"
         for relative in ("README.md", "docs/USAGE.md", "AI_INSTALL.md", "AI_UPGRADE.md"):
@@ -69,6 +77,19 @@ class DocumentationConsistencyTests(unittest.TestCase):
             self.assertIsNone(
                 re.search(r"(?m)^\s*\./install\.sh\b", text),
                 f"{relative} still directs the reader at the codex-surface root installer",
+            )
+        for relative in (
+            "install.sh", "install.ps1", "update.sh", "update.ps1",
+            "uninstall.sh", "uninstall.ps1", "scripts/global_installer.py",
+            "build_release.py", "cc-switch-common-config-codex.txt",
+            "prompts/vibe-global-agent.md", "runtime/agents/roles.json",
+            "runtime/hooks/session_start.py", "runtime/mcp/optional-mcps.json",
+            "plugins/vibe-toolbelt/.codex-plugin/plugin.json",
+            ".agents/plugins/marketplace.json",
+        ):
+            self.assertFalse(
+                (ROOT / relative).exists(),
+                f"{relative} is part of the removed codex delivery face",
             )
 
     def test_no_bare_format_number_naming(self) -> None:

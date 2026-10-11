@@ -17,8 +17,9 @@ into `${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}` by the OpenCode installer.
 | Session Goal and automatic continuation | `@prevalentware/opencode-goal-plugin@0.1.51` | adapted |
 | Install/update/uninstall | `runtime/opencode/install.sh` + `scripts/opencode_installer.py` | supported |
 
-The Codex marketplace, Codex plugin manifest and `cc-switch` TOML generation are intentionally
-not carried into this client surface. OpenCode uses its own plugin and MCP configuration.
+The codex delivery face (its marketplace, plugin manifest, CLI hooks, role templates and
+`cc-switch` TOML generation) is no longer carried in this repository at all -- it lives on the
+`codex` branch. OpenCode uses its own plugin and MCP configuration.
 
 Session Goal is delegated to `@prevalentware/opencode-goal-plugin`, pinned at `0.1.51` and
 registered by the installer as a managed plugin entry. Verified on a real `opencode 1.18.31`

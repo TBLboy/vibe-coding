@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Create or repair the global Conda-backed Python environment for Vibe Coding.
 
-An explicitly configured interpreter (``VIBE_PYTHON`` or ``CODEX_HOME/vibe-python``)
+An explicitly configured interpreter (``VIBE_PYTHON`` or ``OPENCODE_CONFIG_DIR/vibe-python``)
 is never replaced silently. It is repaired in place when it is a Python 3.11+
 interpreter that only lacks the Vibe requirements; otherwise the command fails with
 an actionable message. Setting ``VIBE_PYTHON_REPAIR`` to an affirmative value
@@ -33,9 +33,9 @@ def repair_requested(flag: bool) -> bool:
     return os.environ.get(REPAIR_ENV_NAME, "").strip().lower() in AFFIRMATIVE
 
 
-def codex_home(value: str | None) -> Path:
-    raw = value or os.environ.get("CODEX_HOME")
-    return Path(raw).expanduser().resolve() if raw else (Path.home() / ".codex").resolve()
+def config_home(value: str | None) -> Path:
+    raw = value or os.environ.get("OPENCODE_CONFIG_DIR")
+    return Path(raw).expanduser().resolve() if raw else (Path.home() / ".config" / "opencode").resolve()
 
 
 def configured_python(home: Path) -> tuple[str | None, str | None, str | None]:
@@ -318,7 +318,7 @@ def main() -> int:
         if reconfigure is not None:
             reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--codex-home")
+    parser.add_argument("--config-home")
     parser.add_argument("--requirements", type=Path, required=True)
     parser.add_argument("--env-name", default=os.environ.get("VIBE_CONDA_ENV", DEFAULT_ENV_NAME))
     parser.add_argument("--no-create", action="store_true", help="Do not create a missing Conda environment.")
@@ -331,7 +331,7 @@ def main() -> int:
     args = parser.parse_args()
     try:
         python = ensure_python(
-            codex_home(args.codex_home),
+            config_home(args.config_home),
             args.requirements.expanduser().resolve(),
             args.env_name,
             create=not args.no_create,

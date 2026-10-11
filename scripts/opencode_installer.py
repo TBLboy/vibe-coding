@@ -426,7 +426,7 @@ def plan_sync(
 ) -> tuple[list[tuple[str, str]], list[str], list[str], dict[str, str]]:
     """Decide copy/remove operations and surface conflicts before any write.
 
-    Mirrors the Codex installer semantics: a file that already exists and does
+    Mirrors the uninstall semantics of the rest of the installer: a file that already exists and does
     not match the package is a hard conflict, never a silent overwrite.
     """
     operations: list[tuple[str, str]] = []

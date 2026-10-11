@@ -15,7 +15,7 @@ python_candidates=()
 if [[ -n "${VIBE_PYTHON:-}" ]]; then
   python_candidates+=("$VIBE_PYTHON")
 fi
-for config_home in "${OPENCODE_CONFIG_DIR:-}" "${CODEX_HOME:-$HOME/.codex}" "$HOME/.codex"; do
+for config_home in "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}"; do
   if [[ -n "$config_home" && -f "$config_home/vibe-python" ]]; then
     python_candidates+=("$(<"$config_home/vibe-python")")
   fi

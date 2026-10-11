@@ -49,12 +49,12 @@ class CrossPlatformSurfaceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             target = Path(temporary) / "project"
             target.mkdir()
-            codex_home = Path(temporary) / "codex"
-            codex_home.mkdir()
-            (codex_home / "vibe-python").write_text(sys.executable + "\n", encoding="utf-8")
+            config_home = Path(temporary) / "opencode-config"
+            config_home.mkdir()
+            (config_home / "vibe-python").write_text(sys.executable + "\n", encoding="utf-8")
             result = subprocess.run(
                 [
-                    bash, str(VIBE_SH), "--codex-home", str(codex_home),
+                    bash, str(VIBE_SH), "--config-home", str(config_home),
                     "--root", str(target), "init",
                 ],
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False,
@@ -69,6 +69,8 @@ class CrossPlatformSurfaceTests(unittest.TestCase):
         user who only ever installed the OpenCode client has no ~/.codex at all.
         Pinning the config home to ~/.codex made that launcher look for an
         interpreter that does not exist; it now infers the home from its own path.
+        The ~/.codex fallback itself has since been removed with the codex delivery
+        face, so this test also pins that no codex home is consulted.
         """
         bash = usable_posix_bash()
         if bash is None:
@@ -84,9 +86,8 @@ class CrossPlatformSurfaceTests(unittest.TestCase):
                 key: value for key, value in os.environ.items()
                 if not key.startswith(("CODEX_HOME", "OPENCODE_CONFIG_DIR", "VIBE_PYTHON"))
             }
-            # Point HOME at an empty directory: on a machine that also has the codex
-            # client installed, ~/.codex/vibe-python exists, and a launcher that still
-            # fell back to it would pass this test for the wrong reason.
+            # Point HOME at an empty directory: the launcher must not consult a
+            # codex home, so a fallback would have nothing to find here.
             empty_home = root / "empty-home"
             empty_home.mkdir()
             environment["HOME"] = str(empty_home)

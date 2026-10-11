@@ -4,10 +4,10 @@
 独立派生，不继承 `codex` 分支的提交历史；它与 codex 版**功能对齐、各自独立演进**。
 `main` 已快进到与 `opencode-main` 同一提交，两者内容一致；克隆或下载 ZIP 默认得到 `main`。
 
-> **安装入口是 `./runtime/opencode/install.sh`。**
-> 仓库根目录的 `install.sh` / `update.sh` / `uninstall.sh`（及 `.ps1`）是 **codex 面**的
-> 遗留入口，由 `scripts/global_installer.py` 驱动、安装到 `~/.codex`。它们为保留的
-> codex 交付面服务，**不是** OpenCode 版的入口。OpenCode 客户端的完整表面文档见
+> **安装入口是 `./runtime/opencode/install.sh`。** 本分支**不包含 codex 交付面**：
+> 根目录的 `install.*`/`update.*`/`uninstall.*`、`scripts/global_installer.py`、
+> `runtime/agents/`、`runtime/hooks/`、`prompts/`、`.agents/`、`plugins/vibe-toolbelt/`
+> 等均已移除，codex 版在 `codex` 分支独立维护。OpenCode 客户端的完整表面文档见
 > [runtime/opencode/README.md](runtime/opencode/README.md)。
 
 ## 使用指南
@@ -188,13 +188,16 @@ python -m unittest discover -s tests -p "test_*.py"
 路径**，这是跨平台契约：早期版本写入的主机分隔符键在读取时归一化，并在下一次写入时自动迁移，
 无需手工处理，也不会被误报为冲突。
 
-## 客户端差异与保留的 codex 面
+## 客户端差异与 codex 分支
 
 - OpenCode 与 codex 的行为差异、能力对齐矩阵见
   [runtime/opencode/README.md](runtime/opencode/README.md) 与
   工作目录 `.project-log/docs/opencode-parity-matrix.md`。
-- 仓库仍保留 codex 交付面（`runtime/agents/`、`runtime/hooks/`、`prompts/vibe-global-agent.md`、
-  `scripts/global_installer.py`、根目录的 `install.*`/`update.*`/`uninstall.*`、
-  `runtime/mcp/optional-mcps.json`）。`validate_package.py` 的 `REQUIRED_*` 契约要求它们存在，
-  它们服务 codex 客户端，与 OpenCode 面**互不污染**。
+- 本分支**不含 codex 交付面**：根目录的 `install.*`/`update.*`/`uninstall.*`、
+  `scripts/global_installer.py`、`build_release.py`、`cc-switch-common-config-codex.txt`、
+  `runtime/agents/`、`runtime/hooks/`、`runtime/mcp/optional-mcps.json`、
+  `prompts/vibe-global-agent.md`、`.agents/`、`plugins/vibe-toolbelt/` 已全部移除。
+  codex 版在 `codex` 分支（`cb65aad`）独立维护；`validate_package.py` 的 `REQUIRED_*`
+  契约随之只描述 OpenCode 面。共享启动器也不再回退 `~/.codex`：配置根只认
+  `OPENCODE_CONFIG_DIR`（默认 `~/.config/opencode`）。
 - 两个版本共享的业务规则变更必须**显式同步**，不自动合并。

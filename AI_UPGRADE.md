@@ -2,8 +2,8 @@
 
 适用于已经安装旧版 **Vibe Coding — OpenCode Global Core**，需要升级到 **0.6.0** 的电脑。
 
-> 仓库根目录的 `update.sh` / `update.ps1` 与 `scripts/global_installer.py` 是 codex 面的遗留
-> 入口。OpenCode 版的升级入口是 `runtime/opencode/install.sh update`。
+> OpenCode 版的升级入口是 `runtime/opencode/install.sh update`。仓库**不含** codex 交付面
+> （根目录 `update.sh` / `update.ps1`、`scripts/global_installer.py` 等已移除）。
 
 本版本把 Project Log format 2 确立为唯一受支持的格式，并完成 format 1 退役。升级前先阅读
 [docs/RELEASE-NOTES.md](docs/RELEASE-NOTES.md)。
@@ -49,8 +49,8 @@ Vibe Coding OpenCode Global Core 升级到本包版本。
 ```
 
 `runtime/opencode/install.sh` 会先解析 Python 3.11+ 解释器（`VIBE_PYTHON` →
-`${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/vibe-python` → `CODEX_HOME/vibe-python` →
-`python3` → `python`），再用它执行 `scripts/opencode_installer.py`。
+`${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/vibe-python` → `python3` → `python`），
+再用它执行 `scripts/opencode_installer.py`。
 
 ## 旧格式退役
 
@@ -68,5 +68,5 @@ format 1（`workflow.yaml` 等文件式日志）已退役：`SUPPORTED_FORMATS` 
 ## 平台范围
 
 - **支持**：Linux / WSL。
-- **延期**：Windows（PowerShell 5.1/7 实机矩阵未验证）。旧版文档中的 Windows Hook 适配章节
-  属于 codex 面，与 OpenCode 版无关。
+- **延期**：Windows（PowerShell 5.1/7 实机矩阵未验证）。旧版文档中的 Windows Hook 章节随
+  codex 交付面一并移除，OpenCode 版不使用 Hooks。

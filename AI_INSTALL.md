@@ -2,9 +2,9 @@
 
 本指南用于让 OpenCode 或其他本机 AI Agent 安装 **Vibe Coding — OpenCode Global Core 0.6.0**。
 
-> 仓库根目录的 `install.sh` / `install.ps1` 及 `scripts/global_installer.py` 是 codex 面的遗留
-> 入口（安装到 `~/.codex`），**不要**用它们安装 OpenCode 版。OpenCode 版的入口是
-> `runtime/opencode/install.sh` 与 `scripts/opencode_installer.py`。
+> OpenCode 版的入口是 `runtime/opencode/install.sh` 与 `scripts/opencode_installer.py`。
+> 仓库**不含** codex 交付面（根目录安装脚本、`scripts/global_installer.py` 等已移除），
+> codex 版在 `codex` 分支独立维护。
 
 ## 安装目标
 
@@ -131,7 +131,8 @@ rm -rf "$TMP"
 
 ## 禁止事项
 
-- 不得用仓库根的 `install.sh` / `install.ps1` 安装 OpenCode 版（那是 codex 面）。
+- 不得使用仓库根目录的安装脚本安装 OpenCode 版——本分支已不含它们，入口只有
+  `runtime/opencode/install.sh`。
 - 不得覆盖或删除用户已有的 `AGENTS.md` 内容、`opencode.json` 设置或 `.project-log/`。
 - 不得静默切换解释器版本，也不得在缺少 Conda 时静默使用系统 Python。
 - 不得在源码树内创建 `.project-log/` 或临时测试产物。
