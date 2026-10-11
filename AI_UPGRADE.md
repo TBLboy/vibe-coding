@@ -103,7 +103,7 @@ AI 应：
 - `config.toml` 中只有一个 Vibe config block。
 - `a-loop-control` 可发现。
 - `roles.json` 的 8 个角色都能渲染。
-- 旧 `prompts/` 单体提示词与逐客户端 command/agent 校验面不再存在；规则统一由 `runtime/agents/` 与 Skills 提供。
+- 旧 `.opencode` 逐客户端 command/agent 校验面不再存在；规则统一由 `runtime/agents/roles.json` 与 `prompts/vibe-global-agent.md` 提供。
 - `vibe validate` 通过。
 - 原生 `/goal` 是唯一 continuation 控制器。
 - Stop Hook 未安装。
