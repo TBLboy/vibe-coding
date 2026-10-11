@@ -189,6 +189,8 @@ def main() -> int:
     goal_update.add_argument("--id", required=True)
     goal_update.add_argument("--success-conditions", help="JSON list; @file reads from disk")
     goal_update.add_argument("--required-evidence", help="JSON list; @file reads from disk")
+    goal_update.add_argument("--implementer", help="who implemented the goal (attribution)")
+    goal_update.add_argument("--owner", help="who owns the goal (attribution)")
     goal_complete = goal_sub.add_parser("complete")
     goal_complete.add_argument("--id", required=True)
     goal_cancel = goal_sub.add_parser("cancel", help="cancel a goal without a completion gate")
@@ -435,6 +437,13 @@ def main() -> int:
                 required = _json_argument(args.required_evidence, "required_evidence")
                 if required is not None:
                     payload["required_evidence"] = required
+                # Attribution is what the high-risk completion gate needs to establish
+                # reviewer independence, so it has to be reachable without hand-editing
+                # the ledger (DEC-070).
+                if args.implementer is not None:
+                    payload["implementer"] = args.implementer
+                if args.owner is not None:
+                    payload["owner"] = args.owner
                 result = apply_cli_action(root, "goal.update", payload)
             elif args.goal_action == "cancel":
                 result = apply_cli_action(root, "goal.cancel", {
