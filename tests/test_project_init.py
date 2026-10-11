@@ -93,6 +93,49 @@ class ProjectInitAgentsTests(unittest.TestCase):
         self.assertEqual(result["agents_md"]["status"], "markers-unbalanced")
         self.assertEqual((self.target / "AGENTS.md").read_text(encoding="utf-8"), content)
 
+    def test_update_keeps_bytes_outside_the_block(self):
+        """Bytes outside the managed block must survive, including their line endings.
+
+        `Path.read_text`/`write_text` use universal newlines, so on Windows any write turns
+        every line ending in the file into CRLF -- including the project's own text that this
+        function promises to leave alone.
+        """
+        body = "# 项目规则\n\n- 我自己的行尾是 LF\n"
+        agents = self.target / "AGENTS.md"
+        agents.write_bytes(
+            (ipa.general_block(ipa.load_general_template()) + "\n" + body).encode("utf-8")
+        )
+        before = agents.read_bytes()
+
+        original = ipa.load_general_template
+        ipa.load_general_template = lambda: original() + "\n9. 新规则：模板更新必须能传播。\n"
+        try:
+            result = ipa.initialize(self.target, project_rules="")
+        finally:
+            ipa.load_general_template = original
+
+        self.assertEqual(result["agents_md"]["status"], "updated")
+        after = agents.read_bytes()
+        self.assertNotEqual(before, after)
+        self.assertTrue(after.endswith(body.encode("utf-8")))
+        self.assertNotIn(b"\r\n", after)
+
+    def test_a_second_begin_marker_inside_the_span_is_reported(self):
+        """Two begins with one end means the span is not the block this code assumes.
+
+        Replacing that span would swallow the inner begin marker, so it must report instead.
+        """
+        content = (
+            f"{ipa.GENERAL_BEGIN}\n1. 旧\n{ipa.GENERAL_BEGIN}\n1. 更旧\n"
+            f"{ipa.GENERAL_END}\n\n## 项目级规则\n"
+        )
+        agents = self.target / "AGENTS.md"
+        agents.write_text(content, encoding="utf-8")
+        before = agents.read_bytes()
+        result = ipa.initialize(self.target, project_rules="")
+        self.assertEqual(result["agents_md"]["status"], "markers-ambiguous")
+        self.assertEqual(agents.read_bytes(), before)
+
     def test_dry_run_writes_nothing(self):
         result = ipa.initialize(self.target, project_rules="", dry_run=True)
         self.assertTrue(result["dry_run"])
