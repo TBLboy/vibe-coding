@@ -1,7 +1,8 @@
-"""TASK-049: export the command history to a Git-tracked Format 3 ledger."""
+"""TASK-049: export the command history to the Git-tracked Project Log ledger."""
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import shutil
 import sqlite3
@@ -9,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 import uuid
 
 
@@ -19,8 +21,8 @@ if str(SCRIPTS) not in sys.path:
 
 from state_context import attach, initialize  # noqa: E402
 from state_ledger import (  # noqa: E402
-    LEDGER_RELATIVE, export_ledger, ledger_path, portability_status, read_ledger,
-    render_ledger, verify_ledger,
+    LEDGER_RELATIVE, LEDGER_TEMP_SUFFIX, export_ledger, ledger_path, portability_status,
+    read_ledger, render_ledger, verify_ledger,
 )
 from state_replay import logical_state_hash, reduce_ledger  # noqa: E402
 from state_store import StateError  # noqa: E402
@@ -95,6 +97,17 @@ class LedgerExportTests(unittest.TestCase):
         self.assertEqual(first["sha256"], second["sha256"])
         self.assertEqual(path.read_bytes(), original)
 
+    def test_appended_events_use_lf_on_every_platform(self) -> None:
+        # Windows opens a low-level descriptor in text mode, so the append must force
+        # binary or the ledger would carry CRLF and differ byte-for-byte from the archive
+        # and from a Linux checkout.
+        self.build()
+
+        raw = (self.root / LEDGER_RELATIVE).read_bytes()
+
+        self.assertNotIn(b"\r", raw)
+        self.assertTrue(raw.endswith(b"\n"))
+
     def test_export_rebuilds_a_deleted_ledger(self) -> None:
         self.build()
         path = self.root / LEDGER_RELATIVE
@@ -105,6 +118,72 @@ class LedgerExportTests(unittest.TestCase):
 
         self.assertFalse(result["unchanged"])
         self.assertEqual(path.read_bytes(), expected)
+
+    def test_ledger_rewrite_cleans_up_and_ignores_its_temporary(self) -> None:
+        """A killed rewrite must not leave a file that `git add -A` could stage."""
+        self.build()
+        path = self.root / LEDGER_RELATIVE
+        path.unlink()  # force a real rewrite
+
+        result = export_ledger(self.store)
+
+        self.assertFalse(result["unchanged"])
+        self.assertTrue(path.is_file())
+        ledger_directory = path.parent
+        self.assertEqual(
+            list(ledger_directory.glob("*.tmp*")), [], "a temporary file was left behind"
+        )
+        ignore = ledger_directory / ".gitignore"
+        self.assertTrue(ignore.is_file(), "the ledger directory has no ignore rule")
+        self.assertIn(".tmp-", ignore.read_text(encoding="utf-8"))
+
+        # The rule must actually cover a leftover orphan, not merely exist.
+        orphan = ledger_directory / f"{path.name}{LEDGER_TEMP_SUFFIX}deadbeef"
+        orphan.write_text("orphan\n", encoding="utf-8")
+        subprocess.run(["git", "init", "-q", str(self.root)], check=True)
+        checked = subprocess.run(
+            ["git", "-C", str(self.root), "check-ignore", "-q",
+             str(orphan.relative_to(self.root))],
+            capture_output=True,
+        )
+        self.assertEqual(checked.returncode, 0, "git does not ignore the leftover temporary file")
+
+    def test_ledger_ignore_rule_is_appended_to_an_existing_gitignore(self) -> None:
+        """A ledger directory that already carries a .gitignore still gets the rule."""
+        self.build()
+        path = self.root / LEDGER_RELATIVE
+        ledger_directory = path.parent
+        ledger_directory.mkdir(parents=True, exist_ok=True)
+        ignore = ledger_directory / ".gitignore"
+        ignore.write_text("# user rule\n*.bak\n", encoding="utf-8")
+        path.unlink()
+
+        export_ledger(self.store)
+
+        contents = ignore.read_text(encoding="utf-8")
+        self.assertIn("*.bak", contents, "the existing rule was lost")
+        self.assertIn(f"*{LEDGER_TEMP_SUFFIX}*", contents, "the ignore rule was not appended")
+        # Running again must not duplicate the rule.
+        path.unlink()
+        export_ledger(self.store)
+        self.assertEqual(
+            ignore.read_text(encoding="utf-8").count(f"*{LEDGER_TEMP_SUFFIX}*"), 1,
+            "the ignore rule was appended twice",
+        )
+
+    def test_interrupted_ledger_rewrite_leaves_no_temporary_behind(self) -> None:
+        self.build()
+        elsewhere = ledger_path(self.root).with_name("other-ledger.jsonl")
+
+        with mock.patch("state_ledger.os.replace", side_effect=OSError("killed mid-rewrite")):
+            with self.assertRaises(OSError):
+                export_ledger(self.store, path=elsewhere)
+
+        # The rename never ran, so the target is untouched and the temporary file
+        # the rewrite wrote is cleaned up instead of being left beside it. The glob
+        # covers any temporary naming, so it also fails if the cleanup disappears.
+        self.assertFalse(elsewhere.exists())
+        self.assertEqual(list(elsewhere.parent.glob("*.tmp*")), [])
 
     def test_export_preserves_every_command_verbatim(self) -> None:
         self.build()
@@ -276,12 +355,27 @@ class LedgerExportTests(unittest.TestCase):
         self.build()
         export_ledger(self.store)
 
-        report = portability_status(self.root)
+        with mock.patch.dict(os.environ, {"VIBE_KB_PATH": ""}, clear=False):
+            report = portability_status(self.root)
 
-        self.assertTrue(report["in_sync"])
-        self.assertTrue(report["portable"])
+        self.assertTrue(report["local_consistency"]["in_sync"])
+        self.assertEqual(report["local_consistency"]["status"], "consistent")
         self.assertEqual(report["unexported_commands"], 0)
-        self.assertIsNone(report["git"])
+        # Local consistency does not imply remote durability: with no archive
+        # configured the remote side is unknown, not satisfied.
+        self.assertEqual(report["archive_status"]["status"], "archive_not_configured")
+        self.assertEqual(report["remote_durability"], "unknown")
+        self.assertNotIn("portable", report)
+
+    def test_archive_status_reports_a_configured_knowledge_base(self) -> None:
+        self.build()
+        export_ledger(self.store)
+        with tempfile.TemporaryDirectory() as kb:
+            with mock.patch.dict(os.environ, {"VIBE_KB_PATH": kb}, clear=False):
+                report = portability_status(self.root)
+        self.assertEqual(report["archive_status"]["status"], "configured")
+        self.assertTrue(report["archive_status"]["configured"])
+        self.assertEqual(report["remote_durability"], "unverified")
 
     def test_portability_status_reports_a_ledger_that_lags_the_store(self) -> None:
         self.build()
@@ -293,43 +387,9 @@ class LedgerExportTests(unittest.TestCase):
 
         report = portability_status(self.root)
 
-        self.assertFalse(report["in_sync"])
-        self.assertFalse(report["portable"])
+        self.assertFalse(report["local_consistency"]["in_sync"])
+        self.assertEqual(report["local_consistency"]["status"], "out_of_sync")
         self.assertEqual(report["unexported_commands"], 1)
-
-    def test_portability_status_reports_git_tracking_and_unpushed(self) -> None:
-        git = shutil.which("git")
-        if git is None:
-            self.skipTest("git is unavailable")
-        root = Path(tempfile.mkdtemp())
-        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
-        for arguments in (
-            ("init", "-q"),
-            ("config", "user.email", "vibe@example.com"),
-            ("config", "user.name", "Vibe"),
-        ):
-            subprocess.run([git, "-C", str(root), *arguments], check=True, capture_output=True)
-        store = initialize(root)
-        store.apply({
-            "schema_version": 1, "command_id": uuid.uuid4().hex,
-            "expected_revision": 0, "action": "goal.create",
-            "payload": {"id": "GOAL-001", "title": "Goal"},
-        })
-        export_ledger(store)
-
-        untracked = portability_status(root)
-        self.assertFalse(untracked["git"]["ledger_tracked"])
-        self.assertFalse(untracked["portable"])
-
-        subprocess.run([git, "-C", str(root), "add", ".project-log/ledger"],
-                       check=True, capture_output=True)
-        subprocess.run([git, "-C", str(root), "commit", "-q", "-m", "ledger"],
-                       check=True, capture_output=True)
-        committed = portability_status(root)
-        self.assertTrue(committed["git"]["ledger_tracked"])
-        self.assertFalse(committed["git"]["uncommitted_ledger_changes"])
-        self.assertFalse(committed["git"]["upstream_known"])
-        self.assertFalse(committed["portable"])
 
 
 if __name__ == "__main__":

@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 import uuid
 
 
@@ -40,9 +41,12 @@ def event(command_id: str, action: str = "goal.create") -> dict:
 
 def write_ledger(path: Path, events: list[dict]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    # Explicit LF: the ledger is compared byte-for-byte, so a fixture must use the same
+    # newline the framework writes on every platform instead of the platform default.
     path.write_text(
         "".join(json.dumps(item, ensure_ascii=False, sort_keys=True) + "\n" for item in events),
         encoding="utf-8",
+        newline="\n",
     )
 
 
@@ -95,10 +99,37 @@ class ArchiveSkillTests(unittest.TestCase):
         self.temporary.cleanup()
 
     def archive(self, env: dict | None = None) -> subprocess.CompletedProcess:
+        # The archive CLI's output contract is UTF-8 on every platform, so decode it
+        # explicitly. Relying on the parent locale would mis-decode the non-ASCII
+        # ``工程记录`` in error messages on a legacy Windows console and report a
+        # correct archive failure as a test failure.
         return subprocess.run(
             [sys.executable, str(SCRIPT), "--project-root", str(self.work), "--kb", str(self.kb)],
-            text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False,
+            text=True, encoding="utf-8",
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False,
             env=None if env is None else {**os.environ, **env},
+        )
+
+    def legacy_console_environment(self) -> dict:
+        """A child environment that reproduces a legacy Windows console on any platform.
+
+        ``PYTHONIOENCODING=cp1252`` forces the child's std streams to the codepage the
+        GitHub ``windows-latest`` runner uses, and ``PYTHONUTF8`` is *removed* so the
+        parent's UTF-8 mode cannot mask the defect. The archive then has to encode the
+        non-ASCII knowledge-base directory ``工程记录`` into a legacy stream.
+        """
+        environment = {
+            key: value for key, value in os.environ.items() if key.upper() != "PYTHONUTF8"
+        }
+        environment["PYTHONIOENCODING"] = "cp1252"
+        return environment
+
+    def archive_legacy_console(self) -> subprocess.CompletedProcess:
+        """Run the archive and capture raw bytes so the output encoding is asserted."""
+        return subprocess.run(
+            [sys.executable, str(SCRIPT), "--project-root", str(self.work), "--kb", str(self.kb)],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False,
+            env=self.legacy_console_environment(),
         )
 
     def commits(self) -> int:
@@ -172,10 +203,131 @@ class ArchiveSkillTests(unittest.TestCase):
         self.assertIn('"project": "work"', result.stdout)
         self.assertTrue((self.kb / "工程记录" / "work").is_dir())
 
+    # -- AGENTS.md: the work folder's rules travel with its Project Log ----------------
+
+    @property
+    def archived_agents(self) -> Path:
+        return self.kb / "工程记录" / "work" / "AGENTS.md"
+
+    def write_agents(self, text: str = "# work rules\n") -> None:
+        (self.work / "AGENTS.md").write_text(text, encoding="utf-8", newline="\n")
+
+    def remote_has_agents(self) -> bool:
+        completed = subprocess.run(
+            [
+                "git", "--git-dir", str(self.remote), "cat-file", "-e",
+                "HEAD:工程记录/work/AGENTS.md",
+            ],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False,
+        )
+        return completed.returncode == 0
+
+    def test_archive_copies_the_agents_md_beside_the_project_log(self) -> None:
+        self.write_agents("# work rules\n")
+
+        result = self.archive()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.archived_agents.read_text(encoding="utf-8"), "# work rules\n")
+        self.assertIn('"agents_md": "archived"', result.stdout)
+
+    def test_archive_without_an_agents_md_reports_absent(self) -> None:
+        result = self.archive()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(self.archived_agents.exists())
+        self.assertIn('"agents_md": "absent"', result.stdout)
+
+    def test_archive_publishes_the_agents_md_to_the_remote(self) -> None:
+        self.write_agents("# work rules\n")
+
+        self.assertEqual(self.archive().returncode, 0)
+
+        self.assertTrue(self.remote_has_agents())
+
+    def test_archive_refreshes_a_changed_agents_md(self) -> None:
+        self.write_agents("# v1\n")
+        self.assertEqual(self.archive().returncode, 0)
+
+        self.write_agents("# v2\n")
+        result = self.archive()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.archived_agents.read_text(encoding="utf-8"), "# v2\n")
+
+    def test_archive_keeps_an_archived_agents_md_when_the_local_one_is_gone(self) -> None:
+        """The archive merges: a removed local file must not delete the knowledge base copy."""
+        self.write_agents("# work rules\n")
+        self.assertEqual(self.archive().returncode, 0)
+        (self.work / "AGENTS.md").unlink()
+
+        result = self.archive()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(self.archived_agents.is_file())
+        self.assertIn('"agents_md": "absent"', result.stdout)
+
+    def test_archive_accepts_a_crlf_agents_md(self) -> None:
+        """A knowledge base with core.autocrlf stores LF; that is a faithful archive."""
+        (self.work / "AGENTS.md").write_bytes(b"# rules\r\nline\r\n")
+
+        result = self.archive()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            self.archived_agents.read_bytes().replace(b"\r\n", b"\n"), b"# rules\nline\n"
+        )
+
+    def test_archiving_an_unchanged_agents_md_is_idempotent(self) -> None:
+        self.write_agents("# work rules\n")
+        self.assertEqual(self.archive().returncode, 0)
+        before = self.commits()
+
+        result = self.archive()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.commits(), before)
+        self.assertIn("no-changes", result.stdout)
+
+    def test_archive_refuses_when_the_agents_md_is_ignored(self) -> None:
+        self.write_agents("# work rules\n")
+        (self.kb / ".gitignore").write_text("AGENTS.md\n", encoding="utf-8")
+        subprocess.run(["git", "-C", str(self.kb), "add", "-A"], check=True)
+        subprocess.run(
+            ["git", "-C", str(self.kb), "commit", "-qm", "ignore agents files"], check=True
+        )
+        before = self.commits()
+
+        result = self.archive()
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("ignores the archived AGENTS.md", result.stderr)
+        self.assertIn("!工程记录/work/AGENTS.md", result.stderr)
+        self.assertEqual(self.commits(), before)
+
+    def test_archive_archives_only_the_same_layer_agents_md(self) -> None:
+        """A log-level AGENTS.md belongs to the log copy, not to the project rules file."""
+        (self.log / "AGENTS.md").write_text("# inner\n", encoding="utf-8")
+
+        result = self.archive()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(self.archived_agents.exists())
+        self.assertTrue((self.archived / "AGENTS.md").is_file())
+
+    def test_archive_output_is_utf8_on_a_legacy_console(self) -> None:
+        """A non-UTF-8 console must not change the archive's UTF-8 output contract."""
+        result = self.archive_legacy_console()
+        stdout = result.stdout.decode("utf-8")
+        stderr = result.stderr.decode("utf-8")
+
+        self.assertEqual(result.returncode, 0, stderr)
+        self.assertIn("工程记录", stdout)
+
     # -- TASK-079: a silent archive must fail loudly ---------------------------------
 
     def ignore_project_logs(self) -> None:
-        """Reproduce the knowledge base rule that hid every format 3 archive."""
+        """Reproduce the knowledge base rule that hid every ledger archive."""
         (self.kb / ".gitignore").write_text(".project-log/\n", encoding="utf-8")
         subprocess.run(["git", "-C", str(self.kb), "add", "-A"], check=True)
         subprocess.run(
@@ -234,6 +386,114 @@ class ArchiveSkillTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("no-changes", result.stdout)
+
+    def ignore_project_logs_with_negations(self) -> None:
+        """The corrected rule: the excluded directory itself is re-included."""
+        (self.kb / ".gitignore").write_text(
+            ".project-log/\n"
+            "!工程记录/work/.project-log/\n"
+            "!工程记录/work/.project-log/**\n",
+            encoding="utf-8",
+        )
+        subprocess.run(["git", "-C", str(self.kb), "add", "-A"], check=True)
+        subprocess.run(
+            ["git", "-C", str(self.kb), "commit", "-qm", "ignore project logs with negations"],
+            check=True,
+        )
+
+    def test_archive_accepts_a_negated_untracked_ledger(self) -> None:
+        """A negation re-includes the ledger; check-ignore -v alone misreads it as excluded."""
+        self.ignore_project_logs_with_negations()
+        relative = "工程记录/work/.project-log/ledger/v1/ledger.jsonl"
+        self.assertIsNone(archive_module.ignored_rule(self.kb, relative))
+
+        result = self.archive()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.remote_ledger(), self.events)
+
+    def test_ignored_rule_reports_a_real_exclusion(self) -> None:
+        self.ignore_project_logs()
+        relative = "工程记录/work/.project-log/ledger/v1/ledger.jsonl"
+
+        rule = archive_module.ignored_rule(self.kb, relative)
+
+        self.assertIsNotNone(rule)
+        self.assertIn(".project-log/", rule)
+
+    def test_run_git_passes_the_proxy_environment(self) -> None:
+        with mock.patch.dict(
+            os.environ, {"VIBE_GIT_PROXY": "http://127.0.0.1:10808"}, clear=True
+        ):
+            with mock.patch.object(archive_module.subprocess, "run") as run:
+                run.return_value = subprocess.CompletedProcess([], 0, "", "")
+                archive_module._run_git(["git", "--version"], capture_output=True)
+
+        environment = run.call_args.kwargs["env"]
+        self.assertEqual(environment["https_proxy"], "http://127.0.0.1:10808")
+        self.assertEqual(environment["HTTP_PROXY"], "http://127.0.0.1:10808")
+
+    def test_git_environment_keeps_an_inherited_proxy(self) -> None:
+        with mock.patch.dict(
+            os.environ,
+            {
+                "VIBE_GIT_PROXY": "http://configured.invalid",
+                "http_proxy": "http://inherited.invalid",
+            },
+            clear=True,
+        ):
+            environment = archive_module.git_environment()
+
+        self.assertEqual(environment["http_proxy"], "http://inherited.invalid")
+        self.assertEqual(environment["https_proxy"], "http://configured.invalid")
+
+    def test_configured_proxy_reads_a_config_file(self) -> None:
+        config = self.base / "git_proxy.conf"
+        config.write_text("http://127.0.0.1:10808\n", encoding="utf-8")
+
+        with mock.patch.dict(os.environ, {"VIBE_GIT_PROXY": ""}, clear=True):
+            self.assertEqual(
+                archive_module.configured_proxy(config), "http://127.0.0.1:10808"
+            )
+
+    def test_configured_proxy_ignores_the_placeholder(self) -> None:
+        config = self.base / "git_proxy.conf"
+        config.write_text("__UNSET__\n", encoding="utf-8")
+
+        with mock.patch.dict(os.environ, {"VIBE_GIT_PROXY": ""}, clear=True):
+            self.assertEqual(archive_module.configured_proxy(config), "")
+
+    def test_configured_proxy_skips_comments_and_blank_lines(self) -> None:
+        config = self.base / "git_proxy.conf"
+        config.write_text(
+            "# a comment\n\n   \nhttp://127.0.0.1:10808\n", encoding="utf-8"
+        )
+
+        with mock.patch.dict(os.environ, {"VIBE_GIT_PROXY": ""}, clear=True):
+            self.assertEqual(
+                archive_module.configured_proxy(config), "http://127.0.0.1:10808"
+            )
+
+    def test_configured_proxy_lets_the_environment_override_the_file(self) -> None:
+        config = self.base / "git_proxy.conf"
+        config.write_text("http://from-file.invalid\n", encoding="utf-8")
+
+        with mock.patch.dict(
+            os.environ, {"VIBE_GIT_PROXY": "http://from-env.invalid"}, clear=True
+        ):
+            self.assertEqual(
+                archive_module.configured_proxy(config), "http://from-env.invalid"
+            )
+
+    def test_shipped_proxy_example_is_copy_safe(self) -> None:
+        """`cp git_proxy.conf.example git_proxy.conf` must not inject the comment block."""
+        example = (
+            ROOT / "skills" / "a-project-log-archive" / "scripts" / "git_proxy.conf.example"
+        )
+        self.assertTrue(example.is_file(), "the shipped proxy example is missing")
+
+        with mock.patch.dict(os.environ, {"VIBE_GIT_PROXY": ""}, clear=True):
+            self.assertEqual(archive_module.configured_proxy(example), "")
 
     def test_archive_refuses_when_the_index_ledger_is_stale(self) -> None:
         # A skip-worktree entry keeps the index ledger at the old revision while other
@@ -452,8 +712,17 @@ class ArchiveSkillTests(unittest.TestCase):
             check=True,
         )
 
+    @staticmethod
+    def file_url(authority: str, path: Path) -> str:
+        """A ``file://`` URL for ``path`` that parses identically on POSIX and Windows.
+
+        On POSIX the path already starts with ``/``; on Windows the drive letter is the
+        first path segment, so exactly one separator is placed before ``path``.
+        """
+        return f"file://{authority}/{path.as_posix().lstrip('/')}"
+
     def test_archive_refuses_a_file_url_to_itself(self) -> None:
-        self.point_upstream_at(f"file://localhost{self.kb}")
+        self.point_upstream_at(self.file_url("localhost", self.kb))
         before = self.commits()
 
         result = self.archive()
@@ -476,7 +745,7 @@ class ArchiveSkillTests(unittest.TestCase):
             "%6cocalhost",
         ):
             with self.subTest(authority=authority):
-                self.point_upstream_at(f"file://{authority}{self.kb}")
+                self.point_upstream_at(self.file_url(authority, self.kb))
                 before = self.commits()
 
                 result = self.archive()
@@ -488,7 +757,7 @@ class ArchiveSkillTests(unittest.TestCase):
 
     def test_archive_leaves_the_knowledge_base_clean_when_the_target_is_rejected(self) -> None:
         # Rejecting the publish target must not leave the copied 工程记录/ tree behind.
-        self.point_upstream_at(f"file://random.invalid{self.kb}")
+        self.point_upstream_at(self.file_url("random.invalid", self.kb))
 
         result = self.archive()
 

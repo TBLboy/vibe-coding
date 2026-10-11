@@ -1,6 +1,6 @@
 """TASK-048: the ledger must deterministically rebuild the SQLite projection.
 
-The golden test is the migration safety net: whatever a future Format 3 writer
+The golden test is the migration safety net: whatever a future ledger writer
 emits, replaying it from an empty store has to reproduce the same entities the
 live store holds, and a single tampered command has to break that equality.
 """
@@ -50,7 +50,7 @@ class GoldenReplayTests(unittest.TestCase):
     def build_ledger(self) -> None:
         """Exercise every ledger action so replay covers the whole surface."""
         self.apply("goal.create", {
-            "id": "GOAL-001", "title": "Ship format 3",
+            "id": "GOAL-001", "title": "Ship the ledger",
             "extensions": {"risk_level": "normal"},
         })
         self.apply("goal.update", {
@@ -63,7 +63,7 @@ class GoldenReplayTests(unittest.TestCase):
             "id": "TASK-001", "title": "Implement replay", "goal_id": "GOAL-001",
             "extensions": {"risk": "normal"},
         })
-        self.apply("task.update", {"task_id": "TASK-001", "implementer": "codex"})
+        self.apply("task.update", {"task_id": "TASK-001", "implementer": "agent"})
         self.apply("task.begin", {
             "task_id": "TASK-001", "run_id": "RUN-001", "next_action": "write reducer",
         })
@@ -84,6 +84,10 @@ class GoldenReplayTests(unittest.TestCase):
             "evidence_refs": ["EVID-001"],
         })
         self.apply("task.finish", {"task_id": "TASK-001", "summary": "reducer landed"})
+        self.apply("task.reopen", {
+            "task_id": "TASK-001", "new_task_id": "TASK-004",
+            "reason": "the first attempt did not cover the export path",
+        })
         self.apply("task.create", {"id": "TASK-002", "title": "Second", "goal_id": "GOAL-001"})
         self.apply("task.begin", {
             "task_id": "TASK-002", "run_id": "RUN-002", "next_action": "handoff",

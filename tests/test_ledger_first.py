@@ -116,7 +116,10 @@ class LedgerFirstWriteTests(unittest.TestCase):
         ))
 
         self.assertEqual(reopened.status()["revision"], 2)
-        self.assertEqual(reopened.active_goal_id(), "GOAL-001")
+        # The heal/retry path leaves two active goals behind (GOAL-002 applied on top
+        # of the recovered GOAL-001); the default target now refuses to pick one, so
+        # the assertion names the full set instead of relying on the old earliest-wins rule.
+        self.assertEqual(reopened.active_goal_ids(), ["GOAL-001", "GOAL-002"])
         self.assertTrue(verify_ledger(self.root, reopened)["matches"])
 
     def test_retrying_the_same_command_after_a_crash_is_idempotent(self) -> None:

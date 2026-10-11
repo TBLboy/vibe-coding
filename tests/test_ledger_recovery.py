@@ -295,8 +295,8 @@ class LedgerRecoveryTests(unittest.TestCase):
 
         self.assertEqual(report["ledger_events"], 1)
         self.assertEqual(report["store_revision"], 1)
-        self.assertFalse(report["in_sync"])
-        self.assertFalse(report["portable"])
+        self.assertFalse(report["local_consistency"]["in_sync"])
+        self.assertEqual(report["local_consistency"]["status"], "out_of_sync")
         self.assertFalse(report["history_rewritten"])
         self.assertEqual(report["unexported_commands"], 1)
 
