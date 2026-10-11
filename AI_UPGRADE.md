@@ -2,8 +2,7 @@
 
 适用于已经安装旧版 Vibe Coding Codex Global Core，需要升级到 0.6.0 的电脑。
 
-本版本把新项目默认格式切到 format 2，并把 format 1 的退役分为“停止写入 / 停止读取 /
-停止支持”三个需要用户单独确认的关口。升级前先阅读 [docs/RELEASE-NOTES.md](docs/RELEASE-NOTES.md)。
+本版本以 Git 账本为唯一事实源，format 2 是唯一受支持的格式；format 1 及其迁移工具已整体退役，不再需要分步关口确认。升级前先阅读 [docs/RELEASE-NOTES.md](docs/RELEASE-NOTES.md)。
 
 ## 升级保证
 
@@ -104,7 +103,7 @@ AI 应：
 - `config.toml` 中只有一个 Vibe config block。
 - `a-loop-control` 可发现。
 - `roles.json` 的 8 个角色都能渲染。
-- `.opencode` command/agent 校验已不存在。
+- 旧 `prompts/` 单体提示词与逐客户端 command/agent 校验面不再存在；规则统一由 `runtime/agents/` 与 Skills 提供。
 - `vibe validate` 通过。
 - 原生 `/goal` 是唯一 continuation 控制器。
 - Stop Hook 未安装。

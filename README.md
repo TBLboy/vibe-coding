@@ -6,7 +6,7 @@
 
 以真实开发任务讲解完整使用流程（初始化工程 → 业务逻辑澄清 → 技术选型 → 代码落地 → 归档留痕），见 [docs/USAGE.md](docs/USAGE.md)。
 
-本版本的默认格式切换、format 1 只读兼容与退役关口见 [docs/RELEASE-NOTES.md](docs/RELEASE-NOTES.md)。
+本版本以 Git 账本为唯一事实源，format 2 是唯一受支持的格式，format 1 及其迁移工具已整体退役；详见 [docs/RELEASE-NOTES.md](docs/RELEASE-NOTES.md)。
 
 ## 核心能力
 

@@ -1,6 +1,6 @@
 # Vibe Coding 用户使用指南
 
-Vibe Coding 是一套面向 **OpenCode** 客户端的**用户级全局工程工作流**（本版按 `opencode 1.18.31` 验证）。
+Vibe Coding 是一套面向 **Codex** 客户端的**用户级全局工程工作流**（本版按 `codex-cli 0.162.1` 验证）。
 
 它不只是给 Agent 增加几条提示词，也不只是一个安装脚本。它把一次开发工作串成一条可恢复、可验证、可追溯的链路：
 
@@ -34,7 +34,7 @@ Vibe Coding 是一套面向 **OpenCode** 客户端的**用户级全局工程工�
 全局安装层位于用户目录，负责让多个项目共享同一套 Agent 规则、Skills、插件和 Loop 运行时，典型内容包括：
 
 - 用户级 `AGENTS.md` 中的 Vibe 主 Agent 规则。
-- `OPENCODE_CONFIG_DIR` 下的 Agent、Commands、Skills、插件、配置和备份。
+- `CODEX_HOME`（默认 `~/.codex`）下的 Agent、Commands、Skills、插件、配置和备份。
 - 用户级 Skills 目录。
 - 全局 `vibe-coding` Python 环境及其路径记录。
 - 可选 MCP 和本地插件配置。
@@ -74,9 +74,9 @@ Vibe Coding 是一套面向 **OpenCode** 客户端的**用户级全局工程工�
 
 ### 1.3 当前对话层
 
-当前 OpenCode 对话负责执行一个有限工作单元。它可以被压缩、暂停、切换或重启，因此不能把聊天上下文当作唯一状态。
+当前 Codex 对话负责执行一个有限工作单元。它可以被压缩、暂停、切换或重启，因此不能把聊天上下文当作唯一状态。
 
-OpenCode 插件在会话开始与压缩时会从项目日志恢复紧凑上下文。恢复只是让 Agent 重新获得事实状态，不代表任务已经完成；有未完成任务时，Agent 应继续执行具体下一步。
+Codex 的 `SessionStart` 与 `PreCompact` Hooks 在会话开始与压缩时会从项目日志恢复紧凑上下文。恢复只是让 Agent 重新获得事实状态，不代表任务已经完成；有未完成任务时，Agent 应继续执行具体下一步。
 
 ---
 
@@ -86,7 +86,7 @@ OpenCode 插件在会话开始与压缩时会从项目日志恢复紧凑上下�
 
 建议准备：
 
-- 当前可用的 OpenCode 客户端。
+- 当前可用的 Codex 客户端。
 - Python 3.11 或更高版本。
 - Conda、Miniforge 或 Miniconda，用于创建统一的 `vibe-coding` 环境。
 - 如需拉取可选 MCP 或访问 GitHub 远端，准备可用的网络代理。
@@ -105,7 +105,7 @@ export HTTPS_PROXY=http://127.0.0.1:10808
 安装器、插件、项目校验和包校验使用统一的用户级 Python。安装器会优先使用：
 
 ```text
-${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/vibe-python
+${CODEX_HOME:-$HOME/.codex}/vibe-python
 ```
 
 如果该文件不存在，包装脚本会尝试寻找 Conda/Miniforge/Miniconda，创建或修复名为 `vibe-coding` 的 Python 3.11 环境，并安装：
@@ -197,7 +197,7 @@ PY="$(cat "${CODEX_HOME:-$HOME/.codex}/vibe-python")"
 
 ## 3. 第一次接入一个项目
 
-在项目根目录打开 OpenCode，然后直接告诉 Agent：
+在项目根目录打开 Codex，然后直接告诉 Agent：
 
 ```text
 初始化这个工程
@@ -240,8 +240,8 @@ Agent 应完成以下检查：
 也可以手动运行：
 
 ```bash
-PY="$(cat "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/vibe-python")"
-VIBE="$HOME/.config/opencode/vibe-workflow/scripts/vibe.py"
+PY="$(cat "${CODEX_HOME:-$HOME/.codex}/vibe-python")"
+VIBE="${CODEX_HOME:-$HOME/.codex}/vibe-workflow/scripts/vibe.py"
 "$PY" "$VIBE" --root . status
 "$PY" "$VIBE" --root . validate
 ```
@@ -478,8 +478,8 @@ Loop Core 记录阶段、任务、失败计数、证据有效性和 handoff。�
 常用命令：
 
 ```bash
-PY="$(cat "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/vibe-python")"
-VIBE="$HOME/.config/opencode/vibe-workflow/scripts/vibe.py"
+PY="$(cat "${CODEX_HOME:-$HOME/.codex}/vibe-python")"
+VIBE="${CODEX_HOME:-$HOME/.codex}/vibe-workflow/scripts/vibe.py"
 
 "$PY" "$VIBE" --root . status
 "$PY" "$VIBE" --root . context TASK-001
@@ -696,8 +696,8 @@ vibe 恢复当前项目，先读取 current-session、任务、证据和 Loop �
 ### 导出与校验 Git 账本
 
 ```bash
-PY="$(cat "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/vibe-python")"
-VIBE="$HOME/.config/opencode/vibe-workflow/scripts/vibe.py"
+PY="$(cat "${CODEX_HOME:-$HOME/.codex}/vibe-python")"
+VIBE="${CODEX_HOME:-$HOME/.codex}/vibe-workflow/scripts/vibe.py"
 "$PY" "$VIBE" --root . ledger verify
 ```
 
@@ -755,8 +755,8 @@ VIBE="$HOME/.config/opencode/vibe-workflow/scripts/vibe.py"
 先运行：
 
 ```bash
-PY="$(cat "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/vibe-python")"
-VIBE="$HOME/.config/opencode/vibe-workflow/scripts/vibe.py"
+PY="$(cat "${CODEX_HOME:-$HOME/.codex}/vibe-python")"
+VIBE="${CODEX_HOME:-$HOME/.codex}/vibe-workflow/scripts/vibe.py"
 "$PY" "$VIBE" --root . status
 "$PY" "$VIBE" --root . validate
 ```
@@ -775,8 +775,8 @@ VIBE="$HOME/.config/opencode/vibe-workflow/scripts/vibe.py"
 运行：
 
 ```bash
-PY="$(cat "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/vibe-python")"
-VIBE="$HOME/.config/opencode/vibe-workflow/scripts/vibe.py"
+PY="$(cat "${CODEX_HOME:-$HOME/.codex}/vibe-python")"
+VIBE="${CODEX_HOME:-$HOME/.codex}/vibe-workflow/scripts/vibe.py"
 "$PY" "$VIBE" --root . validate
 "$PY" "$VIBE" --root . ledger verify
 ```
