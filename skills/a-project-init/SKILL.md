@@ -30,27 +30,30 @@ metadata:
    - 已在 Git 仓库中（含刚初始化的仓库）：询问用户该仓库属于“个人仓库”还是“团队协作仓库”，得到明确答复后再继续。
 3. 运行确定性脚本（脚本内部会调用默认 format 2 的 `.project-log` 创建链路）：
    ```bash
-   VIBE_RUNTIME="${CODEX_HOME:-$HOME/.codex}/vibe-workflow"
-   python3 "$VIBE_RUNTIME/scripts/init_project_agents.py" \
+   VIBE_CONFIG="${CODEX_HOME:-$HOME/.codex}"
+   VIBE_RUNTIME="${VIBE_RUNTIME:-$VIBE_CONFIG/vibe-workflow}"
+   VIBE_PYTHON="${VIBE_PYTHON:-$(cat "$VIBE_CONFIG/vibe-python")}"
+   "$VIBE_PYTHON" "$VIBE_RUNTIME/scripts/init_project_agents.py" \
      --target <project-root> [--project-rules "<项目级规则>"]
    ```
    - 若脚本不在运行时中，可在仓库内运行 `skills/a-project-init/scripts/init_project_agents.py`。
 4. 判断项目级规则输入：
    - 目标根目录有 `README.md` 或 `docs/` 主要说明文档：阅读后凝炼项目级规则（架构边界、模块约定、构建/运行方式、团队约束等），通过 `--project-rules` 传入。
    - 没有可用文档：不传 `--project-rules`，脚本会写入占位提示，并向用户说明项目级规则留空、可手动补充。
-5. 记录仓库类型（个人/团队协作）到根目录 `AGENTS.md`，并报告结果：`.project-log` 与 `AGENTS.md` 的状态（created / injected / skipped）、仓库类型、项目级规则是否留空。
+5. 记录仓库类型（个人/团队协作）到根目录 `AGENTS.md`，并报告结果：`.project-log` 与 `AGENTS.md` 的状态（created / injected / updated / unchanged / markers-unbalanced / markers-ambiguous）、仓库类型、项目级规则是否留空。
 
 ## AGENTS.md 更新语义
 
 - 目标无 `AGENTS.md`：创建文件，先写通用规则区块，再写“项目级规则”区。
 - 目标已有 `AGENTS.md`：原内容一字不动保留（视为项目级规则），仅在文件最前面注入通用规则区块。
-- 文件中已存在 `<!-- VIBE-PROJECT-GENERAL:BEGIN -->`：跳过注入，不重复叠加（幂等）。
+- 文件中已存在 `<!-- VIBE-PROJECT-GENERAL:BEGIN -->` 与 `<!-- VIBE-PROJECT-GENERAL:END -->` 配对区块：只就地替换两个标记**之间**的内容，标记外的一切（含行尾字节）原样保留；区块内容已与模板一致时返回 `unchanged`（幂等）。
+- 标记不配对（有 BEGIN 无 END）：返回 `markers-unbalanced`，**不改文件**；一个 BEGIN 跨度内又出现 BEGIN：返回 `markers-ambiguous`，**不改文件**。两种情况都要求人工确认边界，脚本不猜测，避免删掉用户内容。
 - 仓库类型是项目级信息，写入“项目级规则”区：
   - 脚本新建 `AGENTS.md` 时，把 `仓库类型：个人仓库|团队协作仓库` 与其他项目规则合并后通过 `--project-rules` 传入。
-  - 脚本返回 `injected` / `skipped`（文件已存在）时，由 Agent 在“项目级规则”区末尾追加或更新该行；已存在则不重复。
-- 已注入的项目不会自动跟随模板更新；修改模板后，对未注入或新建项目生效，已注入项目由用户决定是否手动同步。
+  - 脚本返回 `injected` / `updated` / `unchanged`（文件已存在）时，由 Agent 在“项目级规则”区末尾追加或更新该行；已存在则不重复。
+- 已注入的项目会跟随模板更新：修改模板后对项目重新运行本脚本即可，脚本返回 `updated`；未变化返回 `unchanged`。因此模板是通用规则的唯一生效入口，不需要手工同步每个项目。
 
 ## Maintenance
 
 - 通用开发规则唯一来源：`templates/general-rules.md`。用户新增或修改通用规则时，直接修改该模板；不要在每个项目的 `AGENTS.md` 里分别改。
-- 本 skill 不修改 `.project-log` 创建逻辑，只编排与调用；新建项目默认生成 format 2，存量旧格式通过 `vibe migrate` 显式迁移。
+- 本 skill 不修改 `.project-log` 创建逻辑，只编排与调用；新建项目生成 format 2，format 2 是唯一受支持的格式。

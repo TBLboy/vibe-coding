@@ -32,7 +32,7 @@ Project data is create-if-missing only. Never replace it during a routine update
 ## Procedure
 
 1. Read source and target manifests.
-2. Run `scripts/update_workflow.py --dry-run` against the global Codex config directory.
+2. Run `scripts/update_workflow.py --dry-run` against `${CODEX_HOME:-$HOME/.codex}`.
 3. Review changed and locally modified files.
 4. If safe, run with `--apply`.
 5. Confirm the runtime assets and templates exist, then restart Codex to load the update.

@@ -43,7 +43,7 @@ Create a temporary but explicit contract for the current increment. A baseline i
 5. List exclusions and deferred behavior.
 6. List blocking and non-blocking unresolved questions.
 7. Create or increment a baseline version.
-8. Update `workflow.yaml` only after all exit conditions are met.
+8. Record the baseline through `vibe record create|update` only after all exit conditions are met.
 
 Do not activate a baseline while the clarification gate is open or blocked. Functional rules, current technical facts, and their conflicts must be distinguishable.
 

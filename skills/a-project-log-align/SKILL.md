@@ -51,12 +51,42 @@ If none is set, the script reports the missing config and stops.
 ## Execution
 
 ```bash
-python3 ~/.codex/skills/a-project-log-align/scripts/align.py \
+python3 "${CODEX_HOME:-$HOME/.codex}/skills/a-project-log-align/scripts/align.py" \
   --project-root <work-folder-path>
 ```
 
 Use `--dry-run` to preview the merge without writing, and `--no-attach` to stop after
 merging the ledger.
+
+## The Work Folder Must Not Be a Git Repository
+
+A Project Log lives in a **plain work folder**: the work folder itself is not a Git
+repository, and it does not sit inside one. Code repositories are its *children*:
+
+```text
+work/                  plain directory, no .git here
+  .project-log/        plain directory
+  repo-a/.git/         repositories live below the work folder
+  repo-b/.git/
+```
+
+The framework refuses any other layout, so `vibe init` never silently creates a log
+in an unsupported place:
+
+- `vibe init` in a Git worktree root — or in a directory inside one — fails with
+  `unsupported_work_layout` **before writing anything**, and the error states the
+  expected shape above.
+- `validate_project.py` reports a log that drifted into a Git root as a validation
+  failure, so a directory copy or a manual move is caught.
+
+Because there is exactly one `.project-log` in the work folder, it covers every
+repository and every branch below it, and a branch switch never hides or forks it.
+Remote durability does **not** come from the work folder being a Git repository; it
+comes from the knowledge-base archive, which is what `a-project-log-archive` writes
+and this skill reads back.
+
+If you need two independent logs, use two work folders — not two branches or two
+worktrees of one repository.
 
 ## Safety
 

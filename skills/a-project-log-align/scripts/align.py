@@ -178,7 +178,11 @@ def _python_executable() -> str:
     override = os.environ.get("VIBE_PYTHON")
     if override:
         return override
-    configured = Path.home() / ".codex" / "vibe-python"
+    config_root = Path(
+        os.environ.get("CODEX_HOME")
+        or (Path.home() / ".codex")
+    )
+    configured = config_root / "vibe-python"
     if configured.is_file():
         value = configured.read_text(encoding="utf-8").strip()
         if value:
@@ -190,8 +194,11 @@ def _vibe_runtime() -> Path:
     configured = os.environ.get("VIBE_RUNTIME")
     if configured:
         return Path(configured).expanduser()
-    codex_home = Path(os.environ.get("CODEX_HOME") or (Path.home() / ".codex"))
-    return codex_home / "vibe-workflow"
+    config_root = Path(
+        os.environ.get("CODEX_HOME")
+        or (Path.home() / ".codex")
+    )
+    return config_root / "vibe-workflow"
 
 
 def run_vibe(root: Path, *arguments: str) -> dict:
@@ -254,6 +261,7 @@ def align(project_root: Path, kb_base: Path, attach: bool = True, dry_run: bool 
             (local_log / MARKER).write_text(
                 _canonical({"format": 2, "project_id": archived_id}) + "\n",
                 encoding="utf-8",
+                newline="\n",
             )
         docs_report = merge_docs(archived_log, local_log)
 
@@ -274,6 +282,14 @@ def align(project_root: Path, kb_base: Path, attach: bool = True, dry_run: bool 
 
 
 def main() -> int:
+    # A Windows console defaults to a legacy codepage (for example cp1252); printing this
+    # CLI's non-ASCII output there raises UnicodeEncodeError. The output contract is UTF-8
+    # on every platform, so force the process streams before anything is printed. The
+    # getattr check tolerates a harness (or a replaced stream) with no reconfigure().
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(description="Align project logs from the knowledge base")
     parser.add_argument("--project-root", required=True, help="Path to the work folder")
     parser.add_argument("--kb", help="Knowledge base root; defaults to the configured path")

@@ -13,12 +13,13 @@ metadata:
 Use this Skill when a Vibe Coding task has a bounded role that benefits from independent analysis,
 parallel work, implementation, or verification.
 
-## Role templates
+## Agent roles
 
-The global Vibe runtime stores role contracts under:
+The Vibe runtime stores role contracts under:
 
 ```bash
-VIBE_RUNTIME="${CODEX_HOME:-$HOME/.codex}/vibe-workflow"
+VIBE_CONFIG="${CODEX_HOME:-$HOME/.codex}"
+VIBE_RUNTIME="${VIBE_RUNTIME:-$VIBE_CONFIG/vibe-workflow}"
 ls "$VIBE_RUNTIME/agents"
 ```
 
@@ -33,7 +34,9 @@ Supported roles:
 - `paper-reader`
 - `workflow-distiller`
 
-Build a task-bound prompt with:
+Render the role contract into a bounded prompt and hand the result to the subagent. Put the project
+root, delegated outcome, allowed scope, read/write boundary, required evidence, and stop condition in
+the rendered prompt:
 
 ```bash
 python3 "$VIBE_RUNTIME/scripts/render_subagent_prompt.py" \
@@ -42,6 +45,8 @@ python3 "$VIBE_RUNTIME/scripts/render_subagent_prompt.py" \
   --task "<precise delegated outcome>" \
   --scope "<allowed files/modules or read-only boundary>"
 ```
+
+The role template and the installed agent configuration enforce the role boundary.
 
 ## Delegation protocol
 
@@ -52,6 +57,7 @@ python3 "$VIBE_RUNTIME/scripts/render_subagent_prompt.py" \
 5. The main agent retains user interaction, C-level decisions, integration, task status, and global-rule authority.
 6. If native subagents are unavailable, perform the role serially and label the result `serial-role-fallback`.
 7. Do not ask an implementation-builder to self-certify completion. Send completed work to verification-reviewer.
+8. Subagents must not invoke other subagents; `vibe-main` performs the cross-role composition.
 
 ## Routing table
 

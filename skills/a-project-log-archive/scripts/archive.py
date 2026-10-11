@@ -12,6 +12,8 @@ Archiving is a merge, never a replacement:
 * A silent archive is treated as a failure: the ledger staged in the knowledge base
   index must be byte-identical to the local ledger, so an ignored, skipped, or
   otherwise unstaged ledger can never be reported as archived.
+* The work folder's ``AGENTS.md`` is archived beside the Project Log it governs, so a
+  project's operating rules travel with its history.
 * Re-running the archive is idempotent.
 """
 from __future__ import annotations
@@ -20,6 +22,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -29,9 +32,12 @@ from urllib.parse import unquote, urlsplit
 
 SKILL_DIR = Path(__file__).resolve().parent.parent
 CONFIG = SKILL_DIR / "scripts" / "kb_path.conf"
+PROXY_CONFIG = SKILL_DIR / "scripts" / "git_proxy.conf"
 PLACEHOLDER = "__UNSET__"
 LEDGER_RELATIVE = Path("ledger") / "v1" / "ledger.jsonl"
 MARKER = "state-format.json"
+# The project's own operating rules, archived beside the Project Log it governs.
+AGENTS_MARKER = "AGENTS.md"
 # Machine-local or derivable: never archived.
 EXCLUDED_NAMES = {".state", ".git", ".migration", "new-writes", "ledger"}
 # Authorities a file:// push target may carry. Anything else is a form whose meaning
@@ -57,6 +63,58 @@ def get_kb_base() -> Path:
             "the absolute path to their My_knowledge_base."
         )
     return Path(raw).expanduser()
+
+
+def configured_proxy(config: Path | None = None) -> str:
+    """The Git transport proxy for this machine, or an empty string when unset.
+
+    ``VIBE_GIT_PROXY`` wins so a one-off run can override the persisted value; the
+    ``git_proxy.conf`` file beside ``kb_path.conf`` keeps it for every later run. The
+    file may carry ``#`` comments and blank lines, so copying the shipped example does
+    not turn the whole comment block into a proxy URL; the first remaining line is it.
+    """
+    value = os.environ.get("VIBE_GIT_PROXY", "").strip()
+    if value:
+        return value
+    path = PROXY_CONFIG if config is None else Path(config)
+    if not path.is_file():
+        return ""
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as error:
+        raise ArchiveError(f"cannot read the Git proxy config {path}: {error}") from error
+    for line in raw.splitlines():
+        candidate = line.strip()
+        if not candidate or candidate.startswith("#"):
+            continue
+        return "" if candidate == PLACEHOLDER else candidate
+    return ""
+
+
+def git_environment() -> dict[str, str]:
+    """Environment for every Git subprocess, carrying the configured proxy.
+
+    Git already honours ``http_proxy``/``https_proxy`` from the caller, so this only
+    fills them in from the persisted configuration. An inherited value always wins,
+    because the caller's own environment is the more specific choice. Each kind is
+    written in both spellings and set to the same value: Windows environment names are
+    case-insensitive, so probing one case and setting the other would leave a second,
+    disagreeing value that a case-insensitive reader could pick up.
+    """
+    environment = dict(os.environ)
+    proxy = configured_proxy()
+    if proxy:
+        for name in ("http_proxy", "https_proxy", "all_proxy"):
+            inherited = environment.get(name) or environment.get(name.upper())
+            value = inherited if inherited is not None else proxy
+            environment[name] = value
+            environment[name.upper()] = value
+    return environment
+
+
+def _run_git(arguments: list[str], **options):
+    """Run one Git command with the environment that carries the configured proxy."""
+    return subprocess.run(arguments, env=git_environment(), **options)
 
 
 def read_project_id(log: Path) -> str | None:
@@ -170,14 +228,47 @@ def copy_project_log(src: Path, dst: Path) -> dict:
     }
 
 
-def ignored_rule(kb_root: Path, relative: str) -> str | None:
-    """Return the .gitignore rule that excludes ``relative``, or None when it is tracked.
+def copy_agents_md(root: Path, project_directory: Path) -> str:
+    """Mirror the work folder's AGENTS.md beside the archived Project Log.
 
-    ``git check-ignore`` reports a path as ignored even when it is already tracked, so
-    tracking status is checked first: a tracked file reaches the remote regardless of
-    ignore rules, and only genuinely unreachable paths are reported.
+    Only the AGENTS.md at the same level as ``.project-log`` belongs to this project; a
+    file inside the log directory is already carried by ``copy_project_log``, and nothing
+    above the work folder is read. The local file is the source of truth, so a changed
+    AGENTS.md overwrites the knowledge base copy. A missing local file reports ``absent``
+    and leaves any existing knowledge base copy in place, because the archive merges and
+    never deletes.
     """
-    tracked = subprocess.run(
+    source = root / AGENTS_MARKER
+    if not source.is_file():
+        return "absent"
+    target = project_directory / AGENTS_MARKER
+    target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(source, target)
+    return "archived"
+
+
+def normalised_newlines(data: bytes) -> bytes:
+    """Bytes with CRLF collapsed to LF, for comparing a document across a checkout.
+
+    The Project Log ledger must reach the remote as the exact bytes written locally, so it
+    is compared strictly. A document does not carry that contract: a knowledge base with
+    ``core.autocrlf`` stores LF for a CRLF file, which is a faithful archive, not an
+    alteration. Collapsing both sides still fails on truncated, reordered or otherwise
+    different content.
+    """
+    return data.replace(b"\r\n", b"\n")
+
+
+def ignored_rule(kb_root: Path, relative: str) -> str | None:
+    """Return the .gitignore rule that excludes ``relative``, or None when it is reachable.
+
+    A tracked file reaches the remote regardless of ignore rules, so tracking status is
+    checked first. The verdict for an untracked path comes from ``check-ignore -q``:
+    ``check-ignore -v`` exits 0 whenever *any* rule matches, including a ``!`` negation
+    that re-includes the path, so its exit status alone would report a correctly negated
+    path as excluded. ``-v`` is consulted afterwards only to name the matching rule.
+    """
+    tracked = _run_git(
         ["git", "-C", str(kb_root), "ls-files", "--error-unmatch", "--", relative],
         capture_output=True, text=True, check=False,
     )
@@ -190,19 +281,23 @@ def ignored_rule(kb_root: Path, relative: str) -> str | None:
             f"cannot inspect the knowledge base repository at {kb_root}: "
             f"{tracked.stderr.strip() or 'git ls-files failed'}"
         )
-    probe = subprocess.run(
-        ["git", "-C", str(kb_root), "check-ignore", "-v", "--", relative],
+    verdict = _run_git(
+        ["git", "-C", str(kb_root), "check-ignore", "-q", "--", relative],
         capture_output=True, text=True, check=False,
     )
-    if probe.returncode == 1:
+    if verdict.returncode == 1:
         return None
-    if probe.returncode != 0:
+    if verdict.returncode != 0:
         # 0 means "ignored", 1 means "not ignored"; any other status means the probe
         # failed, so fail closed instead of assuming the ledger is reachable.
         raise ArchiveError(
             f"cannot determine whether {relative} is ignored by {kb_root}: "
-            f"{probe.stderr.strip() or 'git check-ignore failed'}"
+            f"{verdict.stderr.strip() or 'git check-ignore failed'}"
         )
+    probe = _run_git(
+        ["git", "-C", str(kb_root), "check-ignore", "-v", "--", relative],
+        capture_output=True, text=True, check=False,
+    )
     return probe.stdout.strip() or "(matched an ignore rule)"
 
 
@@ -212,7 +307,7 @@ def blob_bytes(kb_root: Path, revision: str) -> bytes | None:
     ``git cat-file blob`` returns what Git actually stores, after any clean filter or
     end-of-line conversion, which is exactly what the remote would receive.
     """
-    probe = subprocess.run(
+    probe = _run_git(
         ["git", "-C", str(kb_root), "cat-file", "blob", revision],
         capture_output=True, check=False,
     )
@@ -223,7 +318,7 @@ def blob_bytes(kb_root: Path, revision: str) -> bytes | None:
 
 def revision(kb_root: Path, name: str) -> str | None:
     """Resolve a revision to a full object name, or None when Git cannot."""
-    probe = subprocess.run(
+    probe = _run_git(
         ["git", "-C", str(kb_root), "rev-parse", name],
         capture_output=True, text=True, check=False,
     )
@@ -233,7 +328,7 @@ def revision(kb_root: Path, name: str) -> str | None:
 
 
 def config_value(kb_root: Path, key: str) -> str:
-    probe = subprocess.run(
+    probe = _run_git(
         ["git", "-C", str(kb_root), "config", "--get", key],
         capture_output=True, text=True, check=False,
     )
@@ -253,7 +348,7 @@ def repository_identity(path: Path) -> str | None:
         # worktree's own git dir and would make the same repository look different.
         ("rev-parse", "--git-common-dir"),
     ):
-        probe = subprocess.run(
+        probe = _run_git(
             ["git", "-C", str(path), *arguments],
             capture_output=True, text=True, check=False,
         )
@@ -267,6 +362,54 @@ def repository_identity(path: Path) -> str | None:
             resolved = path / resolved
         return str(resolved.resolve())
     return None
+
+
+# A Windows drive path ("C:\kb", "C:/kb") is a local path, but ``urlsplit`` reads the
+# drive letter as a URL scheme, so it must be recognised before the scheme test.
+WINDOWS_DRIVE_PATH = re.compile(r"^[A-Za-z]:[\\/]")
+# A file URL carries the drive in its path component: ``file:///C:/kb`` parses to
+# ``/C:/kb``, which is not absolute on Windows until the leading slash is dropped.
+FILE_URL_DRIVE_PATH = re.compile(r"^/[A-Za-z]:")
+
+
+def _unresolvable_home(target: str) -> ArchiveError:
+    return ArchiveError(
+        f"the archive target {target!r} starts with '~' but the home directory it "
+        "names cannot be resolved, so the archive cannot prove it is not the "
+        "knowledge base itself; refusing to run. Use an absolute path instead."
+    )
+
+
+def _expand_home(target: str) -> Path:
+    """Expand a leading ``~`` the way Git will, or fail closed.
+
+    Git expands ``~`` from ``HOME`` on every platform, while Python's Windows
+    ``expanduser`` reads ``USERPROFILE`` and silently returns an unresolvable ``~user``
+    unchanged. Either difference would let a target that really names the knowledge
+    base slip past the self-reference guard, so the expansion is done here: ``~`` and
+    ``~/`` use ``HOME`` when it is set, and a ``~user`` form is refused on Windows,
+    where Git has no portable equivalent.
+    """
+    if not target.startswith("~"):
+        return Path(target)
+    if target == "~" or target.startswith("~/"):
+        home = os.environ.get("HOME")
+        if home:
+            return Path(home) / target[2:] if target.startswith("~/") else Path(home)
+        try:
+            return Path(target).expanduser()
+        except RuntimeError as error:
+            raise _unresolvable_home(target) from error
+    if os.name == "nt":
+        raise ArchiveError(
+            f"the archive target {target!r} names another user's home directory, which "
+            "Git does not resolve portably on Windows, so the archive cannot prove it is "
+            "not the knowledge base itself; refusing to run. Use an absolute path instead."
+        )
+    try:
+        return Path(target).expanduser()
+    except RuntimeError as error:
+        raise _unresolvable_home(target) from error
 
 
 def local_path_of(target: str) -> Path | None:
@@ -283,19 +426,15 @@ def local_path_of(target: str) -> Path | None:
     """
     parsed = urlsplit(target)
     if parsed.scheme == "file":
-        return Path(unquote(parsed.path))
-    if parsed.scheme:
+        path = unquote(parsed.path)
+        if FILE_URL_DRIVE_PATH.match(path):
+            path = path[1:]
+        return Path(path)
+    if parsed.scheme and not WINDOWS_DRIVE_PATH.match(target):
         return None
     if "@" in target.split("/", 1)[0] and ":" in target:
         return None  # scp-like ssh target, for example git@github.com:owner/repo.git
-    try:
-        return Path(target).expanduser()
-    except RuntimeError as error:
-        raise ArchiveError(
-            f"the archive target {target!r} starts with '~' but the home directory it "
-            "names cannot be resolved, so the archive cannot prove it is not the "
-            "knowledge base itself; refusing to run. Use an absolute path instead."
-        ) from error
+    return _expand_home(target)
 
 
 def reject_self_reference(kb_root: Path, target: str) -> None:
@@ -341,7 +480,13 @@ def reject_self_reference(kb_root: Path, target: str) -> None:
         return
     identity = repository_identity(path)
     own = repository_identity(kb_root)
-    if identity is not None and own is not None and identity == own:
+    # ``normcase`` is the identity on POSIX and lowercases on Windows, where two spellings
+    # of the same directory must still count as the knowledge base itself.
+    if (
+        identity is not None
+        and own is not None
+        and os.path.normcase(identity) == os.path.normcase(own)
+    ):
         raise ArchiveError(
             f"the archive target {target!r} resolves to the knowledge base itself; pushing "
             "and verifying against the same repository would prove nothing, so the archive "
@@ -351,7 +496,7 @@ def reject_self_reference(kb_root: Path, target: str) -> None:
 
 def push_urls(kb_root: Path, remote: str) -> list[str]:
     """Every URL ``git push <remote>`` would contact, in order."""
-    probe = subprocess.run(
+    probe = _run_git(
         ["git", "-C", str(kb_root), "remote", "get-url", "--push", "--all", remote],
         capture_output=True, text=True, check=False,
     )
@@ -377,7 +522,7 @@ def push_target(kb_root: Path) -> tuple[str, str, list[str]]:
     checked-out branch is the only target, and it is resolved before anything is
     committed so a missing upstream cannot leave a stray commit behind.
     """
-    branch = subprocess.run(
+    branch = _run_git(
         ["git", "-C", str(kb_root), "symbolic-ref", "--short", "HEAD"],
         capture_output=True, text=True, check=False,
     )
@@ -405,7 +550,7 @@ def remote_revision(kb_root: Path, remote: str, ref: str, attempts: int = 3) -> 
     failure, which must not be mistaken for "the remote does not have the commit".
     """
     for attempt in range(attempts):
-        probe = subprocess.run(
+        probe = _run_git(
             ["git", "-C", str(kb_root), "ls-remote", "--exit-code", remote, ref],
             capture_output=True, text=True, check=False,
         )
@@ -421,14 +566,16 @@ def push_and_verify(
     kb_root: Path, remote: str, remote_ref: str, commit: str, urls: list[str]
 ) -> None:
     """Push ``commit`` to the upstream ref and verify every URL it lands on."""
-    pushed = subprocess.run(
+    pushed = _run_git(
         ["git", "-C", str(kb_root), "push", "--porcelain", remote, f"{commit}:{remote_ref}"],
         capture_output=True, text=True, check=False,
     )
     if pushed.returncode:
         detail = pushed.stderr.strip() or pushed.stdout.strip()
         raise ArchiveError(
-            f"git push {remote} {commit[:12]}:{remote_ref} failed: {detail}"
+            f"git push {remote} {commit[:12]}:{remote_ref} failed: {detail}\n"
+            "if this is a network timeout, give the archive a Git transport proxy in "
+            f"{PROXY_CONFIG} (a single URL) or in VIBE_GIT_PROXY, then re-run"
         )
     for url in urls:
         probed, reported = remote_revision(kb_root, url, remote_ref)
@@ -451,6 +598,7 @@ def git_push(
     project_name: str,
     local_ledger: Path,
     target: tuple[str, str, list[str]] | None = None,
+    local_agents: Path | None = None,
 ) -> str:
     """Stage, commit, and push only this project's archive directory.
 
@@ -462,9 +610,19 @@ def git_push(
 
     ``target`` is the already-validated ``push_target`` result; callers pass it so an
     unusable upstream is rejected before the knowledge base worktree is modified.
+    ``local_agents`` is the work folder's AGENTS.md when one was copied; it is held to the
+    same "no silent archive" rule, except that end-of-line conversion is tolerated because
+    a document, unlike the ledger, has no byte-exact contract.
     """
-    relative = str(Path("工程记录") / project_name)
-    ledger_relative = str(Path("工程记录") / project_name / ".project-log" / LEDGER_RELATIVE)
+    # Git pathspecs and the ``:path`` / ``HEAD:path`` revision syntax take POSIX
+    # separators: a backslash from ``str(Path(...))`` on Windows is read as an escape,
+    # so the ledger lookup fails even though the file is tracked. ``as_posix`` is
+    # portable and produces the same strings as before on POSIX systems.
+    relative = (Path("工程记录") / project_name).as_posix()
+    ledger_relative = (
+        Path("工程记录") / project_name / ".project-log" / LEDGER_RELATIVE
+    ).as_posix()
+    agents_relative = (Path("工程记录") / project_name / AGENTS_MARKER).as_posix()
     remote, remote_ref, urls = target if target is not None else push_target(kb_root)
     rule = ignored_rule(kb_root, ledger_relative)
     if rule is not None:
@@ -472,11 +630,21 @@ def git_push(
             "the knowledge base ignores the archived ledger, so the log history would "
             f"never reach the remote:\n  {rule}\n"
             "add negations for this project to the knowledge base .gitignore:\n"
-            f"  !{Path('工程记录') / project_name}/.project-log/\n"
-            f"  !{Path('工程记录') / project_name}/.project-log/**\n"
+            f"  !{relative}/.project-log/\n"
+            f"  !{relative}/.project-log/**\n"
             "then re-run the archive"
         )
-    completed = subprocess.run(
+    if local_agents is not None:
+        agents_rule = ignored_rule(kb_root, agents_relative)
+        if agents_rule is not None:
+            raise ArchiveError(
+                "the knowledge base ignores the archived AGENTS.md, so the project rules "
+                f"would never reach the remote:\n  {agents_rule}\n"
+                "add a negation for this project to the knowledge base .gitignore:\n"
+                f"  !{agents_relative}\n"
+                "then re-run the archive"
+            )
+    completed = _run_git(
         ["git", "-C", str(kb_root), "add", "-A", "--", relative],
         capture_output=True, text=True, check=False,
     )
@@ -487,6 +655,15 @@ def git_push(
         local_bytes = local_ledger.read_bytes()
     except OSError as error:
         raise ArchiveError(f"cannot read the local ledger {local_ledger}: {error}") from error
+
+    local_agents_bytes = None
+    if local_agents is not None:
+        try:
+            local_agents_bytes = local_agents.read_bytes()
+        except OSError as error:
+            raise ArchiveError(
+                f"cannot read the local AGENTS.md {local_agents}: {error}"
+            ) from error
 
     staged_bytes = blob_bytes(kb_root, f":{ledger_relative}")
     if staged_bytes is None:
@@ -506,7 +683,26 @@ def git_push(
             f"  # a clean filter or text/eol conversion on {ledger_relative} must be removed"
         )
 
-    pending = subprocess.run(
+    if local_agents_bytes is not None:
+        staged_agents = blob_bytes(kb_root, f":{agents_relative}")
+        if staged_agents is None:
+            raise ArchiveError(
+                f"the knowledge base index does not hold {agents_relative}, so the project "
+                "rules would never reach the remote. Check that the knowledge base tracks "
+                "the file:\n"
+                f"  git -C {kb_root} check-ignore -v -- {agents_relative}\n"
+                f"  git -C {kb_root} ls-files --error-unmatch -- {agents_relative}"
+            )
+        if normalised_newlines(staged_agents) != normalised_newlines(local_agents_bytes):
+            raise ArchiveError(
+                "the staged AGENTS.md does not match the local one, so the archive would "
+                "publish different project rules. Common causes and fixes:\n"
+                f"  git -C {kb_root} update-index --no-skip-worktree -- {agents_relative}\n"
+                f"  git -C {kb_root} update-index --no-assume-unchanged -- {agents_relative}\n"
+                f"  # a clean filter that rewrites {agents_relative} must be removed"
+            )
+
+    pending = _run_git(
         ["git", "-C", str(kb_root), "diff", "--cached", "--quiet", "--", relative],
         check=False,
     )
@@ -532,7 +728,7 @@ def git_push(
             f"Re-run: git -C {kb_root} diff --cached -- {relative}"
         )
     parent = revision(kb_root, "HEAD")
-    committed = subprocess.run(
+    committed = _run_git(
         [
             "git", "-C", str(kb_root), "commit", "--only", "-m",
             f"archive: {project_name}", "--", relative,
@@ -554,6 +750,21 @@ def git_push(
             "(that reset is only safe while HEAD is the archive commit; it is now "
             f"{archive_commit})."
         )
+    if local_agents_bytes is not None:
+        head_agents = blob_bytes(kb_root, f"HEAD:{agents_relative}")
+        if head_agents is None or normalised_newlines(head_agents) != normalised_newlines(
+            local_agents_bytes
+        ):
+            raise ArchiveError(
+                "the committed AGENTS.md does not match the local one; refusing to push. "
+                "Inspect with:\n"
+                f"  git -C {kb_root} log --oneline -2\n"
+                f"  git -C {kb_root} cat-file blob HEAD:{agents_relative}\n"
+                "If HEAD is still the archive commit, undo it with:\n"
+                f"  git -C {kb_root} reset --soft {parent}\n"
+                "(that reset is only safe while HEAD is the archive commit; it is now "
+                f"{archive_commit})."
+            )
     if revision(kb_root, "HEAD") != archive_commit:
         raise ArchiveError(
             "HEAD moved after the archive commit, so the revision that was verified is no "
@@ -574,7 +785,8 @@ def archive(project_root: Path, kb_base: Path) -> dict:
 
     # The project name is the work folder name, exactly as the user specified.
     project_name = root.name
-    destination = engineering / project_name / ".project-log"
+    project_directory = engineering / project_name
+    destination = project_directory / ".project-log"
 
     local_id = read_project_id(source)
     known_id = read_project_id(destination)
@@ -593,9 +805,9 @@ def archive(project_root: Path, kb_base: Path) -> dict:
     kb_events = read_ledger(destination / LEDGER_RELATIVE)
     ledger = compare_ledgers(local_events, kb_events)
     kb_root = Path(kb_base).expanduser()
-    ledger_relative = str(
+    ledger_relative = (
         Path("工程记录") / project_name / ".project-log" / LEDGER_RELATIVE
-    )
+    ).as_posix()
     committed = read_committed_ledger(kb_root, ledger_relative)
     ledger["kb_committed"] = len(committed)
     ledger["appended"] = max(0, len(local_events) - len(committed))
@@ -604,18 +816,34 @@ def archive(project_root: Path, kb_base: Path) -> dict:
     # 工程记录/ directory behind.
     target = push_target(kb_root)
     copied = copy_project_log(source, destination)
-    pushed = git_push(kb_root, project_name, source / LEDGER_RELATIVE, target)
+    agents_md = copy_agents_md(root, project_directory)
+    pushed = git_push(
+        kb_root,
+        project_name,
+        source / LEDGER_RELATIVE,
+        target,
+        local_agents=root / AGENTS_MARKER if agents_md == "archived" else None,
+    )
     return {
         "project": project_name,
         "project_id": local_id,
         "destination": str(destination),
         "ledger": ledger,
         "files": copied["files"],
+        "agents_md": agents_md,
         "git": pushed,
     }
 
 
 def main() -> int:
+    # A Windows console defaults to a legacy codepage (for example cp1252); printing this
+    # CLI's non-ASCII output there raises UnicodeEncodeError. The output contract is UTF-8
+    # on every platform, so force the process streams before anything is printed. The
+    # getattr check tolerates a harness (or a replaced stream) with no reconfigure().
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(description="Archive project log to knowledge base")
     parser.add_argument("--project-root", required=True, help="Path to project root")
     parser.add_argument("--kb", help="Knowledge base root; defaults to the configured path")

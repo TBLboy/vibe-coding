@@ -18,7 +18,11 @@ def find_init_project_py() -> Path:
     env_runtime = os.environ.get("VIBE_RUNTIME")
     if env_runtime:
         candidates.append(Path(env_runtime) / "scripts" / "init_project.py")
-    candidates.append(Path.home() / ".codex" / "vibe-workflow" / "scripts" / "init_project.py")
+    codex_config = Path(
+        os.environ.get("CODEX_HOME")
+        or (Path.home() / ".codex")
+    )
+    candidates.append(codex_config / "vibe-workflow" / "scripts" / "init_project.py")
     candidates.append(Path(__file__).resolve().parents[3] / "runtime" / "scripts" / "init_project.py")
     for candidate in candidates:
         if candidate.is_file():
@@ -47,19 +51,65 @@ def build_agents_md(template: str, project_rules: str) -> str:
     return block + "\n" + project_section
 
 
+def read_preserving_newlines(path: Path) -> str:
+    """Read text without translating line endings.
+
+    ``Path.read_text`` uses universal newlines, so a later write converts every line ending
+    in the file to the platform default -- including the parts outside the managed block.
+    Opening with ``newline=""`` keeps those bytes exactly as they were.
+    """
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        return handle.read()
+
+
+def write_preserving_newlines(path: Path, content: str) -> None:
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        handle.write(content)
+
+
+def update_general_block(path: Path, content: str, template: str, dry_run: bool) -> str:
+    """Refresh the managed block in place, leaving everything outside the markers alone.
+
+    The skill tells the user to change `templates/general-rules.md` and re-initialize, so
+    re-initializing has to actually carry the change. It used to return ``skipped`` whenever
+    the begin marker was present, which made that instruction silently ineffective: a project
+    that already had a block could never receive an updated general rule.
+
+    Only the span between the markers is template-owned. The project-rules section and
+    anything else the user added keep their bytes, including their line endings. Malformed
+    marker layouts are reported instead of guessed at, because inventing a boundary could
+    delete text the user wrote.
+    """
+    start = content.index(GENERAL_BEGIN)
+    end = content.find(GENERAL_END, start)
+    if end == -1:
+        return "markers-unbalanced"
+    end += len(GENERAL_END)
+    if GENERAL_BEGIN in content[start + len(GENERAL_BEGIN):end]:
+        # A second begin marker inside the span means the boundaries are not the ones assumed
+        # here; replacing the span would swallow that marker.
+        return "markers-ambiguous"
+    replacement = general_block(template).rstrip("\n")
+    if content[start:end] == replacement:
+        return "unchanged"
+    if not dry_run:
+        write_preserving_newlines(path, content[:start] + replacement + content[end:])
+    return "updated"
+
+
 def ensure_agents_md(target: Path, template: str, project_rules: str, dry_run: bool) -> str:
     path = target / "AGENTS.md"
     if path.exists():
-        content = path.read_text(encoding="utf-8")
+        content = read_preserving_newlines(path)
         if GENERAL_BEGIN in content:
-            return "skipped"
+            return update_general_block(path, content, template, dry_run)
         new_content = general_block(template) + "\n" + content
         status = "injected"
     else:
         new_content = build_agents_md(template, project_rules)
         status = "created"
     if not dry_run:
-        path.write_text(new_content, encoding="utf-8")
+        write_preserving_newlines(path, new_content)
     return status
 
 
@@ -92,6 +142,14 @@ def initialize(target: Path, project_rules: str = "", dry_run: bool = False) -> 
 
 
 def main() -> int:
+    # A Windows console defaults to a legacy codepage (for example cp1252); printing this
+    # CLI's non-ASCII output there raises UnicodeEncodeError. The output contract is UTF-8
+    # on every platform, so force the process streams before anything is printed. The
+    # getattr check tolerates a harness (or a replaced stream) with no reconfigure().
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--target", type=Path, required=True)
     parser.add_argument("--project-rules", default="", help="Project-specific rules extracted from README/docs")

@@ -1,6 +1,6 @@
 ---
 name: a-loop-control
-description: Control a bounded Vibe work loop through durable state restoration, evidence validity, failure attribution, retry contracts, native Codex Goal synchronization, completion evaluation, and handoff.
+description: Control a bounded Vibe work loop through durable state restoration, evidence validity, failure attribution, retry contracts, Project Goal evaluation, and handoff.
 license: MIT
 compatibility: codex
 metadata:
@@ -12,32 +12,31 @@ metadata:
 
 ## Purpose
 
-Use the installed `loopctl` runtime as the single deterministic controller for Project Goal state, evidence validity, failure attribution, retry limits, native Goal synchronization, and Handoff.
+Use the installed `vibe` runtime as the deterministic controller for Project Goal state, evidence validity, failure attribution, retry limits, and Handoff. Project Log format 2 is the only supported format; the retired `loopctl` compatibility entry is gone.
 
-Codex's native `/goal` is the only thread execution and continuation controller. This Skill must not create a second continuation loop.
+Project Goal is the only completion contract. The session-level Goal control surface is Codex's native
+`/goal`; its state is a session control surface and never counts as completion evidence. This Skill must
+not invent or call any other continuation interface. If native Goals are unavailable or disabled,
+continuation falls back to explicit user turns plus the restored `.project-log` state and Handoff.
 
 ## Restore
 
 At the start of non-trivial work:
 
 ```bash
-VIBE_RUNTIME="${CODEX_HOME:-$HOME/.codex}/vibe-workflow"
-python3 "$VIBE_RUNTIME/scripts/loopctl.py" --root <project-root> --json restore
+VIBE_CONFIG="${CODEX_HOME:-$HOME/.codex}"
+VIBE_RUNTIME="${VIBE_RUNTIME:-$VIBE_CONFIG/vibe-workflow}"
+VIBE_PYTHON="${VIBE_PYTHON:-$(cat "$VIBE_CONFIG/vibe-python")}"
+"$VIBE_PYTHON" "$VIBE_RUNTIME/scripts/vibe.py" --root <project-root> status
 ```
-
-On Windows use `py -3`.
 
 Read the Project Goal, active run, current task, valid/stale evidence, open C-level questions, limits, and exact next action before changing product files.
 
-## Native Goal Bridge
+## Session Continuation
 
-Generate the objective to bind through Codex's native `/goal`:
+At the start of a turn, restore the Project Goal, active Run, task status, valid evidence, blocking questions and exact next action. Continue until the task is complete, explicitly blocked, or the user pauses.
 
-```bash
-python3 "$VIBE_RUNTIME/scripts/loopctl.py" --root <project-root> --json goal-bind
-```
-
-Synchronize observed native Goal state with `goal-sync`. Native Goal completion only triggers Project Goal evaluation; it does not bypass required evidence.
+Do not claim automatic continuation, background resumption, or a session Goal binding that the installed Codex version does not provide. When TASK-072 ships a session runner, this section must be updated from the actual implemented interface before use.
 
 ## Decision Boundary
 
@@ -75,14 +74,14 @@ Never repeat the same failure signature with the same delta. When limits are rea
 
 ## Evidence
 
-Register evidence with `record-evidence`. Any covered code, config, dependency, requirement, or verification-harness change makes the evidence `stale`; never delete it to hide invalidation.
+Register evidence with `vibe evidence record`. Any covered code, config, dependency, requirement, or verification-harness change makes the evidence `stale`; never delete it to hide invalidation.
 
 ## Completion
 
 Run:
 
 ```bash
-python3 "$VIBE_RUNTIME/scripts/loopctl.py" --root <project-root> --json evaluate goal
+"$VIBE_PYTHON" "$VIBE_RUNTIME/scripts/vibe.py" --root <project-root> goal complete --id <GOAL-ID>
 ```
 
 Project Goal completion requires all success conditions, valid required evidence, no blocking C-level question, and independent review evidence for high/critical goals.
