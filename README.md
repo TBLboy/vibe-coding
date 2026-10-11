@@ -1,7 +1,8 @@
 # Vibe Coding — OpenCode 版
 
-面向 **OpenCode** 客户端的用户级全局 Vibe Coding 工作流。本分支（`opencode`）从 `main`
+面向 **OpenCode** 客户端的用户级全局 Vibe Coding 工作流。本分支（`opencode-main`）从 `main`
 独立派生，不继承 `codex` 分支的提交历史；它与 codex 版**功能对齐、各自独立演进**。
+`main` 已快进到与 `opencode-main` 同一提交，两者内容一致；克隆或下载 ZIP 默认得到 `main`。
 
 > **安装入口是 `./runtime/opencode/install.sh`。**
 > 仓库根目录的 `install.sh` / `update.sh` / `uninstall.sh`（及 `.ps1`）是 **codex 面**的

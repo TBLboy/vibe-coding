@@ -51,12 +51,38 @@ def build_agents_md(template: str, project_rules: str) -> str:
     return block + "\n" + project_section
 
 
+def update_general_block(path: Path, content: str, template: str, dry_run: bool) -> str:
+    """Refresh the managed block in place, leaving everything outside the markers alone.
+
+    The skill tells the user to change `templates/general-rules.md` and re-initialize, so
+    re-initializing has to actually carry the change. It used to return ``skipped`` whenever
+    the begin marker was present, which made that instruction silently ineffective: a project
+    that already had a block could never receive an updated general rule.
+
+    Only the span between the markers is template-owned. The project-rules section and
+    anything else the user added stay byte-for-byte untouched. A begin marker without its end
+    marker is reported instead of guessed at, because inventing the end could delete text the
+    user wrote.
+    """
+    start = content.index(GENERAL_BEGIN)
+    end = content.find(GENERAL_END, start)
+    if end == -1:
+        return "markers-unbalanced"
+    end += len(GENERAL_END)
+    replacement = general_block(template).rstrip("\n")
+    if content[start:end] == replacement:
+        return "unchanged"
+    if not dry_run:
+        path.write_text(content[:start] + replacement + content[end:], encoding="utf-8")
+    return "updated"
+
+
 def ensure_agents_md(target: Path, template: str, project_rules: str, dry_run: bool) -> str:
     path = target / "AGENTS.md"
     if path.exists():
         content = path.read_text(encoding="utf-8")
         if GENERAL_BEGIN in content:
-            return "skipped"
+            return update_general_block(path, content, template, dry_run)
         new_content = general_block(template) + "\n" + content
         status = "injected"
     else:

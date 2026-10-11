@@ -49,14 +49,49 @@ class ProjectInitAgentsTests(unittest.TestCase):
         self.assertTrue(content.startswith(ipa.GENERAL_BEGIN))
         self.assertIn(existing, content)
 
-    def test_idempotent_skip(self):
+    def test_idempotent_unchanged(self):
         ipa.initialize(self.target, project_rules="")
         agents = self.target / "AGENTS.md"
         before = agents.read_text(encoding="utf-8")
         result = ipa.initialize(self.target, project_rules="")
-        self.assertEqual(result["agents_md"]["status"], "skipped")
+        self.assertEqual(result["agents_md"]["status"], "unchanged")
         after = agents.read_text(encoding="utf-8")
         self.assertEqual(before, after)
+
+    def test_existing_block_is_updated_when_the_template_changes(self):
+        """The skill's instruction ("change the template, re-initialize") has to work.
+
+        Re-initializing used to report `skipped` whenever the begin marker existed, so an
+        updated general rule could never reach a project that already had a block.
+        """
+        rules = "## 模块边界\n\n- 只修改 dexbot_bringup。"
+        ipa.initialize(self.target, project_rules=rules)
+        agents = self.target / "AGENTS.md"
+        before = agents.read_text(encoding="utf-8")
+
+        original = ipa.load_general_template
+        ipa.load_general_template = lambda: original() + "\n9. 新规则：模板更新必须能传播。\n"
+        try:
+            result = ipa.initialize(self.target, project_rules="")
+        finally:
+            ipa.load_general_template = original
+
+        self.assertEqual(result["agents_md"]["status"], "updated")
+        after = agents.read_text(encoding="utf-8")
+        self.assertIn("新规则：模板更新必须能传播。", after)
+        self.assertNotIn("新规则：模板更新必须能传播。", before)
+        # Only the managed span moves: the project's own rules survive verbatim.
+        self.assertIn(rules, after)
+        self.assertIn("## 项目级规则", after)
+        self.assertLess(after.index(ipa.GENERAL_END), after.index("## 项目级规则"))
+
+    def test_unbalanced_markers_are_left_alone(self):
+        """A begin marker without its end marker must not be guessed at."""
+        content = f"# 项目规则\n\n{ipa.GENERAL_BEGIN}\n1. 半截块\n\n## 我自己的章节\n\n- 别删我\n"
+        (self.target / "AGENTS.md").write_text(content, encoding="utf-8")
+        result = ipa.initialize(self.target, project_rules="")
+        self.assertEqual(result["agents_md"]["status"], "markers-unbalanced")
+        self.assertEqual((self.target / "AGENTS.md").read_text(encoding="utf-8"), content)
 
     def test_dry_run_writes_nothing(self):
         result = ipa.initialize(self.target, project_rules="", dry_run=True)
