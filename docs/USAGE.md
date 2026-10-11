@@ -31,7 +31,7 @@ Vibe Coding 是一套面向 **OpenCode** 客户端的**用户级全局工程工�
 
 ### 1.1 全局安装层
 
-全局安装层位于用户目录，负责让多个项目共享同一套 Agent 规则、Skills、Hooks 和 Loop 运行时，典型内容包括：
+全局安装层位于用户目录，负责让多个项目共享同一套 Agent 规则、Skills、插件和 Loop 运行时，典型内容包括：
 
 - 用户级 `AGENTS.md` 中的 Vibe 主 Agent 规则。
 - `OPENCODE_CONFIG_DIR` 下的 Agent、Commands、Skills、插件、配置和备份。
@@ -102,7 +102,7 @@ export HTTPS_PROXY=http://127.0.0.1:10808
 
 ### 2.2 统一 Vibe Python
 
-安装器、Hooks、项目校验和包校验使用统一的用户级 Python。安装器会优先使用：
+安装器、插件、项目校验和包校验使用统一的用户级 Python。安装器会优先使用：
 
 ```text
 ${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/vibe-python
@@ -726,7 +726,7 @@ VIBE="$HOME/.config/opencode/vibe-workflow/scripts/vibe.py"
 不要只汇报恢复摘要。根据记录中的 next action 继续执行；如果没有活动任务，就为我的新请求创建一个 run。
 ```
 
-### 10.2 SessionStart 显示了旧任务
+### 10.2 会话恢复显示了旧任务
 
 先运行：
 
@@ -889,9 +889,9 @@ format 2 是框架**唯一支持**的格式：新建项目直接生成新格式�
 
 自动摘要保存在数据库旁的 `generated` 目录。以 `CURRENT.json` 指向的同一版本为一组读取，校验项目、上下文、revision 和内容哈希；不逐文件猜测哪个版本更新。`current-session.md`、`progress.md` 和 `handoff.md` 是派生视图，不是另外三份事实源，也不覆盖项目中的同名用户笔记。投影失败时业务提交仍成立，返回 `projection: pending`，可用 `state-views` 修复，不需要再次登记业务操作。生成内容由 revision 唯一决定，因此生成目录里缺失的文件（含 `manifest.json`）会在下次 `state-views` 时原地补写，结果中的 `repaired` 列出补写的文件名；已存在但字节不同的文件属于篡改，仍然失败关闭（`projection_incomplete`），不会被静默覆盖。
 
-新格式下，启动 Hook 与会话恢复从状态库读回目标、任务、阻塞、证据有效性与精确下一步；`PostToolUse` 只按记录哈希精确失效证据，不创建旧 YAML。已退役的 format 1 写入口不再存在，日常操作统一走正式 `vibe` 入口。初始化中断、缺失数据库或无法识别的标记均需保留现场并调查；不要删除标记或数据库来让旧入口接管。
+新格式下，会话恢复从状态库读回目标、任务、阻塞、证据有效性与精确下一步；插件在工具执行后只按记录哈希精确失效证据，不创建旧 YAML。已退役的 format 1 写入口不再存在，日常操作统一走正式 `vibe` 入口。初始化中断、缺失数据库或无法识别的标记均需保留现场并调查；不要删除标记或数据库来让旧入口接管。
 
-`.project-log/.state/` 是格式 2 保留的本机所有权目录。目录仍在而标记缺失时（包括切换到不含标记的旧分支），入口保守拒绝恢复，不自动补写旧 YAML；需要通过显式 `state-attach` 恢复，不能通过删除目录绕过。Hook 从子目录启动时会识别上层格式 2 项目，路径别名也不能绕过该保护。
+`.project-log/.state/` 是格式 2 保留的本机所有权目录。目录仍在而标记缺失时（包括切换到不含标记的旧分支），入口保守拒绝恢复，不自动补写旧 YAML；需要通过显式 `state-attach` 恢复，不能通过删除目录绕过。插件从子目录启动时会识别上层格式 2 项目，路径别名也不能绕过该保护。
 
 ### 快照交换已退役
 

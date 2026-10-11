@@ -150,17 +150,17 @@ Project Log format 2 是唯一受支持的格式；日常操作与文档示例�
 
 ## 平台范围
 
-| 平台 | CI 实测（`.github/workflows/tests.yml`） | 状态 |
+| 平台 | 最近一次实测（命令见下） | 状态 |
 |---|---|---|
-| Linux（`ubuntu-latest`） | `Ran 252 tests in 27.5s` / `OK (skipped=2)` | 支持 |
-| Windows（`windows-latest` + Python 3.11） | `Ran 252 tests in 148.5s` / `OK (skipped=2)` | 支持（见下列限制） |
+| Linux（`ubuntu-latest`） | `Ran 252 tests in 27.5s` / `OK (skipped=2)`（上次 CI 实测；本轮改动后尚未重跑 CI） | 支持 |
+| Windows（`windows-latest` + Python 3.11） | `Ran 334 tests in 164.6s` / `OK (skipped=7)`（本机 Windows 实测 2026-10-11；CI 运行同一条命令） | 支持（见下列限制） |
 
-跳过的数量取决于宿主能力，三种实测情形都是 `OK`、0 failures / 0 errors：
+跳过的数量取决于宿主能力，三种实测情形都是 `OK`、0 failures / 0 errors（下表数字取自各自最近一次实测；测试增删会改变总数与跳过数，跳过原因不变）：
 
 | 宿主 | 结果 | 差异原因 |
 |---|---|---|
 | GitHub `windows-latest` | `skipped=2` | 具备符号链接特权，`bash` 可用 |
-| 本机 PowerShell 5.1（cp936 控制台，`bash` 为 WSL 存根，无符号链接特权） | `skipped=8` | 4 个 symlink 用例 + 相关 bash 用例跳过 |
+| 本机 PowerShell 5.1（cp936 控制台，`bash` 为 WSL 存根，无符号链接特权） | `skipped=7` | 4 个 symlink 用例 + 相关 bash 用例跳过 |
 | 本机并把 `C:\Program Files\Git\bin` 前置到 `PATH` | `skipped=5` | bash 可用，symlink 仍受特权限制 |
 
 CI 在 `ubuntu-latest` 与 `windows-latest` 上运行与本地完全相同的命令
