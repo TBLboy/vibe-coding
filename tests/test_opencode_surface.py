@@ -354,6 +354,23 @@ class OpenCodeStaticSurfaceTests(unittest.TestCase):
             rules = agent_rules(role)
             self.assertEqual(resolve(rules, "external_directory", installed), "allow", role)
             self.assertEqual(resolve(rules, "read", installed), "allow", role)
+            # The allow is per subdirectory: `grep`'s resource is its pattern, not its
+            # search path, so a directory-wide allow would expose the secrets below to
+            # the grep tool. Anything outside an allowed boundary must not resolve to
+            # `external_directory: allow`.
+            for outside in (
+                "~/.config/opencode/opencode.json",
+                "~/.config/opencode/opencode.json.bak-20261012-225139",
+                "~/.config/opencode/service.json",
+                "~/.config/opencode/backups/update-20261012-224224/opencode.json",
+                "~/.config/opencode/memory/notes.md",
+            ):
+                self.assertNotEqual(
+                    resolve(rules, "external_directory", outside), "allow", f"{role}: {outside}"
+                )
+            self.assertNotEqual(
+                resolve(rules, "shell", "git diff --no-index x y"), "allow", role
+            )
             for secret in (
                 "~/.config/opencode/opencode.json",
                 "~/.config/opencode/opencode.json.bak-20261012-225139",

@@ -12,6 +12,9 @@ permissions:
   - { action: skill, resource: "*", effect: allow }
   - { action: shell, resource: "git status*", effect: allow }
   - { action: shell, resource: "git diff*", effect: allow }
+  # `git diff --no-index` reads arbitrary files, external ones included, so it bypasses
+  # the read/external_directory gates (ALIGN-FW-005).
+  - { action: shell, resource: "git diff --no-index*", effect: deny }
   - { action: shell, resource: "git log*", effect: allow }
   - { action: shell, resource: "git show*", effect: allow }
   - { action: shell, resource: "git rev-parse*", effect: allow }
@@ -22,12 +25,31 @@ permissions:
   - { action: shell, resource: "git log --pretty=*", effect: allow }
   - { action: shell, resource: "*verification_runner.py preflight*", effect: allow }
   - { action: shell, resource: "*verification_runner.py run*", effect: allow }
-  # Read-only roles must be able to inspect the installed control layer (TASK-140):
+  # Read-only roles must be able to inspect the deployed control layer (TASK-140):
   # V2 gates an outside path with the separate `external_directory` action before its
-  # `read`, so allowing `read` alone is not enough. The denies below stay last and win.
-  - { action: external_directory, resource: "~/.config/opencode/*", effect: allow }
-  - { action: read, resource: "~/.config/opencode/*", effect: allow }
-  - { action: glob, resource: "~/.config/opencode/*", effect: allow }
+  # `read`, so allowing `read` alone is not enough. The allow is per subdirectory on
+  # purpose: `grep`'s permission resource is its *pattern*, not its search path, so a
+  # directory-wide allow hands `opencode.json`, `backups/**` and `memory/**` to the
+  # grep tool. Keeping the secrets outside every allowed boundary is what protects
+  # them; the `read` denies below stay last and win too.
+  - { action: external_directory, resource: "~/.config/opencode/agents/*", effect: allow }
+  - { action: external_directory, resource: "~/.config/opencode/commands/*", effect: allow }
+  - { action: external_directory, resource: "~/.config/opencode/plugins/*", effect: allow }
+  - { action: external_directory, resource: "~/.config/opencode/skills/*", effect: allow }
+  - { action: external_directory, resource: "~/.config/opencode/vibe-workflow/*", effect: allow }
+  - { action: external_directory, resource: "~/.config/opencode/AGENTS.md", effect: allow }
+  - { action: read, resource: "~/.config/opencode/agents/*", effect: allow }
+  - { action: read, resource: "~/.config/opencode/commands/*", effect: allow }
+  - { action: read, resource: "~/.config/opencode/plugins/*", effect: allow }
+  - { action: read, resource: "~/.config/opencode/skills/*", effect: allow }
+  - { action: read, resource: "~/.config/opencode/vibe-workflow/*", effect: allow }
+  - { action: read, resource: "~/.config/opencode/AGENTS.md", effect: allow }
+  - { action: glob, resource: "~/.config/opencode/agents/*", effect: allow }
+  - { action: glob, resource: "~/.config/opencode/commands/*", effect: allow }
+  - { action: glob, resource: "~/.config/opencode/plugins/*", effect: allow }
+  - { action: glob, resource: "~/.config/opencode/skills/*", effect: allow }
+  - { action: glob, resource: "~/.config/opencode/vibe-workflow/*", effect: allow }
+  - { action: glob, resource: "~/.config/opencode/AGENTS.md", effect: allow }
   - { action: read, resource: "**/.env", effect: deny }
   - { action: read, resource: ".env", effect: deny }
   - { action: read, resource: "**/.env.*", effect: deny }
