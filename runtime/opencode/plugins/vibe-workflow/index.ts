@@ -55,6 +55,7 @@ function detectPython(): string {
       const probe = spawnSync(candidate, ["-c", "import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)"], {
         stdio: "ignore",
         timeout: 2_000,
+        windowsHide: true,
       })
       if (probe.status === 0) return candidate
     } catch {
@@ -109,6 +110,7 @@ function runCli(runtime: Runtime, args: string[], timeoutMs = COMMAND_TIMEOUT_MS
       cwd: runtime.root,
       env: cliEnvironment(),
       stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
     })
     let stdout = ""
     let stderr = ""

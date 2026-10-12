@@ -163,6 +163,14 @@ class OpenCodePluginSourceTests(unittest.TestCase):
             "delete environment.PYTHONPATH",
         ):
             self.assertIn(required, text)
+        # Every console child must be hidden: on Windows an un-hidden python.exe
+        # flashes a console window on each hook and tool call (ALIGN-FW-003).
+        spawn_calls = text.count("spawn(") + text.count("spawnSync(")
+        self.assertEqual(
+            text.count("windowsHide: true"),
+            spawn_calls,
+            "every spawn/spawnSync call must set windowsHide: true",
+        )
         for forbidden in (
             "@opencode-ai/plugin",
             "experimental.chat.system.transform",
