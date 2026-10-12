@@ -371,6 +371,15 @@ class OpenCodeStaticSurfaceTests(unittest.TestCase):
             self.assertNotEqual(
                 resolve(rules, "shell", "git diff --no-index x y"), "allow", role
             )
+            # `external_directory` resources are directory boundaries: a literal
+            # top-level file entry is inert in the runtime matcher, so keep every
+            # allow wildcard-shaped or it silently does nothing.
+            for rule in rules:
+                if rule["action"] == "external_directory" and rule["effect"] == "allow":
+                    self.assertTrue(
+                        str(rule["resource"]).endswith("/*"),
+                        f"{role}: external_directory allow must be a directory boundary: {rule}",
+                    )
             for secret in (
                 "~/.config/opencode/opencode.json",
                 "~/.config/opencode/opencode.json.bak-20261012-225139",

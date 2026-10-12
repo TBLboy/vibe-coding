@@ -31,25 +31,24 @@ permissions:
   # purpose: `grep`'s permission resource is its *pattern*, not its search path, so a
   # directory-wide allow hands `opencode.json`, `backups/**` and `memory/**` to the
   # grep tool. Keeping the secrets outside every allowed boundary is what protects
-  # them; the `read` denies below stay last and win too.
+  # them; the `read` denies below stay last and win too. Only directory boundaries
+  # work here: a literal top-level file entry is inert in the runtime matcher, so
+  # `AGENTS.md` is covered by its hash binding instead.
   - { action: external_directory, resource: "~/.config/opencode/agents/*", effect: allow }
   - { action: external_directory, resource: "~/.config/opencode/commands/*", effect: allow }
   - { action: external_directory, resource: "~/.config/opencode/plugins/*", effect: allow }
   - { action: external_directory, resource: "~/.config/opencode/skills/*", effect: allow }
   - { action: external_directory, resource: "~/.config/opencode/vibe-workflow/*", effect: allow }
-  - { action: external_directory, resource: "~/.config/opencode/AGENTS.md", effect: allow }
   - { action: read, resource: "~/.config/opencode/agents/*", effect: allow }
   - { action: read, resource: "~/.config/opencode/commands/*", effect: allow }
   - { action: read, resource: "~/.config/opencode/plugins/*", effect: allow }
   - { action: read, resource: "~/.config/opencode/skills/*", effect: allow }
   - { action: read, resource: "~/.config/opencode/vibe-workflow/*", effect: allow }
-  - { action: read, resource: "~/.config/opencode/AGENTS.md", effect: allow }
   - { action: glob, resource: "~/.config/opencode/agents/*", effect: allow }
   - { action: glob, resource: "~/.config/opencode/commands/*", effect: allow }
   - { action: glob, resource: "~/.config/opencode/plugins/*", effect: allow }
   - { action: glob, resource: "~/.config/opencode/skills/*", effect: allow }
   - { action: glob, resource: "~/.config/opencode/vibe-workflow/*", effect: allow }
-  - { action: glob, resource: "~/.config/opencode/AGENTS.md", effect: allow }
   - { action: read, resource: "**/.env", effect: deny }
   - { action: read, resource: ".env", effect: deny }
   - { action: read, resource: "**/.env.*", effect: deny }
