@@ -342,6 +342,30 @@ class OpenCodeStaticSurfaceTests(unittest.TestCase):
             for command in ("git commit -m x", "git push origin main", "git reset --hard", "git checkout ."):
                 self.assertNotEqual(resolve(rules, "shell", command), "allow", f"{role}: {command}")
 
+    def test_read_only_roles_may_inspect_the_installed_control_layer(self) -> None:
+        """Verification needs the deployed layer, not only the source template.
+
+        A path outside the Location is gated by the separate `external_directory`
+        action before its `read`, so allowing `read` alone is not enough; and the
+        secret denies must stay last so that they still win (TASK-140).
+        """
+        installed = "~/.config/opencode/agents/verification-reviewer.md"
+        for role in ("verification-reviewer", "alignment-reviewer"):
+            rules = agent_rules(role)
+            self.assertEqual(resolve(rules, "external_directory", installed), "allow", role)
+            self.assertEqual(resolve(rules, "read", installed), "allow", role)
+            for secret in (
+                "~/.config/opencode/opencode.json",
+                "~/.config/opencode/opencode.json.bak-20261012-225139",
+                "~/.config/opencode/auth.json",
+                "~/.config/opencode/service.json",
+                "~/.config/opencode/backups/update-20261012-224224/opencode.json",
+                "~/.config/opencode/memory/notes.md",
+                "~/.ssh/id_rsa",
+                "~/.aws/credentials",
+            ):
+                self.assertNotEqual(resolve(rules, "read", secret), "allow", f"{role}: {secret}")
+
     def test_commands_are_thin_primary_agent_entrypoints(self) -> None:
         paths = sorted((OPENCODE / "commands").glob("*.md"))
         self.assertEqual({path.stem for path in paths}, EXPECTED_COMMANDS)
