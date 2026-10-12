@@ -60,7 +60,7 @@ REQUIRED_OPENCODE = {
     "commands/vibe-verify.md",
     "commands/vibe-status.md",
     "commands/vibe-retro.md",
-    "plugins/vibe-workflow.ts",
+    "plugins/vibe-workflow/index.ts",
 }
 REQUIRED_PACKAGE_FILES = {
     "AI_INSTALL.md",

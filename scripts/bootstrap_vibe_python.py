@@ -86,6 +86,9 @@ def run(command: Sequence[str], *, check: bool = True, capture: bool = True) -> 
     environment = os.environ.copy()
     environment["PYTHONUTF8"] = "1"
     environment["PYTHONIOENCODING"] = "utf-8"
+    # A foreign PYTHONPATH (for example ROS pointing at another Python's site-packages)
+    # would leak into the probes and the pip install of the Conda environment.
+    environment.pop("PYTHONPATH", None)
     return subprocess.run(
         list(command),
         text=True,

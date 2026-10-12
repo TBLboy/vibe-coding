@@ -10,12 +10,16 @@
 
 AI 必须完成：
 
-1. 检查 OpenCode CLI、Python 3.11+ 和依赖。
+1. 检查 OpenCode CLI（必须是 **V2**，即 `opencode --version` 为 2.x；V1 不再支持）、Python 3.11+ 和依赖。
+   只装了桌面版时 CLI 不在 PATH，位于 `/opt/OpenCode/resources/opencode-cli`，先软链：
+   `ln -sf /opt/OpenCode/resources/opencode-cli ~/.local/bin/opencode`。
+   shell 里设置了其他 Python 的 `PYTHONPATH`（例如 ROS）时，先 `unset PYTHONPATH` 再执行安装与验收命令。
 2. 阅读现有的 `AGENTS.md` 与 `opencode.json`，不得覆盖用户已有的规则、插件、MCP 或权限设置。
 3. 运行安装器 preflight。
 4. 安装全局主 Agent、八个受限 subagent、七个生命周期命令、全部内置 Skills、runtime、
-   `vibe-workflow` 插件，并注册固定版本的会话 Goal 控制器
-   `@prevalentware/opencode-goal-plugin@0.1.51`。
+   `vibe-workflow` V2 目录插件（`plugins/vibe-workflow/index.ts`，由 OpenCode 自动发现，不写入
+   `opencode.json`），并注册固定版本的会话 Goal 控制器
+   `@prevalentware/opencode-goal-plugin@0.1.60`。
 5. 在临时项目中初始化并验证 `.project-log`。
 6. 输出安装路径、备份路径、保留的本地修改和未安装的可选能力。
 
@@ -92,7 +96,7 @@ chmod +x runtime/opencode/install.sh
 | 选项 | 作用 |
 |---|---|
 | `--opencode-home <dir>` | 目标配置目录，默认 `${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}` |
-| `--skip-plugin-install` | 不运行包管理器安装 `@opencode-ai/plugin` |
+| `--skip-plugin-install` | 兼容旧调用而保留，无任何作用：OpenCode V2 自带插件 API，不再安装 npm 依赖 |
 | `--skip-preflight` | 跳过工具探测，仅用于隔离的包测试 |
 
 ## 临时项目验收
@@ -101,7 +105,7 @@ chmod +x runtime/opencode/install.sh
 PY="$(cat "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/vibe-python")"
 VIBE="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/vibe-workflow/scripts/vibe.py"
 TMP="$(mktemp -d)"
-"$PY" "$VIBE" init --root "$TMP"
+"$PY" "$VIBE" --root "$TMP" init
 "$PY" "$VIBE" --root "$TMP" validate
 "$PY" "$VIBE" --root "$TMP" status
 rm -rf "$TMP"
@@ -110,8 +114,11 @@ rm -rf "$TMP"
 上面第一条命令展开后即：
 
 ```bash
-"$PY" "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/vibe-workflow/scripts/vibe.py" init --root "$TMP"
+"$PY" "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/vibe-workflow/scripts/vibe.py" --root "$TMP" init
 ```
+
+`--root` 是全局参数，必须写在子命令（`init`、`validate`、`status` 等）**之前**；写在后面会报
+`unrecognized arguments: --root`。
 
 期望：`init` 在临时目录生成 format 2 的 `.project-log/`；`validate` 返回 `{"errors": []}`；
 `status` 输出 `project_id` 与 `revision`。临时目录用后删除，不要留在源码树内。
@@ -121,7 +128,7 @@ rm -rf "$TMP"
 1. 在目标项目根目录让 Agent 执行：
 
    ```bash
-   "$PY" "$VIBE" init --root <项目根>
+   "$PY" "$VIBE" --root <项目根> init
    ```
 
 2. 用自然语言或斜杠命令开始：`/vibe-start`、`/vibe-plan`、`/vibe-implement`、

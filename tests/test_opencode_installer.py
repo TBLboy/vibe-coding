@@ -64,15 +64,18 @@ class OpenCodeInstallerTests(unittest.TestCase):
             self.assertTrue((home / "AGENTS.md").is_file())
             self.assertTrue((home / "agents/vibe-main.md").is_file())
             self.assertTrue((home / "commands/vibe-start.md").is_file())
-            self.assertTrue((home / "plugins/vibe-workflow.ts").is_file())
+            self.assertTrue((home / "plugins/vibe-workflow/index.ts").is_file())
             self.assertTrue((home / "skills/a-loop-control/SKILL.md").is_file())
             self.assertTrue((home / "vibe-workflow/scripts/vibe.py").is_file())
             self.assertTrue((home / "vibe-python").is_file())
             config = json.loads((home / "opencode.json").read_text(encoding="utf-8"))
             self.assertEqual(config["default_agent"], "vibe-main")
-            self.assertIn("./plugins/vibe-workflow.ts", config["plugin"])
+            # V2 discovers the directory plugin itself; registering it too would load it twice.
+            self.assertNotIn("./plugins/vibe-workflow.ts", config["plugin"])
+            self.assertEqual([item for item in config["plugin"] if str(item).startswith(".")], [])
             state = json.loads((home / ".vibe-opencode-installation-state.json").read_text(encoding="utf-8"))
-            self.assertEqual(state["plugin_install"], "skipped")
+            self.assertNotIn("plugin_install", state)
+            self.assertIn("plugins/vibe-workflow/index.ts", state["managed_files"])
             self.assertIn("vibe-workflow/scripts/vibe.py", state["managed_files"])
 
             verify = run_installer("verify", "--opencode-home", str(home))
@@ -81,7 +84,7 @@ class OpenCodeInstallerTests(unittest.TestCase):
             uninstall = run_installer("uninstall", "--opencode-home", str(home))
             self.assertEqual(uninstall.returncode, 0, uninstall.stdout)
             self.assertFalse((home / ".vibe-opencode-installation-state.json").exists())
-            self.assertFalse((home / "plugins/vibe-workflow.ts").exists())
+            self.assertFalse((home / "plugins/vibe-workflow/index.ts").exists())
             self.assertFalse((home / "vibe-workflow/scripts/vibe.py").exists())
             self.assertTrue((project_log / "keep.txt").is_file())
 
@@ -101,7 +104,7 @@ class OpenCodeInstallerTests(unittest.TestCase):
             self.assertEqual(first.returncode, 0, first.stdout)
             config = json.loads((home / "opencode.json").read_text(encoding="utf-8"))
             self.assertIn("user-plugin", config["plugin"])
-            self.assertIn("./plugins/vibe-workflow.ts", config["plugin"])
+            self.assertNotIn("./plugins/vibe-workflow.ts", config["plugin"])
             self.assertEqual(config["mcp"], original["mcp"])
             self.assertEqual(config["default_agent"], "vibe-main")
 
@@ -111,7 +114,7 @@ class OpenCodeInstallerTests(unittest.TestCase):
             )
             self.assertEqual(second.returncode, 0, second.stdout)
             config = json.loads((home / "opencode.json").read_text(encoding="utf-8"))
-            self.assertEqual(config["plugin"].count("./plugins/vibe-workflow.ts"), 1)
+            self.assertEqual(config["plugin"].count("./plugins/vibe-workflow.ts"), 0)
             self.assertIn("user-plugin", config["plugin"])
 
     def test_repeated_install_is_idempotent(self) -> None:
@@ -128,7 +131,7 @@ class OpenCodeInstallerTests(unittest.TestCase):
             self.assertEqual(second.returncode, 0, second.stdout)
             after = json.loads((home / "opencode.json").read_text(encoding="utf-8"))
             self.assertEqual(after["plugin"], before["plugin"])
-            self.assertEqual(after["plugin"].count("./plugins/vibe-workflow.ts"), 1)
+            self.assertEqual(after["plugin"].count("./plugins/vibe-workflow.ts"), 0)
             state_after = json.loads(
                 (home / ".vibe-opencode-installation-state.json").read_text(encoding="utf-8")
             )
@@ -170,7 +173,7 @@ class OpenCodeInstallerTests(unittest.TestCase):
             self.assertEqual(update.returncode, 0, update.stdout)
             updated = json.loads(config_path.read_text(encoding="utf-8"))
             self.assertIn("another-user-plugin", updated["plugin"])
-            self.assertIn("./plugins/vibe-workflow.ts", updated["plugin"])
+            self.assertNotIn("./plugins/vibe-workflow.ts", updated["plugin"])
             self.assertEqual(updated["model"], "user/model")
 
     def test_local_skill_modification_is_preserved(self) -> None:
@@ -214,36 +217,31 @@ class OpenCodeInstallerTests(unittest.TestCase):
                     "file:///abs/plugin.ts", None, 42, ["a"], {"a": 1}):
             self.assertIsNone(installer.plugin_package_name(odd), odd)
 
-    def test_plugin_dependency_install_uses_package_manager(self) -> None:
+    def test_install_runs_no_package_manager(self) -> None:
+        """OpenCode V2 provides the plugin API, so install never runs npm/bun."""
         with tempfile.TemporaryDirectory() as temporary:
             workspace = Path(temporary)
             home = workspace / "opencode"
             bin_dir = workspace / "bin"
-            bin_dir.mkdir()
-            make_package_manager_shim(
-                bin_dir, "npm",
-                "import json, pathlib\n"
-                "cwd = pathlib.Path.cwd()\n"
-                "package = json.loads((cwd / 'package.json').read_text())\n"
-                "assert package['dependencies']['@opencode-ai/plugin'] == '1.18.4'\n"
-                "target = cwd / 'node_modules/@opencode-ai/plugin'\n"
-                "target.mkdir(parents=True, exist_ok=True)\n"
-                "(target / 'package.json').write_text('{\"version\": \"1.18.4\"}')\n"
-                "print('installed')\n",
-            )
+            marker = workspace / "package-manager-ran"
+            for name in ("npm", "bun"):
+                make_package_manager_shim(
+                    bin_dir, name,
+                    "import pathlib, sys\n"
+                    f"pathlib.Path({str(marker)!r}).write_text('ran')\n"
+                    "sys.exit(0)\n",
+                )
             environment = os.environ.copy()
             environment["PATH"] = str(bin_dir) + os.pathsep + environment["PATH"]
 
             install = run_installer(
                 "install", "--opencode-home", str(home), "--skip-preflight", env=environment,
             )
-            if install.returncode != 0 and "npm or bun is required" in install.stdout:
-                self.skipTest("no runnable npm/bun interpreter available")
             self.assertEqual(install.returncode, 0, install.stdout)
-            self.assertTrue((home / "node_modules/@opencode-ai/plugin").is_dir())
-            verify = run_installer(
-                "verify", "--opencode-home", str(home), env=environment,
-            )
+            self.assertFalse(marker.exists(), "the installer must not run a package manager")
+            self.assertFalse((home / "package.json").exists())
+            self.assertFalse((home / "node_modules").exists())
+            verify = run_installer("verify", "--opencode-home", str(home), env=environment)
             self.assertEqual(verify.returncode, 0, verify.stdout)
 
     def test_installation_state_keys_are_posix(self) -> None:
@@ -338,7 +336,7 @@ class OpenCodeInstallerTests(unittest.TestCase):
             self.assertNotIn("default_agent", config)
 
     def test_install_registers_the_pinned_goal_controller(self) -> None:
-        # The global rules declare @prevalentware/opencode-goal-plugin@0.1.51 as the
+        # The global rules declare @prevalentware/opencode-goal-plugin@0.1.60 as the
         # OpenCode session Goal controller, so a fresh install must actually register it.
         with tempfile.TemporaryDirectory() as temporary:
             home = Path(temporary) / "opencode"
@@ -348,7 +346,7 @@ class OpenCodeInstallerTests(unittest.TestCase):
             self.assertEqual(install.returncode, 0, install.stdout)
             config = json.loads((home / "opencode.json").read_text(encoding="utf-8"))
             self.assertIn(
-                "@prevalentware/opencode-goal-plugin@0.1.51", config["plugin"]
+                "@prevalentware/opencode-goal-plugin@0.1.60", config["plugin"]
             )
             # The rule text names one version, so an unpinned spec must never appear.
             self.assertNotIn("@prevalentware/opencode-goal-plugin", config["plugin"])
@@ -364,7 +362,7 @@ class OpenCodeInstallerTests(unittest.TestCase):
                 else {}
             )
             self.assertNotIn(
-                "@prevalentware/opencode-goal-plugin@0.1.51", removed.get("plugin", [])
+                "@prevalentware/opencode-goal-plugin@0.1.60", removed.get("plugin", [])
             )
 
     def test_goal_controller_the_user_already_had_is_kept_after_uninstall(self) -> None:
@@ -373,7 +371,7 @@ class OpenCodeInstallerTests(unittest.TestCase):
             home.mkdir()
             (home / "opencode.json").write_text(
                 json.dumps(
-                    {"plugin": ["@prevalentware/opencode-goal-plugin@0.1.51"]}, indent=2
+                    {"plugin": ["@prevalentware/opencode-goal-plugin@0.1.60"]}, indent=2
                 ),
                 encoding="utf-8",
             )
@@ -383,7 +381,7 @@ class OpenCodeInstallerTests(unittest.TestCase):
             self.assertEqual(install.returncode, 0, install.stdout)
             config = json.loads((home / "opencode.json").read_text(encoding="utf-8"))
             self.assertEqual(
-                config["plugin"].count("@prevalentware/opencode-goal-plugin@0.1.51"), 1
+                config["plugin"].count("@prevalentware/opencode-goal-plugin@0.1.60"), 1
             )
 
             uninstall = run_installer("uninstall", "--opencode-home", str(home))
@@ -391,7 +389,7 @@ class OpenCodeInstallerTests(unittest.TestCase):
             self.assertEqual(uninstall.returncode, 0, uninstall.stdout)
             config = json.loads((home / "opencode.json").read_text(encoding="utf-8"))
             self.assertEqual(
-                config["plugin"], ["@prevalentware/opencode-goal-plugin@0.1.51"]
+                config["plugin"], ["@prevalentware/opencode-goal-plugin@0.1.60"]
             )
 
     def test_conflicting_goal_controller_version_aborts_before_writing(self) -> None:
@@ -507,67 +505,183 @@ class OpenCodeInstallerTests(unittest.TestCase):
             self.assertEqual(install.returncode, 0, install.stdout)
             config = json.loads((home / "opencode.json").read_text(encoding="utf-8"))
             self.assertIn(array_plugin, config["plugin"])
-            self.assertEqual(config["plugin"].count("./plugins/vibe-workflow.ts"), 1)
+            self.assertEqual(config["plugin"].count("./plugins/vibe-workflow.ts"), 0)
 
             uninstall = run_installer("uninstall", "--opencode-home", str(home))
             self.assertEqual(uninstall.returncode, 0, uninstall.stdout)
             config = json.loads((home / "opencode.json").read_text(encoding="utf-8"))
             self.assertEqual(config["plugin"], [array_plugin])
 
-    def test_uninstall_restores_created_package_json(self) -> None:
+    def test_update_removes_dependency_an_older_release_added(self) -> None:
+        """An older release wrote @opencode-ai/plugin into package.json; update undoes it."""
         with tempfile.TemporaryDirectory() as temporary:
-            workspace = Path(temporary)
-            home = workspace / "opencode"
-            bin_dir = workspace / "bin"
-            bin_dir.mkdir()
-            make_package_manager_shim(
-                bin_dir, "npm",
-                "import pathlib\n"
-                "cwd = pathlib.Path.cwd()\n"
-                "target = cwd / 'node_modules/@opencode-ai/plugin'\n"
-                "target.mkdir(parents=True, exist_ok=True)\n"
-                "(target / 'package.json').write_text('{\"version\": \"1.18.4\"}')\n",
+            home = Path(temporary) / "opencode"
+            self.assertEqual(self.install(home).returncode, 0)
+            package_json = home / "package.json"
+            package_json.write_text(
+                json.dumps({"dependencies": {"@opencode-ai/plugin": "1.18.4", "user-dep": "1.0.0"}}),
+                encoding="utf-8",
             )
-            environment = os.environ.copy()
-            environment["PATH"] = str(bin_dir) + os.pathsep + environment["PATH"]
+            state_path = home / ".vibe-opencode-installation-state.json"
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+            state["package_json"] = {"existed": True, "previous_dependency": None}
+            state["plugin_install"] = "installed"
+            state_path.write_text(json.dumps(state, indent=2), encoding="utf-8")
 
-            install = run_installer(
-                "install", "--opencode-home", str(home), "--skip-preflight", env=environment,
+            update = run_installer("update", "--opencode-home", str(home), "--skip-preflight")
+            self.assertEqual(update.returncode, 0, update.stdout)
+            self.assertEqual(
+                json.loads(package_json.read_text(encoding="utf-8")),
+                {"dependencies": {"user-dep": "1.0.0"}},
             )
-            self.assertEqual(install.returncode, 0, install.stdout)
-            self.assertTrue((home / "package.json").is_file())
+            migrated = json.loads(state_path.read_text(encoding="utf-8"))
+            self.assertNotIn("package_json", migrated)
+            self.assertNotIn("plugin_install", migrated)
 
-            uninstall = run_installer(
-                "uninstall", "--opencode-home", str(home), env=environment,
+    def test_update_migrates_the_v1_plugin_layout(self) -> None:
+        """A V1-era install (single-file plugin, 0.1.51 Goal pin) migrates to the V2 layout."""
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary) / "opencode"
+            self.assertEqual(self.install(home).returncode, 0)
+            installer = load_installer_module()
+            legacy = home / "plugins/vibe-workflow.ts"
+            legacy.write_text("export const VibeWorkflowPlugin = async () => ({})\n", encoding="utf-8")
+            config_path = home / "opencode.json"
+            config = json.loads(config_path.read_text(encoding="utf-8"))
+            config["plugin"] = [
+                "user-plugin",
+                "./plugins/vibe-workflow.ts",
+                "@prevalentware/opencode-goal-plugin@0.1.51",
+            ]
+            config_path.write_text(json.dumps(config, indent=2), encoding="utf-8")
+            state_path = home / ".vibe-opencode-installation-state.json"
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+            state["managed_files"]["plugins/vibe-workflow.ts"] = installer.sha256_file(legacy)
+            state["opencode_config"]["plugin"] = {"present": False}
+            state["opencode_config"]["plugins_added"] = {
+                installer.plugin_key("@prevalentware/opencode-goal-plugin@0.1.51"): False,
+            }
+            state_path.write_text(json.dumps(state, indent=2), encoding="utf-8")
+
+            verify_before = run_installer("verify", "--opencode-home", str(home))
+            self.assertNotEqual(verify_before.returncode, 0, verify_before.stdout)
+
+            update = run_installer("update", "--opencode-home", str(home), "--skip-preflight")
+            self.assertEqual(update.returncode, 0, update.stdout)
+            self.assertIn("V1 single-file plugin", update.stdout)
+            self.assertIn("migrated the session Goal controller", update.stdout)
+            self.assertFalse(legacy.exists())
+            self.assertTrue((home / "plugins/vibe-workflow/index.ts").is_file())
+            config = json.loads(config_path.read_text(encoding="utf-8"))
+            self.assertEqual(
+                config["plugin"], ["user-plugin", "@prevalentware/opencode-goal-plugin@0.1.60"]
             )
+            verify = run_installer("verify", "--opencode-home", str(home))
+            self.assertEqual(verify.returncode, 0, verify.stdout)
+
+            # The migrated controller is still installer-owned, so uninstall removes it.
+            uninstall = run_installer("uninstall", "--opencode-home", str(home))
             self.assertEqual(uninstall.returncode, 0, uninstall.stdout)
-            self.assertFalse((home / "package.json").exists())
+            config = json.loads(config_path.read_text(encoding="utf-8"))
+            self.assertEqual(config["plugin"], ["user-plugin"])
 
-    def test_bun_install_omits_npm_only_flags(self) -> None:
+    def test_v2_plugins_key_is_used_when_present(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            workspace = Path(temporary)
-            home = workspace / "opencode"
-            bin_dir = workspace / "bin"
-            bin_dir.mkdir()
-            record = workspace / "bun-args.txt"
-            make_package_manager_shim(
-                bin_dir, "bun",
-                "import pathlib, sys\n"
-                f"pathlib.Path({str(record)!r}).write_text(' '.join(sys.argv[1:]))\n"
-                "cwd = pathlib.Path.cwd()\n"
-                "target = cwd / 'node_modules/@opencode-ai/plugin'\n"
-                "target.mkdir(parents=True, exist_ok=True)\n"
-                "(target / 'package.json').write_text('{\"version\": \"1.18.4\"}')\n",
-            )
-            environment = os.environ.copy()
-            # Restrict PATH so only the fake bun is discoverable as a package manager.
-            environment["PATH"] = str(bin_dir)
+            home = Path(temporary) / "opencode"
+            home.mkdir()
+            config_path = home / "opencode.json"
+            config_path.write_text(json.dumps({"plugins": ["user-plugin"]}), encoding="utf-8")
 
-            install = run_installer(
-                "install", "--opencode-home", str(home), "--skip-preflight", env=environment,
-            )
+            install = self.install(home)
             self.assertEqual(install.returncode, 0, install.stdout)
-            self.assertEqual(record.read_text(encoding="utf-8"), "install")
+            config = json.loads(config_path.read_text(encoding="utf-8"))
+            self.assertNotIn("plugin", config)
+            self.assertEqual(
+                config["plugins"], ["user-plugin", "@prevalentware/opencode-goal-plugin@0.1.60"]
+            )
+            verify = run_installer("verify", "--opencode-home", str(home))
+            self.assertEqual(verify.returncode, 0, verify.stdout)
+
+            uninstall = run_installer("uninstall", "--opencode-home", str(home))
+            self.assertEqual(uninstall.returncode, 0, uninstall.stdout)
+            self.assertEqual(json.loads(config_path.read_text(encoding="utf-8")), {"plugins": ["user-plugin"]})
+
+    def test_both_plugin_list_keys_are_migrated_together(self) -> None:
+        """A config carrying both `plugins` and `plugin` is cleaned in both lists."""
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary) / "opencode"
+            self.assertEqual(self.install(home).returncode, 0)
+            installer = load_installer_module()
+            config_path = home / "opencode.json"
+            config = json.loads(config_path.read_text(encoding="utf-8"))
+            config.pop("plugin", None)
+            config["plugins"] = ["user-a", "@prevalentware/opencode-goal-plugin@0.1.51"]
+            config["plugin"] = ["./plugins/vibe-workflow.ts", "user-b"]
+            config_path.write_text(json.dumps(config, indent=2), encoding="utf-8")
+            state_path = home / ".vibe-opencode-installation-state.json"
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+            state["opencode_config"]["plugins_added"] = {
+                installer.plugin_key("@prevalentware/opencode-goal-plugin@0.1.51"): False,
+            }
+            state_path.write_text(json.dumps(state, indent=2), encoding="utf-8")
+
+            update = run_installer("update", "--opencode-home", str(home), "--skip-preflight")
+            self.assertEqual(update.returncode, 0, update.stdout)
+            config = json.loads(config_path.read_text(encoding="utf-8"))
+            self.assertEqual(config["plugins"], ["user-a", "@prevalentware/opencode-goal-plugin@0.1.60"])
+            self.assertEqual(config["plugin"], ["user-b"])
+
+            uninstall = run_installer("uninstall", "--opencode-home", str(home))
+            self.assertEqual(uninstall.returncode, 0, uninstall.stdout)
+            config = json.loads(config_path.read_text(encoding="utf-8"))
+            self.assertEqual(config["plugins"], ["user-a"])
+            self.assertEqual(config["plugin"], ["user-b"])
+
+    def test_goal_version_conflict_in_the_secondary_list_is_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary) / "opencode"
+            home.mkdir()
+            original = {"plugins": ["user-a"], "plugin": ["@prevalentware/opencode-goal-plugin@0.1.50"]}
+            (home / "opencode.json").write_text(json.dumps(original), encoding="utf-8")
+            install = self.install(home)
+            self.assertNotEqual(install.returncode, 0, install.stdout)
+            self.assertIn("already registers", install.stdout)
+            self.assertEqual(json.loads((home / "opencode.json").read_text(encoding="utf-8")), original)
+
+    def test_preflight_refuses_an_opencode_v1_cli(self) -> None:
+        for version, accepted in (("1.18.31", False), ("opencode v2.0.27", True)):
+            with self.subTest(version=version), tempfile.TemporaryDirectory() as temporary:
+                workspace = Path(temporary)
+                bin_dir = workspace / "bin"
+                make_package_manager_shim(
+                    bin_dir, "opencode", f"import sys\nprint({version!r})\nsys.exit(0)\n",
+                )
+                environment = os.environ.copy()
+                environment["PATH"] = str(bin_dir) + os.pathsep + environment["PATH"]
+                result = run_installer(
+                    "preflight", "--opencode-home", str(workspace / "opencode"), env=environment,
+                )
+                if accepted:
+                    self.assertEqual(result.returncode, 0, result.stdout)
+                    report = json.loads(result.stdout)
+                    self.assertEqual(report["opencode_version"], "2.0.27")
+                    self.assertNotIn("package_manager", report)
+                else:
+                    self.assertNotEqual(result.returncode, 0, result.stdout)
+                    self.assertIn("V1 release", result.stdout)
+
+    def test_preflight_warns_about_pythonpath(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            environment = os.environ.copy()
+            environment["PYTHONPATH"] = str(Path(temporary) / "foreign-site-packages")
+            result = run_installer(
+                "preflight", "--opencode-home", str(Path(temporary) / "opencode"), env=environment,
+            )
+            if result.returncode != 0 and "V1 release" in result.stdout:
+                self.skipTest("the host opencode CLI is a V1 release")
+            self.assertEqual(result.returncode, 0, result.stdout)
+            report = json.loads(result.stdout)
+            self.assertTrue(any("PYTHONPATH" in item for item in report["warnings"]), report)
 
     def test_install_sh_defaults_to_install_with_options_only(self) -> None:
         bash = usable_posix_bash()
@@ -653,29 +767,27 @@ class OpenCodeInstallerTests(unittest.TestCase):
             self.assertIn("damaged managed block", uninstall.stdout)
             self.assertTrue(agents.is_file())
             self.assertIn("USER CONTENT AFTER BLOCK", agents.read_text(encoding="utf-8"))
-            self.assertTrue((home / "plugins/vibe-workflow.ts").is_file())
+            self.assertTrue((home / "plugins/vibe-workflow/index.ts").is_file())
             self.assertTrue((home / ".vibe-opencode-installation-state.json").is_file())
 
-    def test_package_manager_failure_rolls_back_all_writes(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            workspace = Path(temporary)
-            home = workspace / "opencode"
-            bin_dir = workspace / "bin"
-            bin_dir.mkdir()
-            make_package_manager_shim(
-                bin_dir, "npm",
-                "import sys\n"
-                "print('boom', file=sys.stderr)\n"
-                "sys.exit(1)\n",
-            )
-            environment = os.environ.copy()
-            environment["PATH"] = str(bin_dir) + os.pathsep + environment["PATH"]
+    def _install_failing_after_writes(self, home: Path) -> None:
+        """Run install in-process and fail in the final verification, after every write."""
+        installer = load_installer_module()
 
-            install = run_installer(
-                "install", "--opencode-home", str(home), "--skip-preflight", env=environment,
+        def broken_verify(root: Path, target: Path) -> None:
+            raise RuntimeError("injected verification failure")
+
+        installer.verify = broken_verify
+        with self.assertRaises(RuntimeError):
+            installer.install_or_update(
+                installer.package_root(), home, skip_preflight=True, skip_plugin_install=True,
             )
-            self.assertNotEqual(install.returncode, 0)
-            self.assertFalse((home / "plugins/vibe-workflow.ts").exists())
+
+    def test_failure_rolls_back_all_writes(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary) / "opencode"
+            self._install_failing_after_writes(home)
+            self.assertFalse((home / "plugins/vibe-workflow/index.ts").exists())
             self.assertFalse((home / "vibe-workflow/scripts/vibe.py").exists())
             self.assertFalse((home / "AGENTS.md").exists())
             self.assertFalse((home / "opencode.json").exists())
@@ -684,31 +796,13 @@ class OpenCodeInstallerTests(unittest.TestCase):
 
     def test_corrupt_package_json_blocks_uninstall_before_deleting(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            workspace = Path(temporary)
-            home = workspace / "opencode"
-            bin_dir = workspace / "bin"
-            bin_dir.mkdir()
-            make_package_manager_shim(
-                bin_dir, "npm",
-                "import pathlib\n"
-                "cwd = pathlib.Path.cwd()\n"
-                "target = cwd / 'node_modules/@opencode-ai/plugin'\n"
-                "target.mkdir(parents=True, exist_ok=True)\n"
-                "(target / 'package.json').write_text('{\"version\": \"1.18.4\"}')\n",
-            )
-            environment = os.environ.copy()
-            environment["PATH"] = str(bin_dir) + os.pathsep + environment["PATH"]
-            self.assertEqual(
-                run_installer(
-                    "install", "--opencode-home", str(home), "--skip-preflight", env=environment,
-                ).returncode,
-                0,
-            )
+            home = Path(temporary) / "opencode"
+            self.assertEqual(self.install(home).returncode, 0)
             (home / "package.json").write_text("{ not json", encoding="utf-8")
 
-            uninstall = run_installer("uninstall", "--opencode-home", str(home), env=environment)
+            uninstall = run_installer("uninstall", "--opencode-home", str(home))
             self.assertNotEqual(uninstall.returncode, 0)
-            self.assertTrue((home / "plugins/vibe-workflow.ts").is_file())
+            self.assertTrue((home / "plugins/vibe-workflow/index.ts").is_file())
             self.assertTrue((home / ".vibe-opencode-installation-state.json").is_file())
             self.assertTrue((home / "AGENTS.md").is_file())
 
@@ -770,28 +864,10 @@ class OpenCodeInstallerTests(unittest.TestCase):
             updated = json.loads(config_path.read_text(encoding="utf-8"))
             self.assertNotIn("*", (updated.get("permission") or {}).get("skill") or {})
 
-    def test_package_manager_failure_leaves_no_artifacts_or_dirs(self) -> None:
+    def test_failure_leaves_no_created_dirs(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            workspace = Path(temporary)
-            home = workspace / "opencode"
-            bin_dir = workspace / "bin"
-            bin_dir.mkdir()
-            make_package_manager_shim(
-                bin_dir, "npm",
-                "import pathlib, sys\n"
-                "cwd = pathlib.Path.cwd()\n"
-                "(cwd / 'node_modules').mkdir(exist_ok=True)\n"
-                "(cwd / 'package-lock.json').write_text('{}')\n"
-                "print('boom', file=sys.stderr)\n"
-                "sys.exit(1)\n",
-            )
-            environment = os.environ.copy()
-            environment["PATH"] = str(bin_dir) + os.pathsep + environment["PATH"]
-
-            install = run_installer(
-                "install", "--opencode-home", str(home), "--skip-preflight", env=environment,
-            )
-            self.assertNotEqual(install.returncode, 0)
+            home = Path(temporary) / "opencode"
+            self._install_failing_after_writes(home)
             self.assertFalse((home / "node_modules").exists())
             self.assertFalse((home / "package-lock.json").exists())
             for name in ("agents", "commands", "plugins", "skills", "vibe-workflow"):
@@ -823,7 +899,7 @@ class OpenCodeInstallerTests(unittest.TestCase):
             uninstall = run_installer("uninstall", "--opencode-home", str(home))
             self.assertNotEqual(uninstall.returncode, 0)
             self.assertIn("created_dirs", uninstall.stdout)
-            self.assertTrue((home / "plugins/vibe-workflow.ts").is_file())
+            self.assertTrue((home / "plugins/vibe-workflow/index.ts").is_file())
 
     def test_state_path_traversal_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -845,7 +921,7 @@ class OpenCodeInstallerTests(unittest.TestCase):
             self.assertIn("unsafe", uninstall.stdout)
             self.assertTrue(victim.is_file())
             self.assertEqual(victim.read_text(encoding="utf-8"), "do not delete me\n")
-            self.assertTrue((home / "plugins/vibe-workflow.ts").is_file())
+            self.assertTrue((home / "plugins/vibe-workflow/index.ts").is_file())
 
     def test_absolute_created_dir_in_state_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -863,47 +939,20 @@ class OpenCodeInstallerTests(unittest.TestCase):
             self.assertNotEqual(uninstall.returncode, 0)
             self.assertIn("unsafe", uninstall.stdout)
             self.assertTrue(outside_dir.is_dir())
-            self.assertTrue((home / "plugins/vibe-workflow.ts").is_file())
+            self.assertTrue((home / "plugins/vibe-workflow/index.ts").is_file())
 
     def test_existing_lockfile_is_restored_after_failed_update(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            workspace = Path(temporary)
-            home = workspace / "opencode"
-            bin_dir = workspace / "bin"
-            bin_dir.mkdir()
-            flag = workspace / "fail"
-            make_package_manager_shim(
-                bin_dir, "npm",
-                "import pathlib, sys\n"
-                f"if pathlib.Path({str(flag)!r}).exists():\n"
-                "    cwd = pathlib.Path.cwd()\n"
-                "    (cwd / 'package-lock.json').write_text('{\"changed\": true}')\n"
-                "    sys.exit(1)\n"
-                "cwd = pathlib.Path.cwd()\n"
-                "(cwd / 'package-lock.json').write_text('{\"original\": true}')\n"
-                "t = cwd / 'node_modules/@opencode-ai/plugin'\n"
-                "t.mkdir(parents=True, exist_ok=True)\n"
-                "(t / 'package.json').write_text('{\"version\": \"1.18.4\"}')\n",
-            )
-            environment = os.environ.copy()
-            environment["PATH"] = str(bin_dir) + os.pathsep + environment["PATH"]
-
-            self.assertEqual(
-                run_installer(
-                    "install", "--opencode-home", str(home), "--skip-preflight", env=environment,
-                ).returncode,
-                0,
-            )
+            home = Path(temporary) / "opencode"
+            self.assertEqual(self.install(home).returncode, 0)
             lockfile = home / "package-lock.json"
-            original = lockfile.read_text(encoding="utf-8")
-            flag.write_text("fail")
+            lockfile.write_text('{"original": true}', encoding="utf-8")
+            installed = (home / "plugins/vibe-workflow/index.ts").read_bytes()
 
-            update = run_installer(
-                "update", "--opencode-home", str(home), "--skip-preflight", env=environment,
-            )
-            self.assertNotEqual(update.returncode, 0)
-            self.assertEqual(lockfile.read_text(encoding="utf-8"), original)
-            self.assertTrue((home / "plugins/vibe-workflow.ts").is_file())
+            self._install_failing_after_writes(home)
+            self.assertEqual(lockfile.read_text(encoding="utf-8"), '{"original": true}')
+            self.assertEqual((home / "plugins/vibe-workflow/index.ts").read_bytes(), installed)
+            self.assertTrue((home / ".vibe-opencode-installation-state.json").is_file())
 
     def test_user_edited_schema_survives_update_and_uninstall(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -945,7 +994,7 @@ class OpenCodeInstallerTests(unittest.TestCase):
             install = self.install(home)
             self.assertNotEqual(install.returncode, 0)
             self.assertIn("outside the OpenCode home", install.stdout)
-            self.assertFalse((outside / "vibe-workflow.ts").exists())
+            self.assertFalse((outside / "vibe-workflow").exists())
             self.assertEqual(list(outside.iterdir()), [])
 
     @skip_unless_symlink
@@ -972,6 +1021,21 @@ class OpenCodeInstallerTests(unittest.TestCase):
                 self.assertEqual(outside.read_text(encoding="utf-8"), initial)
 
     @skip_unless_symlink
+    def test_symlinked_node_modules_is_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = Path(temporary)
+            home = workspace / "opencode"
+            outside = workspace / "outside"
+            outside.mkdir()
+            home.mkdir()
+            os.symlink(outside, home / "node_modules")
+
+            install = self.install(home)
+            self.assertNotEqual(install.returncode, 0)
+            self.assertIn("outside the OpenCode home", install.stdout)
+            self.assertEqual(list(outside.iterdir()), [])
+            self.assertFalse((home / ".vibe-opencode-installation-state.json").exists())
+
     def test_symlinked_node_modules_is_refused_before_package_manager(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             workspace = Path(temporary)

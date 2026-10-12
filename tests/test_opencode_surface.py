@@ -1,17 +1,20 @@
 """TASK-070: OpenCode global rules, agents, commands, and Skills surface."""
 from __future__ import annotations
 
+import base64
 import json
 import os
 import re
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
-from urllib.parse import urlparse
-from urllib.request import url2pathname
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
 
 import yaml
 
@@ -23,7 +26,6 @@ OPENCODE = ROOT / "runtime" / "opencode"
 OPENCODE_CLI = shutil.which("opencode")
 if str(Path(__file__).resolve().parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _platform import make_opencode_ai_node_modules  # noqa: E402
 EXPECTED_AGENTS = {
     "vibe-main",
     "business-analyst",
@@ -37,9 +39,9 @@ EXPECTED_AGENTS = {
 }
 SUBAGENTS = EXPECTED_AGENTS - {"vibe-main"}
 # `/goal` is no longer forbidden: the user authorised declaring a per-client session Goal
-# controller (ALIGN-OPENCODE-002), and a real opencode 1.18.31 run verified the plugin's
-# commands are registered and idle auto-continuation starts further turns
-# (RESEARCH-OPENCODE-003). The runtime-specific verbs below still do not exist in OpenCode.
+# controller (ALIGN-OPENCODE-002). Historically, a real opencode 1.18.31 (V1) run first verified the plugin's
+# commands and idle auto-continuation (RESEARCH-OPENCODE-003); on OpenCode V2 the pin moved to
+# 0.1.60, which loads with status `active` (see OpenCodeIsolatedLoadTests). The runtime-specific verbs below still do not exist in OpenCode.
 FORBIDDEN_SESSION_GOAL_PATTERNS = {
     "goal-bind-command": r"goal-bind",
     "goal-sync-command": r"goal-sync",
@@ -52,7 +54,7 @@ FORBIDDEN_SESSION_GOAL_CLAIMS = {
     "native-goal-en": r"native Goal",
 }
 DECLARED_SESSION_GOAL_CONTROLLER = "@prevalentware/opencode-goal-plugin"
-PINNED_SESSION_GOAL_VERSION = "0.1.51"
+PINNED_SESSION_GOAL_VERSION = "0.1.60"
 # A surface must not deny that the client has a session Goal capability: the
 # controller is declared (ALIGN-OPENCODE-002), and a surviving denial is exactly
 # how the round-1 B1 slipped through when only AGENTS.md was asserted.
@@ -248,7 +250,7 @@ class OpenCodeStaticSurfaceTests(unittest.TestCase):
         # The authorised contract (ALIGN-OPENCODE-002): a declared per-client controller,
         # pinned, with the plugin state explicitly excluded from completion evidence.
         self.assertIn(DECLARED_SESSION_GOAL_CONTROLLER, text)
-        self.assertIn("0.1.51", text)
+        self.assertIn(PINNED_SESSION_GOAL_VERSION, text)
         self.assertIn("永不作为完成依据", text)
         for forbidden in (
             "CODEX_HOME", ".codex", "Codex", "TOML", "marketplace", "vibe-toolbelt",
@@ -328,21 +330,59 @@ class OpenCodeStaticSurfaceTests(unittest.TestCase):
             self.assertEqual(metadata.get("compatibility"), "opencode", path)
 
 
+def opencode_major() -> int | None:
+    if not OPENCODE_CLI:
+        return None
+    try:
+        result = subprocess.run(
+            [OPENCODE_CLI, "--version"], text=True, errors="replace", stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT, check=False, timeout=60,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    match = re.search(r"(\d+)\.\d+\.\d+", result.stdout)
+    return int(match.group(1)) if match else None
+
+
+def free_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as handle:
+        handle.bind(("127.0.0.1", 0))
+        return handle.getsockname()[1]
+
+
 @unittest.skipUnless(OPENCODE_CLI, "OpenCode CLI is required")
 class OpenCodeIsolatedLoadTests(unittest.TestCase):
-    def test_isolated_config_loads_agents_commands_and_skills(self) -> None:
+    """Install into an isolated config and let a real OpenCode V2 server load it."""
+
+    PASSWORD = "vibe-isolated-load"
+
+    def _get(self, port: int, path: str, directory: Path) -> list:
+        query = urlencode({"directory": str(directory)})
+        request = Request(f"http://127.0.0.1:{port}{path}?{query}")
+        token = base64.b64encode(f"opencode:{self.PASSWORD}".encode()).decode()
+        request.add_header("Authorization", f"Basic {token}")
+        with urlopen(request, timeout=60) as response:  # noqa: S310 - loopback only
+            return json.loads(response.read().decode("utf-8"))["data"]
+
+    def test_installed_config_loads_plugins_agents_commands_and_skills(self) -> None:
+        major = opencode_major()
+        if major is None or major < 2:
+            self.skipTest(f"OpenCode V2 CLI is required (found major version {major})")
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             config = root / "config"
             home = root / "home"
-            shutil.copytree(OPENCODE, config)
-            shutil.copytree(ROOT / "skills", config / "skills")
-            # A self-contained node_modules shim keeps the isolated config load from
-            # depending on this machine's global ~/.config/opencode (and avoids the
-            # symlink privilege Windows does not grant).
-            make_opencode_ai_node_modules(config)
+            project = root / "project"
+            (project / ".project-log").mkdir(parents=True)
             for relative in (".config", ".local/share", ".local/state", ".cache"):
                 (home / relative).mkdir(parents=True, exist_ok=True)
+            installed = subprocess.run(
+                [sys.executable, str(ROOT / "scripts/opencode_installer.py"), "install",
+                 "--opencode-home", str(config), "--skip-preflight"],
+                text=True, errors="replace", stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                check=False,
+            )
+            self.assertEqual(installed.returncode, 0, installed.stdout)
 
             environment = os.environ.copy()
             environment.update({
@@ -352,105 +392,73 @@ class OpenCodeIsolatedLoadTests(unittest.TestCase):
                 "XDG_STATE_HOME": str(home / ".local/state"),
                 "XDG_CACHE_HOME": str(home / ".cache"),
                 "OPENCODE_CONFIG_DIR": str(config),
+                "OPENCODE_SERVER_PASSWORD": self.PASSWORD,
             })
-
-            resolved = subprocess.run(
-                [OPENCODE_CLI, "debug", "config", "--pure"],
-                env=environment, text=True, errors="replace", stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT, check=False,
+            port = free_port()
+            log = (root / "serve.log").open("w", encoding="utf-8")
+            server = subprocess.Popen(
+                [OPENCODE_CLI, "serve", "--hostname", "127.0.0.1", "--port", str(port), "--print-logs"],
+                cwd=project, env=environment, stdout=log, stderr=subprocess.STDOUT,
             )
-            self.assertEqual(resolved.returncode, 0, resolved.stdout)
-            resolved_config = json.loads(resolved.stdout)
-            self.assertEqual(resolved_config["default_agent"], "vibe-main")
-            self.assertEqual(set(resolved_config["command"]), EXPECTED_COMMANDS)
-            # `--pure` resolves config without external plugins; it proves the plugin spec is
-            # resolvable but not that OpenCode imports the plugin module.
-            plugins = resolved_config.get("plugin", [])
-            self.assertIn(
-                "@prevalentware/opencode-goal-plugin@0.1.51", plugins, plugins
-            )
-            local_plugins = [item for item in plugins if not str(item).startswith("@")]
-            self.assertEqual(len(local_plugins), 1, plugins)
-            # A file:// URI must be converted with url2pathname: on Windows a
-            # naive removeprefix("file://") leaves "/C:/..." which is not absolute.
-            local_plugin_path = url2pathname(urlparse(str(local_plugins[0])).path)
-            self.assertTrue(Path(local_plugin_path).is_absolute(), plugins)
-
-            # Non-pure debug agent performs the real plugin load in OpenCode.
-            # Runtime plugin import/execution is covered by tests/test_opencode_plugin.py and the
-            # non-pure OpenCode load recorded in TASK-071 evidence; a live TUI/CLI session with a
-            # real model belongs to TASK-075.
-
-            listed = subprocess.run(
-                [OPENCODE_CLI, "debug", "skill", "--pure"],
-                env=environment, text=True, errors="replace", stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT, check=False,
-            )
-            self.assertEqual(listed.returncode, 0, listed.stdout)
-            # OpenCode prints full Skill bodies and truncates large stdout, so one call cannot
-            # expose all 36 names. Verify every parsed runtime name belongs to the expected set,
-            # no custom Skill is silently substituted, and a second isolated config that removes
-            # the first page exposes exactly the remaining Skills. Together the two pages prove
-            # the full set is discovered.
-            expected_skills = {path.parent.name for path in (ROOT / "skills").glob("*/SKILL.md")}
-            listed_skills = set(re.findall(r'"name": "([^"]+)"', listed.stdout))
-            custom_listed = listed_skills - {"customize-opencode"}
-            self.assertTrue(custom_listed, "no custom Skill was discovered by the isolated config")
-            self.assertLessEqual(custom_listed, expected_skills, sorted(custom_listed - expected_skills))
-
-            discovered = set(custom_listed)
-            for round_number in range(1, 5):
-                missing = expected_skills - discovered
-                if not missing:
-                    break
-                round_config = root / f"remainder-config-{round_number}"
-                shutil.copytree(OPENCODE, round_config)
-                round_skills = round_config / "skills"
-                round_skills.mkdir()
-                for name in sorted(missing):
-                    shutil.copytree(ROOT / "skills" / name, round_skills / name)
-                round_environment = dict(environment)
-                round_environment["OPENCODE_CONFIG_DIR"] = str(round_config)
-                loaded = subprocess.run(
-                    [OPENCODE_CLI, "debug", "skill", "--pure"],
-                    env=round_environment, text=True, errors="replace", stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT, check=False,
+            try:
+                plugins: dict[str, dict] = {}
+                # The Goal controller is fetched from npm on first load, so allow time for it.
+                deadline = time.monotonic() + 180
+                while time.monotonic() < deadline:
+                    try:
+                        listed = self._get(port, "/api/plugin", project)
+                    except (OSError, ValueError):
+                        time.sleep(1)
+                        continue
+                    plugins = {
+                        item["id"]: item for item in listed if item.get("source", {}).get("type") != "builtin"
+                    }
+                    if "vibe-workflow" in plugins and len(plugins) >= 2:
+                        break
+                    time.sleep(2)
+                log.flush()
+                serve_log = (root / "serve.log").read_text(encoding="utf-8", errors="replace")
+                self.assertNotIn("failed to load plugin", serve_log)
+                self.assertIn("vibe-workflow", plugins, serve_log[-4000:])
+                self.assertEqual(plugins["vibe-workflow"]["state"]["status"], "active")
+                self.assertEqual(
+                    plugins["vibe-workflow"]["source"]["path"],
+                    str(config / "plugins" / "vibe-workflow" / "index.ts"),
                 )
-                self.assertEqual(loaded.returncode, 0, loaded.stdout)
-                round_listed = set(re.findall(r'"name": "([^"]+)"', loaded.stdout))
-                discovered |= round_listed - {"customize-opencode"}
-                self.assertLessEqual(discovered, expected_skills, sorted(discovered - expected_skills))
-            self.assertEqual(
-                discovered, expected_skills, sorted(expected_skills - discovered),
-            )
+                goal = [item for item in plugins.values() if item["source"].get("type") == "package"]
+                if not goal:
+                    self.skipTest("the session Goal controller could not be fetched from npm in time")
+                self.assertEqual(goal[0]["source"]["target"], "@prevalentware/opencode-goal-plugin@0.1.60")
+                self.assertEqual(goal[0]["state"]["status"], "active")
+                # The plugin resolved the project root and the installed runtime at setup.
+                self.assertIn(f'"root":{json.dumps(str(project))}', serve_log)
 
-            for agent in sorted(EXPECTED_AGENTS):
-                loaded = subprocess.run(
-                    [OPENCODE_CLI, "debug", "agent", agent, "--pure"],
-                    env=environment, text=True, errors="replace", stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT, check=False,
-                )
-                self.assertEqual(loaded.returncode, 0, loaded.stdout)
-                payload = json.loads(loaded.stdout)
-                self.assertEqual(payload["name"], agent)
-                expected_mode = "primary" if agent == "vibe-main" else "subagent"
-                self.assertEqual(payload["mode"], expected_mode)
+                agents = {item["id"]: item for item in self._get(port, "/api/agent", project)}
+                self.assertLessEqual(EXPECTED_AGENTS, set(agents))
+                for agent in EXPECTED_AGENTS:
+                    expected_mode = "primary" if agent == "vibe-main" else "subagent"
+                    self.assertEqual(agents[agent]["mode"], expected_mode, agent)
+                reviewer = {
+                    (rule["action"], rule["resource"], rule["effect"])
+                    for rule in agents["verification-reviewer"]["permissions"]
+                }
+                self.assertIn(("edit", "*", "deny"), reviewer)
+                self.assertIn(("shell", "*", "deny"), reviewer)
+                self.assertIn(("shell", "git diff*", "allow"), reviewer)
 
-            reviewer = json.loads(subprocess.run(
-                [OPENCODE_CLI, "debug", "agent", "verification-reviewer", "--pure"],
-                env=environment, text=True, errors="replace", stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT, check=False,
-            ).stdout)
-            self.assertFalse(reviewer["tools"]["edit"])
-            self.assertFalse(reviewer["tools"]["write"])
-            bash_rules = {
-                (entry["pattern"], entry["action"])
-                for entry in reviewer["permission"] if entry.get("permission") == "bash"
-            }
-            self.assertIn(("*", "deny"), bash_rules)
-            self.assertIn(("git diff*", "allow"), bash_rules)
-            self.assertNotIn(("*", "ask"), bash_rules)
+                commands = {item.get("id") or item.get("name") for item in self._get(port, "/api/command", project)}
+                self.assertLessEqual(EXPECTED_COMMANDS, commands)
 
+                skills = {item.get("id") or item.get("name") for item in self._get(port, "/api/skill", project)}
+                expected_skills = {path.parent.name for path in (ROOT / "skills").glob("*/SKILL.md")}
+                self.assertLessEqual(expected_skills, skills, sorted(expected_skills - skills))
+            finally:
+                server.terminate()
+                try:
+                    server.wait(timeout=20)
+                except subprocess.TimeoutExpired:
+                    server.kill()
+                log.close()
 
 if __name__ == "__main__":
     unittest.main()

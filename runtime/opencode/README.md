@@ -13,19 +13,24 @@ into `${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}` by the OpenCode installer.
 | Lifecycle slash commands | `commands/vibe-*.md` | adapted |
 | Reusable workflow Skills | top-level `skills/*/SKILL.md` | supported |
 | Default agent and task permissions | `opencode.json` | supported |
-| Session/compaction/tool hooks | `plugins/vibe-workflow.ts` | supported |
-| Session Goal and automatic continuation | `@prevalentware/opencode-goal-plugin@0.1.51` | adapted |
+| Session/compaction/tool hooks | `plugins/vibe-workflow/index.ts` (V2 directory plugin) | supported |
+| Session Goal and automatic continuation | `@prevalentware/opencode-goal-plugin@0.1.60` | adapted |
 | Install/update/uninstall | `runtime/opencode/install.sh` + `scripts/opencode_installer.py` | supported |
 
 The codex delivery face (its marketplace, plugin manifest, CLI hooks, role templates and
 `cc-switch` TOML generation) is no longer carried in this repository at all -- it lives on the
 `codex` branch. OpenCode uses its own plugin and MCP configuration.
 
-Session Goal is delegated to `@prevalentware/opencode-goal-plugin`, pinned at `0.1.51` and
-registered by the installer as a managed plugin entry. Verified on a real `opencode 1.18.31`
-runtime: the client loads and registers `/goal`, `/pause_goal` and `/resume_goal`, an active goal
-drives further turns by itself through `session.promptAsync`, and a closable objective reaches
-`status=complete` with recorded completion evidence.
+Only OpenCode **V2** is supported (verified on `opencode 2.0.27`). V2 changed the plugin API: a
+plugin is a directory whose default export is `{ id, setup }`, and V1 function exports or
+single-file plugin paths are rejected. The V1 plugin `plugins/vibe-workflow.ts` is therefore gone;
+`update` removes it and its `./plugins/vibe-workflow.ts` registration.
+
+Session Goal is delegated to `@prevalentware/opencode-goal-plugin`, pinned at `0.1.60` and
+registered by the installer as a managed plugin entry. `0.1.60` is the first release that loads on
+V2 (`0.1.51` fails with `Schema.optionalWith is not a function` against the Effect v4 that V2
+injects); an installer-owned `0.1.51` entry is migrated on `update`. On `opencode 2.0.27` the
+plugin loads with status `active` and registers `/goal`, `/pause_goal` and `/resume_goal`.
 
 The plugin is only a session control surface. Project Goal lives in `.project-log` and is still
 the only completion contract: `vibe goal` evidence gating decides completion, and the plugin's
@@ -51,7 +56,7 @@ Common options:
 | Option | Effect |
 |---|---|
 | `--opencode-home <dir>` | Target config directory instead of `${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}` |
-| `--skip-plugin-install` | Do not run the package manager for `@opencode-ai/plugin` |
+| `--skip-plugin-install` | Accepted for compatibility and ignored: V2 provides the plugin API, no npm dependency is installed |
 | `--skip-preflight` | Skip tool detection; intended only for isolated package tests |
 
 What the installer does:
@@ -61,14 +66,20 @@ What the installer does:
   had in that file are preserved instead of overwritten.
 - Copies `agents/`, `commands/`, `plugins/`, the top-level `skills/`, and the `runtime/` tree into
   the OpenCode config directory.
-- Merges — never overwrites — `opencode.json`: it sets `default_agent` and registers the plugin and
-  permission rules while preserving user `plugin`, `mcp`, `model`, `permission` and other keys.
-  Two plugin entries are managed: `./plugins/vibe-workflow.ts` and the pinned session Goal
-  controller `@prevalentware/opencode-goal-plugin@0.1.51`. The version is pinned because the global
-  rule names it; each managed entry records whether the user already had it, so `uninstall` removes
-  only what the installer added.
-- Installs the `@opencode-ai/plugin` dependency with `npm` or `bun` unless `--skip-plugin-install`.
-  `--no-audit`/`--no-fund` are npm-only and are not passed to `bun`.
+- Merges — never overwrites — `opencode.json`: it sets `default_agent` and registers the session
+  Goal plugin and permission rules while preserving user `plugin`/`plugins`, `mcp`, `model`,
+  `permission` and other keys. One plugin entry is managed: the pinned session Goal controller
+  `@prevalentware/opencode-goal-plugin@0.1.60`, written to the user's existing `plugins` list (V2)
+  or `plugin` list (which V2 still normalizes). The version is pinned because the global rule names
+  it; the entry records whether the user already had it, so `uninstall` removes only what the
+  installer added.
+- Does **not** list `plugins/vibe-workflow/` in `opencode.json`: V2 discovers plugin directories
+  under the config `plugins/` folder by itself, and listing it as well loads it twice.
+- Installs no npm dependency. V2 provides the plugin API (`@opencode/plugin`) itself; `update`
+  removes the `@opencode-ai/plugin` entry an older release added to `package.json`.
+- `preflight` reports the OpenCode version and stops on a 1.x CLI. When `opencode` is not on PATH it
+  looks for the desktop application's bundled CLI (`/opt/OpenCode/resources/opencode-cli`) and
+  prints the symlink command; a set `PYTHONPATH` is reported as a warning.
 - Writes install state to `<home>/.vibe-opencode-installation-state.json` and backs up any replaced
   files to `<home>/backups/<action>-<stamp>/`.
 
@@ -89,8 +100,8 @@ Safety properties, all covered by `tests/test_opencode_installer.py`:
   `@scope/name@latest`) and unrelated packages install normally. Ownership and conflict checks
   normalise surrounding whitespace and letter case, so `@Scope/Name` and `@scope/name` are treated
   as the same package.
-- `verify` fails if either managed plugin entry is missing, so a config that silently lost the
-  Goal controller cannot pass installation verification.
+- `verify` fails if the Goal controller entry is missing, if the V1 `./plugins/vibe-workflow.ts`
+  registration or file is still present, or if `plugins/vibe-workflow/index.ts` is missing.
 - Files the user edited after install — including `skills/**` and `vibe-workflow/**` — are reported
   as `PRESERVED local modification` and never overwritten; `uninstall` keeps them too.
 - Permission rules the installer added but the user then edited are handed back to the user: `update`
@@ -216,23 +227,26 @@ Natural-language triggers remain valid; commands are thin entry points, not a se
 
 ## Plugin Hooks
 
-`plugins/vibe-workflow.ts` is registered by `opencode.json` and never advances a task, completes a
-Goal, rewrites business logic, or edits Skills:
+`plugins/vibe-workflow/index.ts` is a V2 directory plugin (`Plugin.define({ id, setup })`),
+auto-discovered from the config `plugins/` folder. It never advances a task, completes a Goal,
+rewrites business logic, or edits Skills:
 
-| Hook | Behavior |
+| V2 hook | Behavior |
 |---|---|
-| `experimental.chat.system.transform` | Inject a bounded `vibe status` snapshot |
-| `experimental.session.compacting` | Refresh generated views, then inject state and preservation rules |
-| `tool.execute.after` | Debounce a `vibe evidence refresh` after file-writing tools |
-| `vibe_workflow_status` | Read-only tool exposing `vibe status` / `vibe context <task>` |
+| `ctx.session.hook("context")` | Inject a bounded `vibe status` snapshot |
+| `ctx.session.hook("compaction")` | Refresh generated views, then inject state and preservation rules |
+| `ctx.tool.hook("execute.after")` | Debounce a `vibe evidence refresh` after file-writing tools |
+| `ctx.tool.transform` → `vibe_workflow_status` | Read-only tool exposing `vibe status` / `vibe context <task>` |
 
-Its runtime is resolved from `VIBE_RUNTIME_SCRIPT`, `VIBE_RUNTIME`, the OpenCode config directory,
-or a development fallback; when none is available the hooks degrade to an explicit "no runtime"
-message. Its only writes are `vibe evidence refresh` and the generated local views produced by
+The project root is resolved on every call — the session's directory (`ctx.session.get`), then the
+plugin instance location — so a `.project-log/` created after the plugin loaded is picked up
+without a restart. The runtime script is resolved from `VIBE_RUNTIME_SCRIPT`, `VIBE_RUNTIME` or the
+OpenCode config directory; when none is available the hooks degrade to an explicit "no runtime"
+message. Runtime calls drop `PYTHONPATH` so a foreign Python install cannot shadow the runtime's
+dependencies. Its only writes are `vibe evidence refresh` and the generated local views produced by
 `vibe state-views`; neither changes task, Goal, or business facts.
-Installing these assets and their `@opencode-ai/plugin` dependency is `TASK-073`.
 
-The unit tests import the plugin directly and exercise every hook; live OpenCode import/registration
-was verified once with a real non-`--pure` OpenCode run. `opencode debug config --pure` only resolves
-the config and does not import external plugins. A real model-driven session, compaction, and write
-tool loop still belongs to TASK-075.
+`tests/test_opencode_plugin.py` drives every hook through a stub V2 context, and
+`tests/test_opencode_surface.py` starts an isolated `opencode serve` (when a V2 CLI is available) and
+checks that both plugins load with status `active`. A real model-driven session, compaction, and
+write tool loop is outside the automated tests.

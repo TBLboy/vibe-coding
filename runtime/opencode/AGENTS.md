@@ -14,7 +14,7 @@
 6. **按需加载 Skills 和 OpenCode 子 Agent。** 不一次性加载全部专业知识；可并行的独立工作再委派，主 Agent 保留集成与最终判断。
 7. **优先复用成熟方案，但不为框架扭曲业务。** 自动化建立在已验证流程之上。
 8. **经验必须有证据和适用边界。** 观察 → 候选 → 重复证据 → 用户批准 → 编码为资产；不得把一次性现象变成永久全局规则。
-9. **会话 Goal 控制面已声明，Project Goal 是唯一完成契约。** 会话级运行、暂停、恢复、预算与 continuation 由 `@prevalentware/opencode-goal-plugin`（固定版本 `0.1.51`）承担，入口为 `/goal`、`/pause_goal`、`/resume_goal`。Project Goal 仍保存在 `.project-log`，由 `vibe goal` 负责证据门禁与最终裁决；插件状态只是会话控制面，永不作为完成依据。
+9. **会话 Goal 控制面已声明，Project Goal 是唯一完成契约。** 会话级运行、暂停、恢复、预算与 continuation 由 `@prevalentware/opencode-goal-plugin`（固定版本 `0.1.60`）承担，入口为 `/goal`、`/pause_goal`、`/resume_goal`。Project Goal 仍保存在 `.project-log`，由 `vibe goal` 负责证据门禁与最终裁决；插件状态只是会话控制面，永不作为完成依据。
 10. **循环必须有限且有变化。** 验证失败先归因；重复执行必须说明新假设、变化量和预期证据。
 
 ## 八荣八耻
@@ -48,7 +48,7 @@
    ```
    恢复 Project Goal、任务、阻塞、证据有效性、活动 Run 和精确下一步。
    同时记下 `status` 的 `workspace_generation`：后续写入把它作为 `expected_generation` 传回（`state-apply` 包络的可选字段），代次与磁盘不符的写入会被拒绝，因此清空前的旧执行器无法复活旧任务或在新代次里创建新工作。
-5. 会话 Goal 与自动续跑由 `@prevalentware/opencode-goal-plugin`（固定版本 `0.1.51`）承担，由 OpenCode 安装器写入客户端配置；真实运行时已验证该插件被加载注册，且 idle 自动续跑会自行驱动后续回合。插件状态是会话控制面而非业务事实源：宣告完成前必须运行 `vibe goal` 的证据门禁。插件未安装或被禁用时，会话续跑退回显式用户指令，并标注 `serial-role-fallback`。
+5. 会话 Goal 与自动续跑由 `@prevalentware/opencode-goal-plugin`（固定版本 `0.1.60`）承担，由 OpenCode 安装器写入客户端配置；真实运行时已验证该插件被加载注册，且 idle 自动续跑会自行驱动后续回合。插件状态是会话控制面而非业务事实源：宣告完成前必须运行 `vibe goal` 的证据门禁。插件未安装或被禁用时，会话续跑退回显式用户指令，并标注 `serial-role-fallback`。
 6. 恢复事实状态后再行动。恢复状态不是交付：对实质性用户任务，必须继续执行到完成、明确阻塞或用户要求暂停；不得只输出恢复摘要后结束。无活动 Run 时，先建立新 Run，再执行当前用户请求。没有非琐碎任务时，先建立最小任务记录；不要无计划地修改项目。
 
 ## Project Log 长文档组织
@@ -151,6 +151,7 @@ business-intent
 - 从成熟代码库或阶段成果提炼可复用知识：`a-codebase-extraction`
 - 更新 AGENTS.md、Skills、Commands、插件、Schema 或运行时：`a-workflow-update`
 - 为新 Skill 设计触发条件、边界和验证：`b-skill-authoring`
+- 配置 OpenCode 已有 provider 下模型的 context 大小与图片输入支持：`b-opencode-model-config`
 - 长时间任务：`b-background-task-runner`
 - 当前网络证据与技术检索：`b-web-research-tooling`
 - 对方案进行逐项质疑并暴露决策风险：`b-plan-stress-test`

@@ -15,7 +15,7 @@ metadata:
 Use the installed `vibe` runtime as the deterministic controller for Project Goal state, evidence validity, failure attribution, retry limits, and Handoff. Project Log format 2 is the only supported format; the retired `loopctl` compatibility entry is gone.
 
 Project Goal is the only completion contract. The session-level Goal control surface is the pinned
-`@prevalentware/opencode-goal-plugin@0.1.51` (`/goal`, `/pause_goal`, `/resume_goal`); its state is a
+`@prevalentware/opencode-goal-plugin@0.1.60` (`/goal`, `/pause_goal`, `/resume_goal`); its state is a
 session control surface and never counts as completion evidence. This Skill must not invent or call
 any other continuation interface. If the plugin is absent or disabled, continuation falls back to
 explicit user turns plus the restored `.project-log` state and Handoff.

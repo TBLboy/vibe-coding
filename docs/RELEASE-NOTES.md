@@ -1,5 +1,19 @@
 # 发布说明
 
+## 未发布 —— 只支持 OpenCode V2
+
+- `vibe-workflow` 插件移植到 OpenCode V2 插件 API：目录插件 `plugins/vibe-workflow/index.ts`，
+  默认导出 `Plugin.define({ id, setup })`，用 `ctx.session.hook("context" | "compaction")`、
+  `ctx.tool.hook("execute.after")` 与 `ctx.tool.transform` 替代 V1 hooks；V1 单文件插件删除。
+- 插件每次调用时重新解析项目根（会话目录优先），插件加载后才创建的 `.project-log/` 也能识别；
+  运行时调用剔除 `PYTHONPATH`。
+- 会话 Goal 控制器固定版本改为 `@prevalentware/opencode-goal-plugin@0.1.60`；安装器写入的
+  `0.1.51` 在 update 时迁移。
+- 安装器不再注册本地插件路径、不再安装 `@opencode-ai/plugin`；preflight 报告 OpenCode 版本，
+  1.x 直接停止，找不到 CLI 时提示桌面版内置 CLI 路径，`PYTHONPATH` 已设置时给出警告。
+- 修正文档中把 `--root` 写在 `init` 子命令之后的示例：`--root` 是全局参数，必须写在子命令之前。
+- `a-project-init` 改为引用已安装 Skill 自带的 `init_project_agents.py`（运行时 `scripts/` 中没有该文件）。
+
 ## 0.6.0 —— 0.6 ledger architecture：Git 账本为唯一事实源
 
 ### 一句话

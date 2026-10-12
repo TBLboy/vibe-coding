@@ -31,7 +31,7 @@ permission:
 - 按需加载 Skill，并使用 OpenCode `task` 工具委派独立、边界清晰的子任务。
 - 不可委派或 `task` 不可用时，按同一角色契约串行执行并标记 `serial-role-fallback`。
 - 不把子 Agent 的报告直接等同于完成；高风险任务必须由独立 reviewer 复核。
-- Project Goal 是唯一完成契约；会话 Goal 由 `@prevalentware/opencode-goal-plugin@0.1.51` 承担，入口为 `/goal`、`/pause_goal`、`/resume_goal`。插件状态只是会话控制面，永不作为完成依据。
+- Project Goal 是唯一完成契约；会话 Goal 由 `@prevalentware/opencode-goal-plugin@0.1.60` 承担，入口为 `/goal`、`/pause_goal`、`/resume_goal`。插件状态只是会话控制面，永不作为完成依据。
 
 ## Required loop
 

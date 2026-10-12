@@ -124,24 +124,23 @@ def usable_posix_bash() -> str | None:
     return bash
 
 
-# --- self-contained @opencode-ai/plugin shim ---------------------------------
+# --- self-contained @opencode/plugin shim ------------------------------------
 
 
-def make_opencode_ai_node_modules(parent: Path) -> Path:
+def make_opencode_plugin_node_modules(parent: Path) -> Path:
     """Materialise a self-contained ``node_modules`` for the plugin tests.
 
-    The real ``@opencode-ai/plugin`` entry point re-exports ``tool`` (a
-    pass-through that returns its input) with ``tool.schema`` bound to a schema
-    builder. The plugin under test imports exactly those names. Reproducing the
-    same shape from the repository tree removes the tests' dependency on the
-    machine's global ``~/.config/opencode/node_modules`` and avoids needing a
-    symlink privilege on Windows. Returns the created ``node_modules`` directory.
+    OpenCode V2 provides ``@opencode/plugin`` to plugins at load time; its
+    ``Plugin.define`` returns the definition it is given. The plugin under test
+    imports only that name, so a pass-through shim lets Node import the plugin
+    directly without the OpenCode binary or a symlink privilege on Windows.
+    Returns the created ``node_modules`` directory.
     """
-    package = parent / "node_modules" / "@opencode-ai" / "plugin"
+    package = parent / "node_modules" / "@opencode" / "plugin"
     package.mkdir(parents=True, exist_ok=True)
     (package / "package.json").write_text(
         "{\n"
-        '  "name": "@opencode-ai/plugin",\n'
+        '  "name": "@opencode/plugin",\n'
         '  "version": "0.0.0-vibe-test-shim",\n'
         '  "type": "module",\n'
         '  "main": "index.js",\n'
@@ -150,21 +149,7 @@ def make_opencode_ai_node_modules(parent: Path) -> Path:
         encoding="utf-8",
     )
     (package / "index.js").write_text(
-        "export function tool(input) { return input; }\n"
-        "function schemaNode() {\n"
-        "  const self = {};\n"
-        "  self.optional = () => self;\n"
-        "  self.nullable = () => self;\n"
-        "  self.describe = () => self;\n"
-        "  self.default = () => self;\n"
-        "  return self;\n"
-        "}\n"
-        "tool.schema = {\n"
-        "  string: () => schemaNode(),\n"
-        "  number: () => schemaNode(),\n"
-        "  boolean: () => schemaNode(),\n"
-        "  object: () => schemaNode(),\n"
-        "};\n",
+        "export const Plugin = { define: (definition) => definition };\n",
         encoding="utf-8",
     )
     return parent / "node_modules"

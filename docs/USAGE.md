@@ -1,6 +1,6 @@
 # Vibe Coding 用户使用指南
 
-Vibe Coding 是一套面向 **OpenCode** 客户端的**用户级全局工程工作流**（本版按 `opencode 1.18.31` 验证）。
+Vibe Coding 是一套面向 **OpenCode** 客户端的**用户级全局工程工作流**（仅支持 OpenCode V2，本版按 `opencode 2.0.27` 验证）。
 
 它不只是给 Agent 增加几条提示词，也不只是一个安装脚本。它把一次开发工作串成一条可恢复、可验证、可追溯的链路：
 
@@ -140,11 +140,12 @@ chmod +x runtime/opencode/install.sh
 默认安装行为：
 
 - 以标记块合并用户级 `AGENTS.md`，保留用户已有规则。
-- 合并而非覆盖 `opencode.json`：设置 `default_agent`、注册插件与权限规则，保留用户自己的
-  `plugin`、`mcp`、`model`、`permission` 等键。
+- 合并而非覆盖 `opencode.json`：设置 `default_agent`、注册会话 Goal 插件与权限规则，保留用户自己的
+  `plugin`/`plugins`、`mcp`、`model`、`permission` 等键。
 - 安装主 Agent、八个受限 subagent、七个生命周期命令、全部内置 Skills、runtime 与
-  `vibe-workflow` 插件，并注册固定版本的会话 Goal 控制器
-  `@prevalentware/opencode-goal-plugin@0.1.51`。
+  `vibe-workflow` V2 目录插件（`plugins/vibe-workflow/index.ts`，由 OpenCode 自动发现，不写入
+  `opencode.json`），并注册固定版本的会话 Goal 控制器
+  `@prevalentware/opencode-goal-plugin@0.1.60`。
 - 自动创建带时间戳的备份到 `<home>/backups/<action>-<stamp>/`。
 - 可选 MCP 在 `opencode.json` 的 `mcp` 段按需声明，安装器不强制安装任何可选 MCP。
 - 不静默删除用户已有配置；安装、升级、卸载对其触及的文件是事务性的。
@@ -456,7 +457,7 @@ Project Goal = 这个项目/增量要达到什么结果
 ### 5.2 会话 Goal（OpenCode 插件）
 
 会话级 `/goal`、`/pause_goal`、`/resume_goal` 由固定版本的
-`@prevalentware/opencode-goal-plugin@0.1.51` 承担，负责当前会话的运行、暂停、恢复、预算和
+`@prevalentware/opencode-goal-plugin@0.1.60` 承担，负责当前会话的运行、暂停、恢复、预算和
 continuation。它是会话控制器，不应被项目日志中的临时措辞替代。
 
 ```text

@@ -5,8 +5,8 @@
 #   ./runtime/opencode/install.sh [install|update|verify|preflight|uninstall] [options]
 #
 # With no action it defaults to `install`. All options are forwarded to
-# scripts/opencode_installer.py (--opencode-home, --skip-preflight,
-# --skip-plugin-install).
+# scripts/opencode_installer.py (--opencode-home, --skip-preflight; the old
+# --skip-plugin-install is still accepted and does nothing on OpenCode V2).
 set -euo pipefail
 
 root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"

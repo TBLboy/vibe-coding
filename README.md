@@ -28,7 +28,7 @@ format 2 是唯一受支持的 Project Log 格式，format 1 的退役与历史�
   `codebase-onboarder`、`solution-researcher`、`implementation-builder`、
   `verification-reviewer`、`alignment-reviewer`、`paper-reader`、`workflow-distiller`），
   通过 OpenCode 原生 `task` 工具编排，权限按角色边界收窄。
-- 会话 Goal 控制面由固定版本 `@prevalentware/opencode-goal-plugin@0.1.51` 承担
+- 会话 Goal 控制面由固定版本 `@prevalentware/opencode-goal-plugin@0.1.60` 承担
   （`/goal`、`/pause_goal`、`/resume_goal`）；**Project Goal 仍是唯一完成契约**，
   插件状态永不作为完成依据。
 - 七个生命周期命令：`/vibe-start`、`/vibe-resume`、`/vibe-plan`、`/vibe-implement`、
@@ -38,7 +38,9 @@ format 2 是唯一受支持的 Project Log 格式，format 1 的退役与历史�
 
 ## 环境要求
 
-- OpenCode CLI（本版在 `1.18.31` 上验证）。
+- OpenCode **V2**（本版在 `2.0.27` 上验证；V1 不再支持，preflight 检测到 1.x 会停止）。
+  只装了桌面版时，CLI 位于 `/opt/OpenCode/resources/opencode-cli`，可软链到 PATH：
+  `ln -sf /opt/OpenCode/resources/opencode-cli ~/.local/bin/opencode`。
 - Python 3.11 或更高版本。
 - 代理：部分功能需要访问外网，本机默认代理监听 `127.0.0.1:10808`；
   可通过 `HTTP_PROXY`/`HTTPS_PROXY` 调整。
@@ -68,14 +70,16 @@ chmod +x runtime/opencode/install.sh
 | 选项 | 作用 |
 |---|---|
 | `--opencode-home <dir>` | 目标配置目录，默认 `${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}` |
-| `--skip-plugin-install` | 不运行包管理器安装 `@opencode-ai/plugin` |
+| `--skip-plugin-install` | 兼容旧调用而保留，无任何作用：OpenCode V2 自带插件 API，不再安装 npm 依赖 |
 | `--skip-preflight` | 跳过工具探测，仅用于隔离的包测试 |
 
 默认行为：
 
 - `AGENTS.md` 以标记块（`<!-- VIBE-OPENCODE-GLOBAL:BEGIN -->` … `END`）合并，用户已有规则被保留。
-- `opencode.json` 采用合并而非覆盖：设置 `default_agent`、注册插件与权限规则，同时保留用户
-  自己的 `plugin`、`mcp`、`model`、`permission` 等键。
+- `opencode.json` 采用合并而非覆盖：设置 `default_agent`、注册会话 Goal 插件与权限规则，同时保留用户
+  自己的 `plugin`/`plugins`、`mcp`、`model`、`permission` 等键。
+- `vibe-workflow` 是 V2 目录插件 `plugins/vibe-workflow/index.ts`，由 OpenCode 从配置目录自动发现，
+  不写入 `opencode.json`；升级会移除旧版 V1 单文件插件 `plugins/vibe-workflow.ts` 及其注册项。
 - 备份到 `<home>/backups/<action>-<stamp>/`。
 - 安装、升级、卸载对其触及的文件是事务性的；失败会回滚。
 
@@ -117,8 +121,8 @@ chmod +x runtime/opencode/install.sh
 
 ```bash
 "$(cat "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/vibe-python")" \
-  "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/vibe-workflow/scripts/vibe.py" init \
-  --root /path/to/project
+  "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/vibe-workflow/scripts/vibe.py" \
+  --root /path/to/project init   # --root 是全局参数，必须写在子命令之前
 ```
 
 ## Vibe CLI

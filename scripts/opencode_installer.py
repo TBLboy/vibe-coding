@@ -8,6 +8,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -23,19 +24,35 @@ from framework_info import VERSION  # noqa: E402
 TITLE = "Vibe Coding - OpenCode Global Core"
 PACKAGE_VERSION = VERSION
 STATE_NAME = ".vibe-opencode-installation-state.json"
-PLUGIN_RELATIVE = "plugins/vibe-workflow.ts"
-DEFAULT_PLUGIN_SPEC = "./plugins/vibe-workflow.ts"
+# OpenCode V2 loads a plugin *directory* whose default export is `{ id, setup }`. The
+# installer places it under the config `plugins/` directory, where V2 discovers it on its
+# own, so it is deliberately not listed in opencode.json: listing it as well loads it twice.
+PLUGIN_RELATIVE = "plugins/vibe-workflow/index.ts"
+# Specs older releases wrote for the V1 single-file plugin. V2 rejects them ("configured
+# plugin path must be a directory"), so update and uninstall always drop them.
+LEGACY_LOCAL_PLUGIN_SPECS = ("./plugins/vibe-workflow.ts",)
 # The session Goal controller the global rules declare for OpenCode. It is pinned: the
 # rule text names one version, so installing any other version would make the rule false.
+# 0.1.60 is the first release that loads on OpenCode V2 (0.1.51 fails with
+# "Schema.optionalWith is not a function" against the Effect v4 that V2 injects).
 GOAL_PLUGIN_PACKAGE = "@prevalentware/opencode-goal-plugin"
-GOAL_PLUGIN_VERSION = "0.1.51"
+GOAL_PLUGIN_VERSION = "0.1.60"
 GOAL_PLUGIN_SPEC = f"{GOAL_PLUGIN_PACKAGE}@{GOAL_PLUGIN_VERSION}"
-MANAGED_PLUGIN_SPECS = (DEFAULT_PLUGIN_SPEC, GOAL_PLUGIN_SPEC)
+# Earlier pins of the same controller. An entry the installer itself wrote is migrated to
+# the current pin on update; an entry the user owned is still reported as a conflict.
+LEGACY_GOAL_PLUGIN_SPECS = (f"{GOAL_PLUGIN_PACKAGE}@0.1.51",)
+MANAGED_PLUGIN_SPECS = (GOAL_PLUGIN_SPEC,)
 AGENTS_RELATIVE = "AGENTS.md"
 AGENTS_BEGIN = "<!-- VIBE-OPENCODE-GLOBAL:BEGIN -->"
 AGENTS_END = "<!-- VIBE-OPENCODE-GLOBAL:END -->"
-OPENCODE_PACKAGE = "@opencode-ai/plugin"
-OPENCODE_PACKAGE_VERSION = "1.18.4"
+# Older releases installed this npm package for the V1 plugin API. V2 provides the plugin
+# API (`@opencode/plugin`) itself, so the dependency is no longer installed; an update
+# removes the entry an older release added to package.json.
+LEGACY_OPENCODE_PACKAGE = "@opencode-ai/plugin"
+# Only OpenCode V2 is supported (V1 plugin API and single-file plugins are not maintained).
+MIN_OPENCODE_MAJOR = 2
+# CLI shipped inside the desktop application, used when `opencode` is not on PATH.
+DESKTOP_CLI_CANDIDATES = ("/opt/OpenCode/resources/opencode-cli",)
 EXCLUDED_NAMES = {"__pycache__", "node_modules"}
 ASSET_DIRECTORIES = ("agents", "bin", "commands", "plugins")
 SKILLS_RELATIVE = "skills"
@@ -329,6 +346,9 @@ def missing_dirs(home: Path, relatives: Iterable[str]) -> list[str]:
     return sorted(missing)
 
 
+# No package manager runs any more (OpenCode V2 provides the plugin API), but configs
+# installed by older releases still carry these artifacts, and the user's own tooling may
+# write them; snapshotting them keeps rollback byte-exact and refuses escaping symlinks.
 LOCKFILES = ("package-lock.json", "bun.lock", "bun.lockb", "yarn.lock", "pnpm-lock.yaml")
 PACKAGE_ARTIFACTS = ("node_modules", *LOCKFILES)
 
@@ -538,26 +558,73 @@ def detect_opencode() -> str | None:
     return shutil.which("opencode")
 
 
-def detect_package_manager() -> str | None:
-    for candidate in ("npm", "bun"):
-        found = shutil.which(candidate)
-        if found:
-            return found
+def detect_desktop_cli() -> str | None:
+    """CLI bundled with the desktop application, when `opencode` itself is not on PATH."""
+    for candidate in DESKTOP_CLI_CANDIDATES:
+        if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+            return candidate
     return None
 
 
-def preflight(root: Path, home: Path, *, skip_plugin_install: bool) -> dict[str, Any]:
+def opencode_version(executable: str) -> str | None:
+    """Return the ``X.Y.Z`` version an OpenCode CLI reports, or None when it cannot tell."""
+    try:
+        result = subprocess.run(
+            [executable, "--version"], text=True, encoding="utf-8", errors="replace",
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False, timeout=60,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    match = re.search(r"(\d+)\.(\d+)\.(\d+)", result.stdout or "")
+    return ".".join(match.groups()) if match else None
+
+
+def preflight(root: Path, home: Path, *, skip_plugin_install: bool = False) -> dict[str, Any]:
+    """Probe the host before writing anything.
+
+    ``skip_plugin_install`` is accepted for compatibility with older callers; OpenCode V2
+    provides the plugin API itself, so there is no npm dependency left to install.
+    """
+    del skip_plugin_install
     validate_source(root)
-    report: dict[str, Any] = {
+    warnings: list[str] = []
+    opencode = detect_opencode()
+    version: str | None = None
+    if opencode:
+        version = opencode_version(opencode)
+    else:
+        desktop = detect_desktop_cli()
+        if desktop:
+            version = opencode_version(desktop)
+            warnings.append(
+                f"opencode is not on PATH, but the desktop application ships a CLI at {desktop}; "
+                f"link it to use the workflow from a shell: ln -sf {desktop} ~/.local/bin/opencode"
+            )
+        else:
+            warnings.append("opencode CLI was not found on PATH; install OpenCode V2 before using the workflow")
+    if (opencode or detect_desktop_cli()) and version is None:
+        warnings.append(
+            "could not read the OpenCode version; this package supports OpenCode "
+            f"{MIN_OPENCODE_MAJOR}.x only, so confirm `opencode --version` reports 2.x"
+        )
+    if version is not None and int(version.split(".")[0]) < MIN_OPENCODE_MAJOR:
+        raise RuntimeError(
+            f"OpenCode {version} is a V1 release; this package supports OpenCode "
+            f"{MIN_OPENCODE_MAJOR}.x only (V1 plugin API is not maintained). Upgrade OpenCode first."
+        )
+    if os.environ.get("PYTHONPATH"):
+        warnings.append(
+            "PYTHONPATH is set; it can shadow the Vibe runtime dependencies with another "
+            "Python's packages. The workflow plugin drops it for runtime calls; unset it "
+            "when running vibe.py by hand."
+        )
+    return {
         "python": detect_python(root, home),
-        "opencode": detect_opencode(),
-        "package_manager": detect_package_manager(),
+        "opencode": opencode,
+        "opencode_version": version,
         "config_dir": str(home),
-        "plugin_install": "skipped" if skip_plugin_install else "required",
+        "warnings": warnings,
     }
-    if not skip_plugin_install and not report["package_manager"]:
-        raise RuntimeError("npm or bun is required to install the OpenCode plugin dependency")
-    return report
 
 
 def backup(home: Path, action: str) -> Path:
@@ -610,6 +677,25 @@ def plugin_package_name(spec: Any) -> str | None:
     return f"@{name}" if scoped else name
 
 
+def configured_plugins(config: Any) -> list[Any]:
+    """Every plugin entry in a config, across the V2 `plugins` and older `plugin` keys."""
+    if not isinstance(config, dict):
+        return []
+    entries: list[Any] = []
+    for key in ("plugins", "plugin"):
+        value = config.get(key)
+        if isinstance(value, list):
+            entries.extend(value)
+    return entries
+
+
+def plugin_list_key(config: dict[str, Any]) -> str:
+    """The plugin list key a config uses: V2 `plugins`, or the older `plugin` it normalizes."""
+    if "plugins" in config:
+        return "plugins"
+    return "plugin"
+
+
 def dedupe_plugins(items: list[Any]) -> list[Any]:
     seen: set[str] = set()
     ordered: list[Any] = []
@@ -637,6 +723,7 @@ def merge_config(home: Path, root: Path, previous_ownership: Any) -> dict[str, A
     source = read_json(root / "runtime" / "opencode" / "opencode.json", {})
     previous = previous_ownership if isinstance(previous_ownership, dict) else {}
     ownership: dict[str, Any] = {}
+    notes: list[str] = []
 
     merged = dict(existing)
     schema_ownership = previous.get("schema")
@@ -674,38 +761,71 @@ def merge_config(home: Path, root: Path, previous_ownership: Any) -> dict[str, A
     merged["default_agent"] = source.get("default_agent", "vibe-main")
 
     # --- plugin registration ----------------------------------------------
-    plugins = existing.get("plugin")
-    if plugins is None:
-        plugins = []
-    if not isinstance(plugins, list):
-        raise RuntimeError("opencode.json plugin must be a list")
-    spec_key = plugin_key(DEFAULT_PLUGIN_SPEC)
-    plugin_ownership = previous.get("plugin")
-    if not isinstance(plugin_ownership, dict) or "present" not in plugin_ownership:
-        plugin_ownership = {"present": any(plugin_key(item) == spec_key for item in plugins)}
-    ownership["plugin"] = plugin_ownership
+    # V2 names the list `plugins`; it still normalizes the older `plugin` key, and a
+    # config may carry both. Every check below runs across both lists; the managed spec
+    # is written to the primary one (`plugins` when present) and removed from the other.
+    list_key = plugin_list_key(existing)
+    lists: dict[str, list[Any]] = {}
+    for key_name in ("plugins", "plugin"):
+        if key_name not in existing and key_name != list_key:
+            continue
+        value = existing.get(key_name)
+        if value is None:
+            value = []
+        if not isinstance(value, list):
+            raise RuntimeError(f"opencode.json {key_name} must be a list")
+        lists[key_name] = list(value)
+    ownership["plugin_list_key"] = list_key
+
+    def all_plugins() -> list[Any]:
+        return [item for entries in lists.values() for item in entries]
+
+    def drop(keys: set[str]) -> None:
+        for key_name in lists:
+            lists[key_name] = [item for item in lists[key_name] if plugin_key(item) not in keys]
+
+    legacy_local = {plugin_key(spec) for spec in LEGACY_LOCAL_PLUGIN_SPECS}
+    dropped_local = [item for item in all_plugins() if plugin_key(item) in legacy_local]
+    if dropped_local:
+        notes.append(
+            "removed the V1 single-file plugin registration "
+            + ", ".join(repr(item) for item in dropped_local)
+            + "; OpenCode V2 discovers plugins/vibe-workflow/ on its own"
+        )
+    drop(legacy_local)
     # Third-party specs the installer registers on the user's behalf, each recorded with
     # whether the user already had it so uninstall removes only what the installer added.
     plugins_added = previous.get("plugins_added")
     if not isinstance(plugins_added, dict):
         plugins_added = {}
+    # Migrate older pins of the Goal controller that the installer itself wrote.
+    for legacy in LEGACY_GOAL_PLUGIN_SPECS:
+        key = plugin_key(legacy)
+        if key in plugins_added and not plugins_added[key]:
+            if any(plugin_key(item) == key for item in all_plugins()):
+                notes.append(f"migrated the session Goal controller {legacy!r} to {GOAL_PLUGIN_SPEC!r}")
+            drop({key})
+            plugins_added = {
+                **{k: v for k, v in plugins_added.items() if k != key},
+                plugin_key(GOAL_PLUGIN_SPEC): False,
+            }
     managed_ownership: dict[str, bool] = {}
     managed_keys = {plugin_key(spec) for spec in MANAGED_PLUGIN_SPECS}
-    for spec in MANAGED_PLUGIN_SPECS[1:]:
+    for spec in MANAGED_PLUGIN_SPECS:
         key = plugin_key(spec)
         if key in plugins_added:
             managed_ownership[key] = bool(plugins_added[key])
         else:
             managed_ownership[key] = any(
-                plugin_package_name(item) == plugin_package_name(spec) for item in plugins
+                plugin_package_name(item) == plugin_package_name(spec) for item in all_plugins()
             )
     ownership["plugins_added"] = managed_ownership
     # The global rules name one version, so a second entry for the same package would make
     # the rule ambiguous and could double-register the controller. Refuse instead.
-    for spec in MANAGED_PLUGIN_SPECS[1:]:
+    for spec in MANAGED_PLUGIN_SPECS:
         name = plugin_package_name(spec)
         conflicts = [
-            item for item in plugins
+            item for item in all_plugins()
             if plugin_package_name(item) == name and plugin_key(item) != plugin_key(spec)
         ]
         if conflicts:
@@ -715,8 +835,10 @@ def merge_config(home: Path, root: Path, previous_ownership: Any) -> dict[str, A
                 "controller version is declared by the global rules, so two versions would "
                 "be ambiguous."
             )
-    kept = [item for item in plugins if plugin_key(item) not in managed_keys]
-    merged["plugin"] = dedupe_plugins([*kept, *MANAGED_PLUGIN_SPECS])
+    drop(managed_keys)
+    lists[list_key] = dedupe_plugins([*lists[list_key], *MANAGED_PLUGIN_SPECS])
+    for key_name, entries in lists.items():
+        merged[key_name] = entries
 
     # --- managed permission rules -----------------------------------------
     permissions = dict(existing.get("permission")) if isinstance(existing.get("permission"), dict) else {}
@@ -725,7 +847,6 @@ def merge_config(home: Path, root: Path, previous_ownership: Any) -> dict[str, A
     if not isinstance(previous_permissions, dict):
         previous_permissions = {}
     permissions_ownership: dict[str, dict[str, Any]] = {}
-    notes: list[str] = []
     # Iterate the union so rules the package stopped shipping keep their ownership
     # instead of being silently orphaned in the user config.
     for group in sorted(set(source_permission) | set(previous_permissions)):
@@ -794,35 +915,6 @@ def merge_config(home: Path, root: Path, previous_ownership: Any) -> dict[str, A
     return ownership
 
 
-def install_plugin_dependency(home: Path, package_manager: str) -> dict[str, Any]:
-    package_json = destination_for(home, "package.json")
-    # Defense in depth: never let the package manager write through an escaping link.
-    destination_for(home, "node_modules")
-    existed = package_json.is_file()
-    package = read_json(package_json, {})
-    if package is None:
-        package = {}
-    if not isinstance(package, dict):
-        raise RuntimeError(f"{package_json} must contain a JSON object")
-    dependencies = package.get("dependencies")
-    if not isinstance(dependencies, dict):
-        dependencies = {}
-    previous_dependency = dependencies.get(OPENCODE_PACKAGE)
-    dependencies[OPENCODE_PACKAGE] = OPENCODE_PACKAGE_VERSION
-    package["dependencies"] = dependencies
-    write_json(package_json, package)
-
-    command = [package_manager, "install"]
-    if Path(package_manager).name == "npm":
-        command += ["--no-audit", "--no-fund"]
-    result = subprocess.run(
-        command, cwd=home, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False,
-    )
-    if result.returncode != 0:
-        raise RuntimeError(f"failed to install {OPENCODE_PACKAGE}:\n{result.stdout}")
-    return {"existed": existed, "previous_dependency": previous_dependency}
-
-
 def restore_package_json(home: Path, ownership: Any) -> None:
     info = ownership if isinstance(ownership, dict) else {}
     if not info:
@@ -838,9 +930,9 @@ def restore_package_json(home: Path, ownership: Any) -> None:
         dependencies = {}
     previous_dependency = info.get("previous_dependency")
     if previous_dependency is None:
-        dependencies.pop(OPENCODE_PACKAGE, None)
+        dependencies.pop(LEGACY_OPENCODE_PACKAGE, None)
     else:
-        dependencies[OPENCODE_PACKAGE] = previous_dependency
+        dependencies[LEGACY_OPENCODE_PACKAGE] = previous_dependency
     if dependencies:
         package["dependencies"] = dependencies
     else:
@@ -863,7 +955,8 @@ def install_or_update(
     previous_managed = old_state.get("managed_files", {})
     if not isinstance(previous_managed, dict):
         previous_managed = {}
-    probe = old_state.get("preflight") if skip_preflight else preflight(root, home, skip_plugin_install=skip_plugin_install)
+    del skip_plugin_install  # accepted for compatibility; V2 has no npm dependency to install
+    probe = old_state.get("preflight") if skip_preflight else preflight(root, home)
     if not isinstance(probe, dict):
         probe = {}
 
@@ -906,12 +999,10 @@ def install_or_update(
             python_pointer.write_text(desired_pointer, encoding="utf-8")
             managed["vibe-python"] = sha256_file(python_pointer)
 
-        package_ownership = old_state.get("package_json") if skip_plugin_install else None
-        if not skip_plugin_install:
-            manager = probe.get("package_manager") or detect_package_manager()
-            if not manager:
-                raise RuntimeError("npm or bun is required to install the OpenCode plugin dependency")
-            package_ownership = install_plugin_dependency(home, manager)
+        # OpenCode V2 provides the plugin API itself. Undo the npm dependency an older
+        # release added to package.json; node_modules is left for the user to prune.
+        if old_state.get("package_json"):
+            restore_package_json(home, old_state.get("package_json"))
 
         state = {
             "schema": 2,
@@ -922,10 +1013,8 @@ def install_or_update(
             "managed_files": managed,
             "preserved_local": preserved,
             "created_dirs": created_dirs,
-            "plugin_install": "skipped" if skip_plugin_install else "installed",
             "preflight": probe,
             "opencode_config": config_ownership,
-            "package_json": package_ownership,
         }
         assert_canonical_state(state)
         write_json(state_path(home), state)
@@ -943,6 +1032,8 @@ def install_or_update(
         print(f"[!] PRESERVED local modification: {relative}")
     for note in config_ownership.get("notes") or []:
         print(f"[!] {note}")
+    for warning in (probe.get("warnings") or []) if not skip_preflight else []:
+        print(f"[!] {warning}")
     print(f"[+] {TITLE} {PACKAGE_VERSION} installed to: {home}")
     print(f"[+] Backup: {backup_dir}")
     print("[*] Project .project-log/ directories are never modified by this installer.")
@@ -967,9 +1058,14 @@ def verify(root: Path, home: Path) -> None:
     config = read_json(destination_for(home, "opencode.json"), {})
     if not isinstance(config, dict) or config.get("default_agent") != "vibe-main":
         raise RuntimeError("opencode.json default_agent must be vibe-main")
-    if DEFAULT_PLUGIN_SPEC not in (config.get("plugin") or []):
-        raise RuntimeError("opencode.json does not register the Vibe Workflow plugin")
-    if GOAL_PLUGIN_SPEC not in (config.get("plugin") or []):
+    registered = configured_plugins(config)
+    legacy = [item for item in registered if plugin_key(item) in {plugin_key(spec) for spec in LEGACY_LOCAL_PLUGIN_SPECS}]
+    if legacy:
+        raise RuntimeError(
+            f"opencode.json still registers the V1 single-file plugin {legacy[0]!r}, which "
+            "OpenCode V2 rejects; rerun the installer update to migrate it"
+        )
+    if GOAL_PLUGIN_SPEC not in registered:
         raise RuntimeError(
             f"opencode.json does not register the pinned session Goal controller "
             f"({GOAL_PLUGIN_SPEC}); the global rules declare it for OpenCode"
@@ -980,17 +1076,14 @@ def verify(root: Path, home: Path) -> None:
     plugin = destination_for(home, PLUGIN_RELATIVE)
     if not plugin.is_file():
         raise RuntimeError("Vibe Workflow plugin asset is missing")
+    legacy_file = destination_for(home, "plugins/vibe-workflow.ts")
+    if legacy_file.is_file():
+        raise RuntimeError(
+            "plugins/vibe-workflow.ts (V1 single-file plugin) is still present; OpenCode V2 "
+            "tries to load it and fails. Remove it after keeping any local changes."
+        )
     if not destination_for(home, f"{RUNTIME_RELATIVE}/scripts/vibe.py").is_file():
         raise RuntimeError("Vibe runtime scripts are missing")
-    if state.get("plugin_install") == "installed":
-        manifest = destination_for(home, "node_modules/@opencode-ai/plugin/package.json")
-        if not manifest.is_file():
-            raise RuntimeError(f"{OPENCODE_PACKAGE} dependency is not installed")
-        installed = read_json(manifest, {}).get("version")
-        if installed != OPENCODE_PACKAGE_VERSION:
-            raise RuntimeError(
-                f"{OPENCODE_PACKAGE} version mismatch: {installed!r} != {OPENCODE_PACKAGE_VERSION!r}"
-            )
     print("[+] OpenCode installation verification passed.")
 
 
@@ -1013,30 +1106,21 @@ def remove_managed_config(home: Path, ownership: Any) -> None:
     else:
         config.pop("default_agent", None)
 
-    plugins = config.get("plugin")
-    plugin_ownership = own.get("plugin")
-    if isinstance(plugins, list) and not (
-        isinstance(plugin_ownership, dict) and plugin_ownership.get("present")
-    ):
-        spec_key = plugin_key(DEFAULT_PLUGIN_SPEC)
-        remaining = [item for item in plugins if plugin_key(item) != spec_key]
-        if remaining:
-            config["plugin"] = remaining
-        else:
-            config.pop("plugin", None)
-        plugins = config.get("plugin")
-
-    # Remove the third-party Goal controller the installer added, keeping any the user
-    # already had before installation.
+    # Drop the V1 single-file plugin spec older releases wrote, and the Goal controller the
+    # installer added, keeping any entry the user already had before installation.
     plugins_added = own.get("plugins_added")
-    if isinstance(plugins, list) and isinstance(plugins_added, dict):
-        removable = {key for key, present in plugins_added.items() if not present}
-        if removable:
-            remaining = [item for item in plugins if plugin_key(item) not in removable]
-            if remaining:
-                config["plugin"] = remaining
-            else:
-                config.pop("plugin", None)
+    removable = {plugin_key(spec) for spec in LEGACY_LOCAL_PLUGIN_SPECS}
+    if isinstance(plugins_added, dict):
+        removable |= {key for key, present in plugins_added.items() if not present}
+    for list_key in ("plugins", "plugin"):
+        plugins = config.get(list_key)
+        if not isinstance(plugins, list):
+            continue
+        remaining = [item for item in plugins if plugin_key(item) not in removable]
+        if remaining:
+            config[list_key] = remaining
+        else:
+            config.pop(list_key, None)
 
     permissions = config.get("permission")
     managed_permissions = own.get("permissions_added")
@@ -1123,7 +1207,7 @@ def main() -> int:
     parser.add_argument("action", choices=("install", "update", "verify", "preflight", "uninstall"))
     parser.add_argument("--opencode-home", help="Override the OpenCode config directory.")
     parser.add_argument("--skip-preflight", action="store_true", help="Only for isolated package tests.")
-    parser.add_argument("--skip-plugin-install", action="store_true", help="Do not install the npm dependency.")
+    parser.add_argument("--skip-plugin-install", action="store_true", help="Accepted for compatibility; OpenCode V2 needs no npm plugin dependency.")
     args = parser.parse_args()
     root = package_root()
     home = config_dir(args.opencode_home)

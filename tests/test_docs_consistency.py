@@ -142,8 +142,12 @@ class DocumentationConsistencyTests(unittest.TestCase):
         self.assertNotIn('init_project.py" --target', readme)
         self.assertNotIn("loopctl init", readme)
         self.assertNotIn('init_project.py" --target', install)
-        self.assertIn('vibe.py" init', readme)
-        self.assertIn('vibe.py" init', install)
+        # `--root` is a global option: it must precede the subcommand, or argparse
+        # rejects it with "unrecognized arguments: --root".
+        self.assertIn("--root /path/to/project init", readme)
+        self.assertIn('vibe.py" --root "$TMP" init', install)
+        self.assertNotIn('vibe.py" init', readme)
+        self.assertNotIn('vibe.py" init', install)
 
 
 if __name__ == "__main__":

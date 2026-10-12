@@ -52,6 +52,23 @@ Vibe Coding OpenCode Global Core 升级到本包版本。
 `${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/vibe-python` → `python3` → `python`），
 再用它执行 `scripts/opencode_installer.py`。
 
+## 从 OpenCode V1 形态升级（只支持 OpenCode V2）
+
+本包只支持 OpenCode **V2**（`opencode --version` 为 2.x）；preflight 检测到 1.x 会停止。`update` 会：
+
+- 删除旧版 V1 单文件插件 `plugins/vibe-workflow.ts`（未被本地修改时），安装 V2 目录插件
+  `plugins/vibe-workflow/index.ts`，并从 `opencode.json` 移除 `./plugins/vibe-workflow.ts` 注册项；
+  目录插件由 OpenCode 自动发现，不再写入 `opencode.json`。
+- 把安装器写入的会话 Goal 控制器 `@prevalentware/opencode-goal-plugin@0.1.51` 迁移为 `@0.1.60`
+  （0.1.51 在 V2 上报 `Schema.optionalWith is not a function`，无法加载）。用户自己写的其他版本
+  仍按冲突处理，需先手动对齐。
+- 不再安装 `@opencode-ai/plugin` npm 依赖，并撤销旧版写入 `package.json` 的该依赖；
+  `node_modules/` 留给用户自行清理。
+
+曾按手工方式移植过插件的机器（例如手动创建了 `plugins/vibe-workflow/index.ts`、把旧插件改名为
+`plugins/vibe-workflow.ts.v1-disabled`）：先把这些手工文件移出 `plugins/`，否则 update 会因
+`pre-existing file differs from package` 在写入前停止。
+
 ## 旧格式退役
 
 format 1（`workflow.yaml` 等文件式日志）已退役：`SUPPORTED_FORMATS` 只含 `2`，任何命令都不再
