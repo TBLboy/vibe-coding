@@ -1,7 +1,6 @@
 ---
 description: Implement the smallest coherent change for an approved task and report evidence without self-certifying completion.
 mode: subagent
-model: llmcenter/claude-opus-5
 request:
   body:
     temperature: 0.1

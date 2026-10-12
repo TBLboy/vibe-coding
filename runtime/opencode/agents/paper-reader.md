@@ -1,7 +1,6 @@
 ---
 description: Read a paper at the lowest sufficient depth and report reproducibility, limitations and project-transfer value.
 mode: subagent
-model: llmcenter/claude-sonnet-5
 request:
   body:
     temperature: 0.1

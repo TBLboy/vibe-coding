@@ -1,7 +1,6 @@
 ---
 description: Review evidence-backed lessons and propose candidates without modifying global rules, Skills or templates.
 mode: subagent
-model: llmcenter/claude-sonnet-5
 request:
   body:
     temperature: 0.1

@@ -211,14 +211,18 @@ class OpenCodeStaticSurfaceTests(unittest.TestCase):
             self.assertEqual(resolve(rules, "shell", "rm -rf /"), "deny", role)
             self.assertEqual(resolve(rules, "shell", "git status"), "allow", role)
 
-    def test_agents_declare_v2_syntax_and_a_model(self) -> None:
-        """Agents must use V2 `permissions` and pin a model.
+    def test_agents_declare_v2_syntax_without_a_model_pin(self) -> None:
+        """Agents must use V2 `permissions` and must not pin a model.
 
         The legacy `permission` mapping still loads through the compatibility
         layer, but it is merged under a global `* * allow` rule, which inverts a
-        declared deny into an effective allow. A missing `model` is a cost issue
-        rather than a safety one: a subagent inherits the parent session's model,
-        so an unpinned reader role runs on whatever the main agent is using.
+        declared deny into an effective allow.
+
+        A pinned `model` names one provider/model id: it breaks on any machine
+        that does not serve that exact id (delegation then fails with "Model
+        unavailable"), and it silently overrides the user's configured default
+        model. Without a pin a subagent inherits the parent session's model,
+        which is the behaviour the user asked for; ALIGN-FW-002 records the drift.
         """
         for role in sorted(EXPECTED_AGENTS):
             metadata = parse_frontmatter(OPENCODE / f"agents/{role}.md")
@@ -237,9 +241,11 @@ class OpenCodeStaticSurfaceTests(unittest.TestCase):
                 0.1,
                 f"{role} must keep temperature 0.1 under request.body",
             )
-            model = metadata.get("model")
-            self.assertIsInstance(model, str, f"{role} must pin a model")
-            self.assertIn("/", model, f"{role} model must be provider/model")
+            self.assertNotIn(
+                "model", metadata,
+                f"{role} must not pin a model: it breaks off this machine and overrides "
+                f"the user's default model (ALIGN-FW-002)",
+            )
             for rule in metadata["permissions"]:
                 self.assertEqual(
                     sorted(rule), ["action", "effect", "resource"], f"{role}: malformed rule {rule}"
@@ -576,7 +582,9 @@ class OpenCodeIsolatedLoadTests(unittest.TestCase):
                     resolve(agents["vibe-main"]["permissions"], "subagent", "paper-reader"), "allow"
                 )
                 for role in EXPECTED_AGENTS:
-                    self.assertIsInstance(agents[role].get("model"), dict, role)
+                    # No agent pins a model, so the live view reports none of its own
+                    # and the role inherits the session model (ALIGN-FW-002).
+                    self.assertIsNone(agents[role].get("model"), role)
 
                 commands = {item.get("id") or item.get("name") for item in self._get(port, "/api/command", project)}
                 self.assertLessEqual(EXPECTED_COMMANDS, commands)

@@ -1,7 +1,6 @@
 ---
 description: Clarify ambiguous intent into atomic, evidence-backed business logic and identify the highest-impact unresolved decision.
 mode: subagent
-model: llmcenter/claude-opus-5
 request:
   body:
     temperature: 0.1

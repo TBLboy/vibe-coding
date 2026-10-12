@@ -1,7 +1,6 @@
 ---
 description: Research a bounded engineering decision using current authoritative evidence and comparable alternatives.
 mode: subagent
-model: llmcenter/claude-opus-5
 request:
   body:
     temperature: 0.1

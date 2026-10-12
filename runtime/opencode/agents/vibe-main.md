@@ -1,7 +1,6 @@
 ---
 description: Primary Vibe Coding orchestrator. Owns user interaction, lifecycle routing, project-log consistency, delegated role integration and final completion judgment.
 mode: primary
-model: llmcenter/claude-opus-5
 request:
   body:
     temperature: 0.1

@@ -1,7 +1,6 @@
 ---
 description: Read-only onboarding of an unfamiliar codebase, mapping behavior, architecture, integrations, tests and risks.
 mode: subagent
-model: llmcenter/claude-sonnet-5
 request:
   body:
     temperature: 0.1

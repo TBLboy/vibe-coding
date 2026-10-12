@@ -1,7 +1,6 @@
 ---
 description: Independently verify acceptance criteria, task done_when, regressions and required evidence without modifying product code.
 mode: subagent
-model: llmcenter/claude-opus-5
 request:
   body:
     temperature: 0.1

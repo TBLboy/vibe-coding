@@ -1,7 +1,6 @@
 ---
 description: Perform a read-only bidirectional audit across business logic, code, configuration and tests.
 mode: subagent
-model: llmcenter/claude-opus-5
 request:
   body:
     temperature: 0.1
