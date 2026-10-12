@@ -703,12 +703,15 @@ class OpenCodeInstallerTests(unittest.TestCase):
             self.assertTrue((home / "AGENTS.md").is_file())
 
     def test_user_permission_edit_is_not_reset_by_update(self) -> None:
+        # The installer template no longer ships a top-level `permission` block
+        # (role boundaries live in the agent files), so this exercises the same
+        # ownership mechanism through a key the user does edit by hand.
         with tempfile.TemporaryDirectory() as temporary:
             home = Path(temporary) / "opencode"
             self.assertEqual(self.install(home).returncode, 0)
             config_path = home / "opencode.json"
             config = json.loads(config_path.read_text(encoding="utf-8"))
-            config["permission"]["skill"]["*"] = "ask"
+            config["permission"] = {"skill": {"*": "ask"}}
             config_path.write_text(json.dumps(config, indent=2), encoding="utf-8")
 
             update = run_installer(
@@ -847,22 +850,38 @@ class OpenCodeInstallerTests(unittest.TestCase):
             self.assertNotIn("skill", second["permissions_added"])
 
     def test_user_deleted_managed_permission_rule_is_not_restored(self) -> None:
+        # The shipped template no longer declares a top-level `permission` block,
+        # so the managed rule is created through merge_config directly; the
+        # behavior under test is ownership hand-back, not the template contents.
+        module = load_installer_module()
         with tempfile.TemporaryDirectory() as temporary:
-            home = Path(temporary) / "opencode"
-            self.assertEqual(self.install(home).returncode, 0)
+            root = Path(temporary) / "package"
+            surface = root / "runtime/opencode"
+            surface.mkdir(parents=True)
+            (surface / "opencode.json").write_text(
+                json.dumps({"default_agent": "vibe-main", "permission": {"skill": {"*": "allow"}}}),
+                encoding="utf-8",
+            )
+            home = Path(temporary) / "home"
+            home.mkdir()
+
+            ownership = module.merge_config(home, root, {})
+            self.assertEqual(ownership["permissions_added"]["skill"]["*"]["installed"], "allow")
+
             config_path = home / "opencode.json"
             config = json.loads(config_path.read_text(encoding="utf-8"))
             del config["permission"]["skill"]["*"]
             config_path.write_text(json.dumps(config, indent=2), encoding="utf-8")
 
-            update = run_installer(
-                "update", "--opencode-home", str(home),
-                "--skip-preflight", "--skip-plugin-install",
-            )
-            self.assertEqual(update.returncode, 0, update.stdout)
-            self.assertIn("managed rule removed by the user", update.stdout)
+            second = module.merge_config(home, root, ownership)
             updated = json.loads(config_path.read_text(encoding="utf-8"))
             self.assertNotIn("*", (updated.get("permission") or {}).get("skill") or {})
+            # The user-facing notice is part of the contract: a silently dropped
+            # managed rule looks identical to a successful update.
+            self.assertIn(
+                "managed rule removed by the user",
+                " ".join(str(note) for note in second.get("notes") or []),
+            )
 
     def test_failure_leaves_no_created_dirs(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

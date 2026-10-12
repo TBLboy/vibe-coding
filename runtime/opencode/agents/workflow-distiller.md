@@ -1,14 +1,25 @@
 ---
 description: Review evidence-backed lessons and propose candidates without modifying global rules, Skills or templates.
 mode: subagent
-temperature: 0.1
-permission:
-  edit:
-    "*": deny
-    ".project-log/**": allow
-  bash: deny
-  task:
-    "*": deny
+model: llmcenter/claude-sonnet-5
+request:
+  body:
+    temperature: 0.1
+permissions:
+  - { action: "*", resource: "*", effect: deny }
+  - { action: read, resource: "**", effect: allow }
+  - { action: glob, resource: "**", effect: allow }
+  - { action: grep, resource: "**", effect: allow }
+  - { action: skill, resource: "*", effect: allow }
+  - { action: edit, resource: ".project-log/**", effect: allow }
+  - { action: read, resource: "**/.env", effect: deny }
+  - { action: read, resource: ".env", effect: deny }
+  - { action: read, resource: "**/.env.*", effect: deny }
+  - { action: read, resource: ".env.*", effect: deny }
+  - { action: read, resource: "~/.ssh/**", effect: deny }
+  - { action: read, resource: "~/.aws/**", effect: deny }
+  - { action: read, resource: "~/.config/opencode/opencode.json", effect: deny }
+  - { action: read, resource: "~/.config/opencode/auth.json", effect: deny }
 ---
 
 # Role: workflow-distiller

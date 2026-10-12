@@ -1,39 +1,38 @@
 ---
 description: Perform a read-only bidirectional audit across business logic, code, configuration and tests.
 mode: subagent
-temperature: 0.1
-permission:
-  edit: deny
-  bash:
-    "*": deny
-    "git status*": allow
-    "git diff*": allow
-    "git log*": allow
-    "git show*": allow
-    "git rev-parse*": allow
-    "git ls-files*": allow
-    # `git log` is already allowed above. These two forms are listed explicitly too, after an
-    # earlier session reported the matcher mishandling `--flag=value` history queries; in the
-    # session that added them the plain `git log*` already matched them, so this is
-    # redundant-but-harmless insurance rather than a fix. Forms observed to match:
-    # `git log --oneline`, `git show`, `git rev-parse`. A denied command is a capability gap to
-    # report, not a reason to widen the allowlist.
-    "git log --format=*": allow
-    "git log --pretty=*": allow
-    "grep *": allow
-    "rg *": allow
-    # Verification runs through the trusted action registry, anchored to the runner and its
-    # subcommand rather than to a wrapper: the installed `bin/vibe-python` is a POSIX shell
-    # script, so pinning the allowlist to it left a Windows reviewer unable to run anything.
-    # An unsupported interpreter is reported by `preflight` as
-    # `verification_capability_missing` (python>=3.11) instead. There is deliberately no raw
-    # `-m unittest` / `*pytest*` allow: those admit any command while looking like a
-    # capability check. Digests are recomputed with `run --action hash`, not with a
-    # host-specific hashing tool, so no POSIX-only entry is needed here.
-    "*verification_runner.py preflight*": allow
-    "*verification_runner.py run*": allow
-  task:
-    "*": deny
+model: llmcenter/claude-opus-5
+request:
+  body:
+    temperature: 0.1
+permissions:
+  - { action: "*", resource: "*", effect: deny }
+  - { action: read, resource: "**", effect: allow }
+  - { action: glob, resource: "**", effect: allow }
+  - { action: grep, resource: "**", effect: allow }
+  - { action: skill, resource: "*", effect: allow }
+  - { action: shell, resource: "git status*", effect: allow }
+  - { action: shell, resource: "git diff*", effect: allow }
+  - { action: shell, resource: "git log*", effect: allow }
+  - { action: shell, resource: "git show*", effect: allow }
+  - { action: shell, resource: "git rev-parse*", effect: allow }
+  - { action: shell, resource: "git ls-files*", effect: allow }
+  # `git log*` already matches these, but an earlier session reported the matcher
+  # mishandling `--flag=value` queries; kept as redundant-but-harmless insurance.
+  - { action: shell, resource: "git log --format=*", effect: allow }
+  - { action: shell, resource: "git log --pretty=*", effect: allow }
+  - { action: shell, resource: "grep *", effect: allow }
+  - { action: shell, resource: "rg *", effect: allow }
+  - { action: shell, resource: "*verification_runner.py preflight*", effect: allow }
+  - { action: shell, resource: "*verification_runner.py run*", effect: allow }
+  - { action: read, resource: "**/.env", effect: deny }
+  - { action: read, resource: ".env", effect: deny }
+  - { action: read, resource: "**/.env.*", effect: deny }
+  - { action: read, resource: ".env.*", effect: deny }
+  - { action: read, resource: "~/.ssh/**", effect: deny }
+  - { action: read, resource: "~/.aws/**", effect: deny }
+  - { action: read, resource: "~/.config/opencode/opencode.json", effect: deny }
+  - { action: read, resource: "~/.config/opencode/auth.json", effect: deny }
 ---
 
 # Role: alignment-reviewer

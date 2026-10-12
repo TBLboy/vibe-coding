@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import base64
+import fnmatch
 import json
 import os
 import re
@@ -106,6 +107,33 @@ def parse_frontmatter(path: Path) -> dict:
     return value
 
 
+def agent_rules(role: str) -> list[dict]:
+    """Return the ordered V2 permission rules declared by an agent."""
+    rules = parse_frontmatter(OPENCODE / f"agents/{role}.md").get("permissions")
+    if not isinstance(rules, list):
+        raise AssertionError(f"{role} does not declare a V2 `permissions` list")
+    return rules
+
+
+def resolve(rules: list[dict], action: str, resource: str) -> str | None:
+    """Resolve an action/resource pair the way OpenCode V2 does.
+
+    The last matching rule wins, so a broad deny placed first is refined by the
+    narrower allows after it. `~` is expanded for path-like actions, matching the
+    documented behavior for `read`, `edit`, and `external_directory`.
+    """
+    if action in ("read", "edit", "external_directory"):
+        resource = os.path.expanduser(resource)
+    effect = None
+    for rule in rules:
+        rule_resource = str(rule["resource"])
+        if action in ("read", "edit", "external_directory"):
+            rule_resource = os.path.expanduser(rule_resource)
+        if fnmatch.fnmatch(action, str(rule["action"])) and fnmatch.fnmatch(resource, rule_resource):
+            effect = rule["effect"]
+    return effect
+
+
 class OpenCodeStaticSurfaceTests(unittest.TestCase):
     def test_agents_match_the_capability_matrix(self) -> None:
         paths = sorted((OPENCODE / "agents").glob("*.md"))
@@ -117,14 +145,42 @@ class OpenCodeStaticSurfaceTests(unittest.TestCase):
             self.assertEqual(metadata.get("mode"), expected_mode, path)
 
     def test_agent_permissions_enforce_role_boundaries(self) -> None:
-        main = parse_frontmatter(OPENCODE / "agents/vibe-main.md")
-        task = main["permission"]["task"]
-        self.assertEqual(task["*"], "deny")
-        self.assertEqual({name for name, action in task.items() if action == "allow"}, SUBAGENTS)
+        # V2 agents declare `permissions` as an ordered rule list and the LAST
+        # matching rule wins, so a role boundary is only real once the rules are
+        # resolved. Asserting on raw entries would have missed the drift this test
+        # now guards: under the V1 `permission` mapping the compatibility layer
+        # prepended a global `* * allow`, which silently granted read/webfetch/
+        # websearch to every declared read-only role.
+        main_rules = agent_rules("vibe-main")
+        self.assertEqual(
+            {name for name in SUBAGENTS if resolve(main_rules, "subagent", name) == "allow"},
+            SUBAGENTS,
+            "vibe-main must be able to launch every subagent",
+        )
 
         for role in SUBAGENTS:
-            metadata = parse_frontmatter(OPENCODE / f"agents/{role}.md")
-            self.assertEqual(metadata["permission"]["task"], {"*": "deny"}, role)
+            rules = agent_rules(role)
+            # No subagent may launch another subagent, whatever the resource.
+            for target in sorted(SUBAGENTS) + ["vibe-main", "general"]:
+                self.assertEqual(resolve(rules, "subagent", target), "deny", f"{role} -> {target}")
+            # Baseline: an action nobody declared must not fall through to allow.
+            self.assertNotEqual(resolve(rules, "browser", "*"), "allow", role)
+            # Every role still has to read the code it reasons about.
+            self.assertEqual(resolve(rules, "read", "src/app.py"), "allow", role)
+            # Secrets stay out of reach even though `read` is broadly allowed.
+            # Root-level forms are listed separately: fnmatch's `**/` requires a
+            # slash, so `**/.env` does not match a project-root `.env`.
+            for secret in (
+                "~/.ssh/id_rsa",
+                "~/.aws/credentials",
+                "app/.env",
+                ".env",
+                ".env.local",
+                "app/.env.local",
+                "~/.config/opencode/opencode.json",
+                "~/.config/opencode/auth.json",
+            ):
+                self.assertNotEqual(resolve(rules, "read", secret), "allow", f"{role}: {secret}")
 
         for role in (
             "codebase-onboarder",
@@ -133,25 +189,73 @@ class OpenCodeStaticSurfaceTests(unittest.TestCase):
             "alignment-reviewer",
             "paper-reader",
         ):
-            metadata = parse_frontmatter(OPENCODE / f"agents/{role}.md")
-            self.assertEqual(metadata["permission"]["edit"], "deny", role)
+            self.assertEqual(resolve(agent_rules(role), "edit", "src/app.py"), "deny", role)
 
         for role in ("business-analyst", "workflow-distiller"):
-            edit = parse_frontmatter(OPENCODE / f"agents/{role}.md")["permission"]["edit"]
-            self.assertEqual(edit["*"], "deny", role)
-            self.assertEqual(edit[".project-log/**"], "allow", role)
+            rules = agent_rules(role)
+            self.assertEqual(resolve(rules, "edit", "src/app.py"), "deny", role)
+            self.assertEqual(resolve(rules, "edit", ".project-log/notes.md"), "allow", role)
+
+        # Web access is a declared capability, not a default. Only the two research
+        # roles may reach the network.
+        for role in SUBAGENTS:
+            expected = "allow" if role in {"solution-researcher", "paper-reader"} else "deny"
+            for action in ("webfetch", "websearch"):
+                self.assertEqual(resolve(agent_rules(role), action, "*"), expected, f"{role}/{action}")
 
         for role in READ_ONLY_BASH_DENY_ROLES:
-            metadata = parse_frontmatter(OPENCODE / f"agents/{role}.md")
-            self.assertEqual(metadata["permission"]["bash"], "deny", role)
+            self.assertEqual(resolve(agent_rules(role), "shell", "ls"), "deny", role)
 
         for role in READ_ONLY_BASH_ALLOWLIST_ROLES:
-            bash = parse_frontmatter(OPENCODE / f"agents/{role}.md")["permission"]["bash"]
-            self.assertEqual(bash["*"], "deny", role)
-            self.assertTrue(
-                {pattern for pattern, action in bash.items() if action == "allow"},
-                f"{role} must keep an explicit read-only allowlist",
+            rules = agent_rules(role)
+            self.assertEqual(resolve(rules, "shell", "rm -rf /"), "deny", role)
+            self.assertEqual(resolve(rules, "shell", "git status"), "allow", role)
+
+    def test_agents_declare_v2_syntax_and_a_model(self) -> None:
+        """Agents must use V2 `permissions` and pin a model.
+
+        The legacy `permission` mapping still loads through the compatibility
+        layer, but it is merged under a global `* * allow` rule, which inverts a
+        declared deny into an effective allow. A missing `model` is a cost issue
+        rather than a safety one: a subagent inherits the parent session's model,
+        so an unpinned reader role runs on whatever the main agent is using.
+        """
+        for role in sorted(EXPECTED_AGENTS):
+            metadata = parse_frontmatter(OPENCODE / f"agents/{role}.md")
+            self.assertIsInstance(metadata.get("permissions"), list, role)
+            self.assertNotIn("permission", metadata, f"{role} still uses V1 permission syntax")
+            for legacy in ("top_p", "prompt", "tools", "disable", "maxSteps"):
+                self.assertNotIn(legacy, metadata, f"{role} still sets legacy field {legacy!r}")
+            # `temperature` is not dropped in V2, it moves under `request.body`
+            # (migrate-v1: "temperature, top_p, and provider-specific options move
+            # under request.body"). Removing it outright would change sampling for
+            # every role. Note OpenCode warns that the V2 session runner preserves
+            # `request` but does not yet send it with model requests.
+            self.assertNotIn("temperature", metadata, f"{role} must not set top-level temperature")
+            self.assertEqual(
+                (metadata.get("request") or {}).get("body", {}).get("temperature"),
+                0.1,
+                f"{role} must keep temperature 0.1 under request.body",
             )
+            model = metadata.get("model")
+            self.assertIsInstance(model, str, f"{role} must pin a model")
+            self.assertIn("/", model, f"{role} model must be provider/model")
+            for rule in metadata["permissions"]:
+                self.assertEqual(
+                    sorted(rule), ["action", "effect", "resource"], f"{role}: malformed rule {rule}"
+                )
+                self.assertIn(rule["effect"], ("allow", "ask", "deny"), role)
+
+    def test_installer_template_declares_no_legacy_permission_block(self) -> None:
+        """A top-level V1 `permission` block leaks into every agent.
+
+        It is expanded into a global `* * allow` rule plus a global subagent
+        allowlist, which is applied before agent rules; that is what granted
+        read-only roles web access and let every subagent inherit the launcher
+        allowlist. Role boundaries belong in the agent files.
+        """
+        config = json.loads((OPENCODE / "opencode.json").read_text(encoding="utf-8"))
+        self.assertNotIn("permission", config)
 
     def test_read_only_roles_can_run_the_project_interpreter(self) -> None:
         # A reviewer must be able to run the pinned interpreter and recompute hashes.
@@ -169,8 +273,12 @@ class OpenCodeStaticSurfaceTests(unittest.TestCase):
         # allowlist no longer advertises `sha256sum`: a permission entry for a command
         # that does not exist on this platform is a capability the reviewer cannot use.
         for role in ("verification-reviewer", "alignment-reviewer"):
-            bash = parse_frontmatter(OPENCODE / f"agents/{role}.md")["permission"]["bash"]
-            allow = {pattern for pattern, action in bash.items() if action == "allow"}
+            rules = agent_rules(role)
+            allow = {
+                str(rule["resource"])
+                for rule in rules
+                if rule["action"] == "shell" and rule["effect"] == "allow"
+            }
             self.assertIn(
                 "*verification_runner.py preflight*",
                 allow, role,
@@ -214,15 +322,19 @@ class OpenCodeStaticSurfaceTests(unittest.TestCase):
         plain patterns above them.
         """
         for role in ("verification-reviewer", "alignment-reviewer"):
-            bash = parse_frontmatter(OPENCODE / f"agents/{role}.md")["permission"]["bash"]
-            allow = {pattern for pattern, action in bash.items() if action == "allow"}
+            rules = agent_rules(role)
+            allow = {
+                str(rule["resource"])
+                for rule in rules
+                if rule["action"] == "shell" and rule["effect"] == "allow"
+            }
             self.assertIn("git log --format=*", allow, role)
             self.assertIn("git log --pretty=*", allow, role)
             for pattern in ("git log*", "git show*", "git rev-parse*"):
                 self.assertIn(pattern, allow, role)
-            # Still read-only: the explicit entries must not admit a mutating subcommand.
-            for pattern in ("git commit*", "git push*", "git reset*", "git checkout*"):
-                self.assertNotIn(pattern, allow, role)
+            # Still read-only: resolved effect, not just the literal pattern list.
+            for command in ("git commit -m x", "git push origin main", "git reset --hard", "git checkout ."):
+                self.assertNotEqual(resolve(rules, "shell", command), "allow", f"{role}: {command}")
 
     def test_commands_are_thin_primary_agent_entrypoints(self) -> None:
         paths = sorted((OPENCODE / "commands").glob("*.md"))
@@ -410,8 +522,12 @@ class OpenCodeIsolatedLoadTests(unittest.TestCase):
                     except (OSError, ValueError):
                         time.sleep(1)
                         continue
+                    # A plugin still being loaded can appear without an `id`;
+                    # indexing it directly made this poll loop fail intermittently.
                     plugins = {
-                        item["id"]: item for item in listed if item.get("source", {}).get("type") != "builtin"
+                        item["id"]: item
+                        for item in listed
+                        if item.get("id") and item.get("source", {}).get("type") != "builtin"
                     }
                     if "vibe-workflow" in plugins and len(plugins) >= 2:
                         break
@@ -438,13 +554,29 @@ class OpenCodeIsolatedLoadTests(unittest.TestCase):
                 for agent in EXPECTED_AGENTS:
                     expected_mode = "primary" if agent == "vibe-main" else "subagent"
                     self.assertEqual(agents[agent]["mode"], expected_mode, agent)
-                reviewer = {
-                    (rule["action"], rule["resource"], rule["effect"])
-                    for rule in agents["verification-reviewer"]["permissions"]
-                }
-                self.assertIn(("edit", "*", "deny"), reviewer)
-                self.assertIn(("shell", "*", "deny"), reviewer)
-                self.assertIn(("shell", "git diff*", "allow"), reviewer)
+                # Assert the resolved effect, not the literal rules: V2 applies the
+                # last matching rule, and global config is merged ahead of agent
+                # rules. A literal-rule assertion passed while the compatibility
+                # layer's global `* * allow` was silently granting read-only roles
+                # network access and secret reads.
+                reviewer = agents["verification-reviewer"]["permissions"]
+                self.assertEqual(resolve(reviewer, "edit", "src/app.py"), "deny")
+                self.assertEqual(resolve(reviewer, "shell", "rm -rf /"), "deny")
+                self.assertEqual(resolve(reviewer, "shell", "git diff"), "allow")
+                self.assertEqual(resolve(reviewer, "read", "src/app.py"), "allow")
+                for action in ("webfetch", "websearch"):
+                    self.assertEqual(resolve(reviewer, action, "*"), "deny", action)
+                for role in EXPECTED_AGENTS - {"vibe-main"}:
+                    rules = agents[role]["permissions"]
+                    self.assertEqual(resolve(rules, "subagent", "paper-reader"), "deny", role)
+                    self.assertNotEqual(
+                        resolve(rules, "read", str(home / ".ssh" / "id_rsa")), "allow", role
+                    )
+                self.assertEqual(
+                    resolve(agents["vibe-main"]["permissions"], "subagent", "paper-reader"), "allow"
+                )
+                for role in EXPECTED_AGENTS:
+                    self.assertIsInstance(agents[role].get("model"), dict, role)
 
                 commands = {item.get("id") or item.get("name") for item in self._get(port, "/api/command", project)}
                 self.assertLessEqual(EXPECTED_COMMANDS, commands)

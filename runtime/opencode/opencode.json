@@ -3,21 +3,5 @@
   "default_agent": "vibe-main",
   "plugin": [
     "@prevalentware/opencode-goal-plugin@0.1.60"
-  ],
-  "permission": {
-    "skill": {
-      "*": "allow"
-    },
-    "task": {
-      "*": "deny",
-      "business-analyst": "allow",
-      "codebase-onboarder": "allow",
-      "solution-researcher": "allow",
-      "implementation-builder": "allow",
-      "verification-reviewer": "allow",
-      "alignment-reviewer": "allow",
-      "paper-reader": "allow",
-      "workflow-distiller": "allow"
-    }
-  }
+  ]
 }

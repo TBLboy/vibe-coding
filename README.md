@@ -76,8 +76,10 @@ chmod +x runtime/opencode/install.sh
 默认行为：
 
 - `AGENTS.md` 以标记块（`<!-- VIBE-OPENCODE-GLOBAL:BEGIN -->` … `END`）合并，用户已有规则被保留。
-- `opencode.json` 采用合并而非覆盖：设置 `default_agent`、注册会话 Goal 插件与权限规则，同时保留用户
-  自己的 `plugin`/`plugins`、`mcp`、`model`、`permission` 等键。
+- `opencode.json` 采用合并而非覆盖：设置 `default_agent`、注册会话 Goal 插件，同时保留用户
+  自己的 `plugin`/`plugins`、`mcp`、`model`、`permission` 等键。角色权限边界写在
+  `agents/*.md` 的 V2 `permissions` 有序规则里，不再通过顶层 `permission` 块下发：顶层块
+  会在每个 agent 的规则之前合并，把声明为只读的角色实际放开（V2 取最后匹配的规则）。
 - `vibe-workflow` 是 V2 目录插件 `plugins/vibe-workflow/index.ts`，由 OpenCode 从配置目录自动发现，
   不写入 `opencode.json`；升级会移除旧版 V1 单文件插件 `plugins/vibe-workflow.ts` 及其注册项。
 - 备份到 `<home>/backups/<action>-<stamp>/`。

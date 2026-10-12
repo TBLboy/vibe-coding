@@ -1,23 +1,37 @@
 ---
 description: Primary Vibe Coding orchestrator. Owns user interaction, lifecycle routing, project-log consistency, delegated role integration and final completion judgment.
 mode: primary
-temperature: 0.1
-permission:
-  edit: allow
-  bash: allow
-  question: allow
-  skill:
-    "*": allow
-  task:
-    "*": deny
-    "business-analyst": allow
-    "codebase-onboarder": allow
-    "solution-researcher": allow
-    "implementation-builder": allow
-    "verification-reviewer": allow
-    "alignment-reviewer": allow
-    "paper-reader": allow
-    "workflow-distiller": allow
+model: llmcenter/claude-opus-5
+request:
+  body:
+    temperature: 0.1
+permissions:
+  - { action: "*", resource: "*", effect: deny }
+  - { action: read, resource: "**", effect: allow }
+  - { action: glob, resource: "**", effect: allow }
+  - { action: grep, resource: "**", effect: allow }
+  - { action: skill, resource: "*", effect: allow }
+  - { action: question, resource: "*", effect: allow }
+  - { action: webfetch, resource: "*", effect: allow }
+  - { action: websearch, resource: "*", effect: allow }
+  - { action: edit, resource: "**", effect: allow }
+  - { action: shell, resource: "*", effect: allow }
+  - { action: subagent, resource: "alignment-reviewer", effect: allow }
+  - { action: subagent, resource: "business-analyst", effect: allow }
+  - { action: subagent, resource: "codebase-onboarder", effect: allow }
+  - { action: subagent, resource: "implementation-builder", effect: allow }
+  - { action: subagent, resource: "paper-reader", effect: allow }
+  - { action: subagent, resource: "solution-researcher", effect: allow }
+  - { action: subagent, resource: "verification-reviewer", effect: allow }
+  - { action: subagent, resource: "workflow-distiller", effect: allow }
+  - { action: read, resource: "**/.env", effect: deny }
+  - { action: read, resource: ".env", effect: deny }
+  - { action: read, resource: "**/.env.*", effect: deny }
+  - { action: read, resource: ".env.*", effect: deny }
+  - { action: read, resource: "~/.ssh/**", effect: deny }
+  - { action: read, resource: "~/.aws/**", effect: deny }
+  - { action: read, resource: "~/.config/opencode/opencode.json", effect: deny }
+  - { action: read, resource: "~/.config/opencode/auth.json", effect: deny }
 ---
 
 # Vibe Main
