@@ -21,7 +21,7 @@ VIBE = SCRIPTS / "vibe.py"
 if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
-from framework_info import VERSION  # noqa: E402
+from framework_info import STORE_SCHEMA, VERSION  # noqa: E402
 
 
 def run(*arguments: str) -> subprocess.CompletedProcess[str]:
@@ -52,7 +52,13 @@ class ReleaseSurfaceTests(unittest.TestCase):
         payload = json.loads(result.stdout)
         self.assertEqual(payload["framework_version"], VERSION)
         self.assertEqual(payload["default_format"], 2)
-        self.assertEqual(payload["store_schema"], 3)
+        # `vibe version` must report the schema the projection actually writes.
+        # Asserting the agreement, not a literal, is what stops the two constants
+        # from drifting apart again (they disagreed: 3 here, 4 in state_store).
+        from state_store import STORE_SCHEMA as PROJECTION_STORE_SCHEMA
+
+        self.assertEqual(payload["store_schema"], PROJECTION_STORE_SCHEMA)
+        self.assertEqual(payload["store_schema"], STORE_SCHEMA)
         self.assertEqual(payload["supported_formats"], [2])
         self.assertNotIn("retirement_stages", payload)
         self.assertNotIn("legacy_guidance", payload)
