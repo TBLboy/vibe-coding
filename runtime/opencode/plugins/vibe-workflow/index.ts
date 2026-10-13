@@ -257,6 +257,21 @@ export default Plugin.define({
       refreshTimer.unref?.()
     }
 
+    const memoryContext = (runtime: Runtime): string =>
+      ([
+        ["current-session.md", 3500],
+        ["progress.md", 2000],
+      ] as const)
+        .map(([name, limit]) => {
+          try {
+            const text = readFileSync(join(runtime.root, ".project-log", name), "utf8")
+            return `### ${name} (Agent-maintained; verify against authoritative task state)\n${truncate(text, limit)}`
+          } catch {
+            return `### ${name}\nUnavailable; run \`vibe init\` or restore the note from the ledger.`
+          }
+        })
+        .join("\n\n")
+
     const stateContext = async (runtime: Runtime, sessionID?: string): Promise<string> => {
       const { status, note } = await readState(runtime)
       const body =
@@ -265,7 +280,11 @@ export default Plugin.define({
         "## Vibe Workflow State",
         "Authoritative state comes from `.project-log` through the `vibe` runtime; this block is a bounded read-only snapshot.",
         sessionID ? `session: ${sessionID}` : "",
-        truncate(body),
+        truncate(body, 3000),
+        "",
+        "## Agent Project Memory",
+        memoryContext(runtime),
+        "Update these notes with `vibe memory sync --file <json>` at task completion, blockage, handoff or before compaction; structured facts still go to SQLite and the ledger.",
       ]
         .filter(Boolean)
         .join("\n")

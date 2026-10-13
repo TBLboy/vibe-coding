@@ -6,9 +6,9 @@
 |---|---|---|
 | format 2 `records` / `evidence` / `reviews` | formal `vibe` commands | Branch-local state database; exact current facts |
 | ledger `ledger/v1/ledger.jsonl` | formal `vibe` commands | Git-tracked append-only ledger; the durable fact source |
-| current-session.md | vibe-goal | Concise, current, resumable |
-| progress.md | vibe-goal | Human-readable phase summary; reverse-chronological |
-| docs/archive/ | vibe-goal | Archived old sections from current-session.md / progress.md |
+| current-session.md | main Agent via `vibe memory sync` | Concise, current, resumable |
+| progress.md | main Agent via `vibe memory sync` | Phase-level summary; reverse-chronological |
+| docs/archive/ | main Agent | Archived old sections from current-session.md / progress.md |
 
 Project Log format 2 is the only supported format. The retired format 1 files
 (`workflow.yaml`, `task-list.yaml`, `active-goal.yaml`, …) are preserved read-only
@@ -35,8 +35,9 @@ under `.project-log/legacy/` for history and are not parsed by any command.
 
 ## Long markdown documents
 
-`current-session.md` and `progress.md` are human-facing summaries, not authoritative runtime state:
+`current-session.md` and `progress.md` are Agent-maintained semantic memory, not authoritative runtime state:
 
+- Write both through `vibe memory read` / `vibe memory sync --file <json>`; the runtime validates and replaces each file atomically.
 - Latest on top: latest session block / phase section is at the top of the file; older sections go downward.
 - Header snapshot: the short "current state" block at the top is overwritten on every update instead of appended.
 - Archive on threshold: when `current-session.md` exceeds about 50-100 KB or roughly 10 session blocks, move older sections to `.project-log/docs/archive/`. Do the same for `progress.md` at about 50-100 KB.

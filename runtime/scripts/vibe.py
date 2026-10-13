@@ -139,6 +139,14 @@ def main() -> int:
     context = sub.add_parser("context", help="read bounded task context")
     context.add_argument("task_id")
     context.add_argument("--budget-bytes", type=int, default=4096)
+    memory = sub.add_parser("memory", help="Agent-maintained semantic project memory")
+    memory_sub = memory.add_subparsers(dest="memory_action", required=True)
+    memory_sub.add_parser("read", help="read current-session.md and progress.md with digests")
+    memory_sync = memory_sub.add_parser("sync", help="atomically replace one or both notes")
+    memory_sync.add_argument(
+        "--file", required=True,
+        help="JSON object with current_session and/or progress; prefix a path with @ to read it from disk",
+    )
     ledger = sub.add_parser("ledger", help="manage the Git-tracked Project Log ledger")
     ledger_sub = ledger.add_subparsers(dest="ledger_action", required=True)
     ledger_sub.add_parser("export")
@@ -146,6 +154,15 @@ def main() -> int:
     sub.add_parser("portability-status", help="report local consistency and remote durability separately")
     record = sub.add_parser("record", help="manage lifecycle records")
     record_sub = record.add_subparsers(dest="record_action", required=True)
+    record_show = record_sub.add_parser("show", help="read one structured record")
+    record_show.add_argument("--kind", required=True)
+    record_show.add_argument("--id", required=True)
+    record_list = record_sub.add_parser("list", help="list persisted records")
+    record_list.add_argument("--kind")
+    record_list.add_argument("--limit", type=int, default=50)
+    record_links = record_sub.add_parser("links", help="read record references")
+    record_links.add_argument("--kind")
+    record_links.add_argument("--id")
     record_create = record_sub.add_parser("create")
     record_create.add_argument("--kind", required=True)
     record_create.add_argument("--id", required=True)
@@ -354,6 +371,13 @@ def main() -> int:
             result = route(args.path, args.signal or None, args.files_touched, not args.irreversible)
         elif args.command == "context":
             result = task_context(open_store(root, heal=True), args.task_id, args.budget_bytes)
+        elif args.command == "memory":
+            from project_memory import read_memory, sync_memory
+
+            if args.memory_action == "read":
+                result = read_memory(root)
+            else:
+                result = sync_memory(root, _json_argument(args.file, "memory payload"))
         elif args.command == "ledger":
             from state_ledger import export_ledger, verify_ledger
 
@@ -374,7 +398,17 @@ def main() -> int:
         elif args.command == "render":
             result = refresh_views(root)
         elif args.command == "record":
-            if args.record_action == "create":
+            if args.record_action in ("show", "list", "links"):
+                store = open_store(root, heal=True)
+                if args.record_action == "show":
+                    result = store.get_record(args.kind, args.id)
+                elif args.record_action == "links":
+                    result = store.list_record_links(args.kind, args.id)
+                else:
+                    if not 1 <= args.limit <= 100:
+                        raise ValueError("limit must be between 1 and 100")
+                    result = store.list_records(args.kind)[:args.limit]
+            elif args.record_action == "create":
                 payload = {
                     "kind": args.kind, "id": args.id, "title": args.title,
                     "status": args.status,

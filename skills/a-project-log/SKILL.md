@@ -38,7 +38,7 @@ VIBE_PYTHON="${VIBE_PYTHON:-$(cat "$VIBE_CONFIG/vibe-python")}"
 
 - format 2：`records` 保存业务原子、需求基线、决策、架构、研究、对齐、复盘与蒸馏；`evidence` 保存证据状态、覆盖范围与哈希绑定；`reviews` 保存独立复核；状态 identity 属于项目根，不随 Git 分支切换而丢失。
 - format 2 是唯一受支持的格式；已退役的 format 1 YAML 分层（`business-logic/`、`tasks/`、`decisions/` 等）只保留在 `.project-log/legacy/` 供人工查阅，不再被读取或写入。
-- `progress.md`、`current-session.md`、生成的 `handoff.md` 是面向人的摘要；format 2 的精确状态以状态库与 Git 账本为单一事实源。
+- `progress.md`、`current-session.md`、生成的 `handoff.md` 是 Agent 维护的语义摘要；format 2 的精确状态以状态库与 Git 账本为单一事实源。
 - `docs/archive/`：长 Markdown 摘要的旧段落归档位置。
 
 ## 更新纪律
@@ -54,7 +54,7 @@ VIBE_PYTHON="${VIBE_PYTHON:-$(cat "$VIBE_CONFIG/vibe-python")}"
 
 ## 长文档维护约定
 
-`current-session.md` 与 `progress.md` 是面向人的长 Markdown 摘要，必须遵守以下规则，不能靠手写自觉维护：
+`current-session.md` 与 `progress.md` 是由主 Agent 维护的长期工程记忆，必须遵守以下规则，不能靠手写自觉维护：
 
 1. **最新在最上**
    - `current-session.md`：最新一次会话写在文件最上面的会话区块，旧会话依次向下。
@@ -72,5 +72,9 @@ VIBE_PYTHON="${VIBE_PYTHON:-$(cat "$VIBE_CONFIG/vibe-python")}"
 5. **机器维护文件边界**
    - 不手工重排或改写状态库、Git 账本与生成视图。
    - 这些文件由运行时脚本与 Hooks 维护；整理长文档时只调整两个 md 的位置、做归档和改写为更清晰的结构。
+
+## 统一写入入口
+
+主 Agent 用 `vibe memory read` 读取这两份记忆，用 `vibe memory sync --file <json>` 更新 `current_session` / `progress`（值为完整 Markdown）。任务完成、阻塞、交接或上下文压缩前检查 `current-session.md`；里程碑更新 `progress.md`。结构化业务记录通过 `vibe record create/update/show/list/links` 读写，仍由 SQLite + Git Ledger 持久化，不要为普通工具动作写 YAML。
 
 详细规范见 `REFERENCE.md` 与 `.project-log/docs/`。

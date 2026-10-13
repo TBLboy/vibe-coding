@@ -40,7 +40,7 @@
    VIBE_PYTHON="${VIBE_PYTHON:-$(cat "$VIBE_CONFIG/vibe-python")}"
    "$VIBE_PYTHON" "$VIBE_RUNTIME/scripts/vibe.py" --root <project-root> init
    ```
-3. 读取相关业务原子、需求基线、决策和现有验证证据。format 2 的精确事实源是状态库，用 `vibe status`、`vibe render`、`vibe context` 读取；`current-session.md`、`progress.md` 由状态库生成只读视图。
+3. 读取相关业务原子、需求基线、决策和现有验证证据。format 2 的精确事实源是状态库，用 `vibe status`、`vibe render`、`vibe context` 读取；`.project-log/current-session.md` 与 `.project-log/progress.md` 是**主 Agent 维护的语义记忆**，生成的只读视图在 `.state/.../generated/`，两者不同。
 4. format 2 调用：
    ```bash
    "$VIBE_PYTHON" "$VIBE_RUNTIME/scripts/vibe.py" --root <project-root> status
@@ -53,10 +53,18 @@
 
 ## Project Log 长文档组织
 
-- `.project-log/current-session.md` 与 `.project-log/progress.md` 是**面向人的手工摘要**：最新在最上，顶部“当前状态”快照每次覆盖更新，超限时旧段落归档到 `.project-log/docs/archive/`（维护约定见 `a-project-log`）。
+- `.project-log/current-session.md` 与 `.project-log/progress.md` 是**主 Agent 维护的工程记忆**：最新在最上，顶部“当前状态”快照每次覆盖更新，超限时旧段落归档到 `.project-log/docs/archive/`（维护约定见 `a-project-log`）。
 - `vibe render` 生成的视图在状态库旁的 `generated/` 目录下（含 `current-session.md`、`progress.md`、`handoff.md`），以 `CURRENT.json` 指向的同一版本为一组读取，不逐文件猜测哪个版本更新；**生成视图只读**，不手工编辑、不重排。
 - format 2 的精确当前状态与下一步以状态库、Git 账本和生成的 `handoff.md` 为单一事实源。不要在多份长文档里维护互相矛盾的“下一步”。
 - 机器维护的结构化状态（状态库、账本与生成视图）不手工重排或改写。
+
+## Agent 工程记忆写入协议
+
+- 每次恢复先读 `.project-log/current-session.md` 和 `.project-log/progress.md`，再用 `vibe status`、`vibe context <task-id>` 校验结构化事实。
+- 由主 Agent（不是并发的多个子 Agent）在任务完成、阻塞、交接或上下文压缩前更新 `current-session.md`；重要阶段成果再更新 `progress.md`。
+- 通过 `vibe memory sync --file <json>` 写入这两份 Markdown，字段为 `current_session` / `progress`，值为完整 Markdown 文本；不要为普通工具动作逐条记录。
+- Task、业务原子、需求、决策、证据的精确事实仍写入 SQLite + Git Ledger；Markdown 只承载决策意义、阶段进展、验证结果、未完成事项和明确下一步。
+- `vibe record show/list/links` 查询结构化业务记录；退役的 format 1 YAML 目录只能作为历史资料，不得作为现行写入目标。
 
 ## 标准生命周期
 
