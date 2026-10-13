@@ -101,7 +101,7 @@ Analyze:
 
 ## Output Location
 
-Default:
+Default file layout for the note (`reading-note.md` and, at the stated depth, `reproduction-plan.md` / `transfer-notes.md`) is a convention for readability only — a path you may choose on disk. It is not a format 1 `.project-log` layer; when the note belongs to a managed project, reference it from the `research` record (`vibe record create|update --kind research`) instead of relying on the directory being parsed.
 
 ```text
 .project-log/research/papers/<paper-slug>/

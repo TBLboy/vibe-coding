@@ -16,7 +16,7 @@ Remove implementation ambiguity without rewriting the entire project design. A s
 
 ## Required Sections
 
-Create `.project-log/specs/<TASK-ID>.md` from the template and include:
+Create `.project-log/specs/<TASK-ID>.md` and include:
 
 1. Task objective and non-goals.
 2. Related business atoms and acceptance criteria.

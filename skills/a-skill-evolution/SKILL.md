@@ -16,7 +16,7 @@ Turn validated experience into durable capability without fossilizing one-off be
 
 ## Preconditions
 
-- an approved candidate exists in `.project-log/distillation/candidates.yaml`;
+- an approved `distillation` record exists (`vibe record show --kind distillation --id <ID>`);
 - applicability, exclusions, evidence, risk, and target asset are explicit;
 - conflicts with higher-priority rules have been checked.
 
@@ -32,7 +32,7 @@ Turn validated experience into durable capability without fossilizing one-off be
 ## Procedure
 
 1. Write the smallest patch that encodes the lesson.
-2. Add normal, boundary, conflict, and non-trigger evaluation cases under `.project-log/evals/`.
+2. Add normal, boundary, conflict, and non-trigger evaluation cases under `.project-log/evals/` (a genuine on-disk eval corpus, not a format 1 layer).
 3. Validate Skill name/frontmatter and all affected schemas/config.
 4. Compare behavior before and after the patch.
 5. Record counterexamples and rollback conditions.

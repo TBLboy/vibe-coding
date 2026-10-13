@@ -42,4 +42,4 @@ Context → Hypothesis → Decision → Action → Expected Result
 
 ## Output
 
-Append to `.project-log/work-trace/trace.yaml` using the template. Update affected task results and distillation candidates when appropriate.
+Record the trace where the runtime already keeps it: task results and verification evidence through `vibe task` / `vibe evidence`, and, for a lesson worth carrying forward, a distillation candidate record. Put what a resuming Agent must know in `.project-log/current-session.md` (and a milestone in `progress.md`) via `vibe memory sync --file <json>`. Do not append a format 1 YAML trace file.

@@ -45,7 +45,7 @@ Describe, at the minimum useful depth:
 
 ## Output
 
-Update `.project-log/architecture/architecture.yaml` and related decision records.
+Persist the architecture with `vibe record create|update --kind architecture` and the choices that justify it with `--kind decision`, linking each entry to the business atoms it supports (`vibe record link`). Do not write a format 1 YAML architecture file.
 
 Architecture entries should reference the business atoms they support and the decisions that justify them.
 

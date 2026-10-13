@@ -36,7 +36,7 @@ Do not convert a personal impression into a universal rule without evidence.
 
 ## Outputs
 
-Write `.project-log/retrospective/retrospective.yaml` with:
+Persist the retrospective with `vibe record create|update --kind retrospective` (status `draft` then `complete`), covering:
 
 - scope and outcome;
 - what worked;

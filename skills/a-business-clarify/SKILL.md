@@ -25,9 +25,7 @@ Read, when available:
    `vibe context <task-id>` for a bounded read of the task you are clarifying.
 3. Business atoms and open questions (record kinds `business-atom` / `open-question`).
 4. Existing code, tests, config, product documents, tickets, screenshots, and historical decisions.
-5. Archived long-form docs under `.project-log/docs/` — including the decision-authority
-   matrix. Pre-format-2 material under `.project-log/legacy/` is reference-only and is
-   never parsed by the tools.
+5. Archived long-form docs under `.project-log/docs/`, including the decision-authority matrix. Retired format 1 material under `.project-log/legacy/` is history only: it is never parsed and must never be a write target.
 
 Never ask the user for information that can be reliably obtained from the project.
 
@@ -84,7 +82,7 @@ Compare what should happen with what currently happens. Classify each material r
 - `constraint-conflict`
 - `unknown`
 
-Write the structured result to `.project-log/business-logic/clarification.yaml`.
+Persist the confirmed atoms with `vibe record create|update --kind business-atom` and the unresolved ones with `--kind open-question`, then link them with `vibe record link`. When clarification changes the active task's scope, update `.project-log/current-session.md` via `vibe memory sync --file <json>`. Do not write format 1 YAML files.
 
 ### 5. Form atomic candidates
 
@@ -161,9 +159,8 @@ Do not research ordinary framework preferences during business clarification.
 Update, through the formal `vibe` command surface:
 
 - `vibe record create|update` for business atoms, clarification state and open questions;
-- `.project-log/requirements.md` for a readable summary;
-- `vibe task create` for follow-up work;
-- `.project-log/current-session.md`.
+- `.project-log/current-session.md` and, on a milestone, `progress.md` via `vibe memory sync`;
+- `vibe task create` for follow-up work.
 
 Draft or inferred atoms remain `draft` or `experimental`. Only promote to `active` when their authority and evidence satisfy the requirement baseline rules.
 

@@ -26,4 +26,4 @@ Do not turn ordinary implementation choices into an endless interview. Record ma
 
 ## Output
 
-Maintain a compact decision list: question, options, recommendation, chosen answer, owner, and remaining risk. Update `.project-log/decisions/decision-log.yaml` and active tasks when the plan belongs to an active project.
+Maintain a compact decision list: question, options, recommendation, chosen answer, owner, and remaining risk. When the plan belongs to an active project, persist each material decision with `vibe record create|update --kind decision` and update the active task or `.project-log/current-session.md`.
