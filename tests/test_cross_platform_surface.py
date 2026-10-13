@@ -173,5 +173,79 @@ class CrossPlatformSurfaceTests(unittest.TestCase):
             self.assertIn("unsupported work layout", result.stdout)
 
 
+class EntryPointWithoutHomeTests(unittest.TestCase):
+    """A stripped environment (sandbox, CI, systemd) has no HOME.
+
+    Both wrappers run under `set -u`, so an unguarded `"$HOME"` aborts with
+    "HOME: unbound variable" — an error that names a shell variable instead of the
+    problem. An explicit config directory must make HOME irrelevant, and with no
+    directory at all the failure must be actionable.
+    """
+
+    def _stripped_env(self) -> dict:
+        environment = {
+            key: value for key, value in os.environ.items()
+            if key not in ("HOME", "OPENCODE_CONFIG_DIR", "XDG_CONFIG_HOME", "VIBE_PYTHON")
+        }
+        environment["PATH"] = os.environ.get("PATH", "")
+        return environment
+
+    def test_vibe_launcher_works_without_home_when_config_home_is_given(self) -> None:
+        bash = usable_posix_bash()
+        if bash is None:
+            self.skipTest("no POSIX bash that can consume native paths")
+        with tempfile.TemporaryDirectory() as temporary:
+            target = Path(temporary) / "project"
+            target.mkdir()
+            config_home = Path(temporary) / "opencode-config"
+            config_home.mkdir()
+            (config_home / "vibe-python").write_text(sys.executable + "\n", encoding="utf-8")
+            result = subprocess.run(
+                [bash, str(VIBE_SH), "--config-home", str(config_home), "--root", str(target), "init"],
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False,
+                env=self._stripped_env(),
+            )
+            output = result.stdout.decode("utf-8", "replace")
+            self.assertNotIn("unbound variable", output)
+            self.assertEqual(result.returncode, 0, output)
+            self.assertTrue((target / ".project-log/state-format.json").is_file())
+
+    def test_vibe_launcher_without_home_or_config_home_fails_usefully(self) -> None:
+        bash = usable_posix_bash()
+        if bash is None:
+            self.skipTest("no POSIX bash that can consume native paths")
+        with tempfile.TemporaryDirectory() as temporary:
+            target = Path(temporary) / "project"
+            target.mkdir()
+            result = subprocess.run(
+                [bash, str(VIBE_SH), "--root", str(target), "status"],
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False,
+                env=self._stripped_env(),
+            )
+            output = result.stdout.decode("utf-8", "replace")
+            self.assertNotIn("unbound variable", output)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("HOME is unset", output)
+
+    def test_installer_entry_point_works_without_home(self) -> None:
+        bash = usable_posix_bash()
+        if bash is None:
+            self.skipTest("no POSIX bash that can consume native paths")
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary) / "opencode"
+            environment = self._stripped_env()
+            environment["VIBE_PYTHON"] = sys.executable
+            result = subprocess.run(
+                [bash, str(ROOT / "runtime/opencode/install.sh"), "install",
+                 "--opencode-home", str(home), "--skip-preflight"],
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False,
+                env=environment,
+            )
+            output = result.stdout.decode("utf-8", "replace")
+            self.assertNotIn("unbound variable", output)
+            self.assertEqual(result.returncode, 0, output)
+            self.assertTrue((home / "opencode.json").is_file())
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -128,10 +128,22 @@ class OptionalIntegrationTests(unittest.TestCase):
             self.assertFalse((home / "opencode.json").exists())
 
     def test_schema_2_state_migrates_without_losing_ownership(self) -> None:
-        """A pre-layering state keeps exactly the set it already owned."""
+        """A pre-layering state keeps exactly the set it already owned.
+
+        One default is deselected first, so the migration must reproduce the *recorded*
+        set rather than today's catalog defaults: deriving from defaults would silently
+        reinstall the integration the user had just turned off, and this assertion would
+        catch it.
+        """
         with tempfile.TemporaryDirectory() as temporary:
             home = Path(temporary) / "opencode"
             self.assertEqual(self.install(home).returncode, 0)
+            deselected = run_installer(
+                "update", "--opencode-home", str(home), "--skip-preflight",
+                "--without-mcp", "github", "--without-plugin", "memory",
+            )
+            self.assertEqual(deselected.returncode, 0, deselected.stdout)
+
             state_path = home / ".vibe-opencode-installation-state.json"
             state = self.state(home)
             state["schema"] = 2
@@ -145,10 +157,15 @@ class OptionalIntegrationTests(unittest.TestCase):
             migrated = self.state(home)
             self.assertEqual(migrated["schema"], 3)
             self.assertIn("schema-2-to-3", migrated["state_migrations"])
-            # Everything the old state owned is still registered and still owned.
-            for spec in MANAGED_PLUGINS:
-                self.assertIn(spec, self.config(home)["plugin"])
-            self.assertIn("github", self.config(home)["mcp"])
+            # The deselected pair stays deselected across the migration.
+            self.assertNotIn("opencode-agent-memory", self.config(home)["plugin"])
+            self.assertNotIn("github", self.config(home)["mcp"])
+            self.assertNotIn("memory", migrated["selected_integrations"]["plugins"])
+            self.assertNotIn("github", migrated["selected_integrations"]["mcp"])
+            # Everything still recorded as owned is still registered.
+            self.assertIn(
+                "@prevalentware/opencode-goal-plugin@0.1.60", self.config(home)["plugin"]
+            )
 
     def test_a_newer_state_schema_is_refused_not_guessed(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

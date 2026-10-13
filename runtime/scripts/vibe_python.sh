@@ -46,6 +46,11 @@ vibe_resolve_python() {
     done
   fi
   for name in miniforge3 mambaforge miniconda3 anaconda3; do
+    # Guarded for `set -u`: this bootstrap branch is unreachable from vibe.sh today (which
+    # uses runtime mode), but a stripped environment has no HOME and an unguarded
+    # "$HOME/..." would abort with "HOME: unbound variable" instead of this function's
+    # intended "install Conda" message.
+    [[ -n "${HOME:-}" ]] || break
     candidates+=("$HOME/$name/bin/python" "$HOME/$name/python.exe")
   done
   candidates+=("$(command -v python3 || true)" "$(command -v python || true)")
