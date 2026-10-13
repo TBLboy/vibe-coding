@@ -221,7 +221,7 @@ class HashActionTests(unittest.TestCase):
         for name in ("verification-reviewer.md", "alignment-reviewer.md"):
             text = (ROOT / "runtime" / "opencode" / "agents" / name).read_text(encoding="utf-8")
             self.assertNotIn("sha256sum", text, name)
-            self.assertIn("*verification_runner.py run*", text, name)
+            self.assertIn("*verification_runner.py*", text, name)
 
 
 class RunnerEntryPointTests(unittest.TestCase):

@@ -84,6 +84,48 @@ ACTION_SPECS = {
         "argument": "paths",
         "coverage": (),
     },
+    "package-validate": {
+        "description": "validate the package through its fixed project entry point",
+        "requires_paths": ("runtime/scripts/validate_package.py",),
+        "requires_modules": (),
+        "argument": None,
+        "coverage": ("runtime/scripts/validate_package.py",),
+    },
+    "installer-verify": {
+        "description": "verify the installed client surface through its fixed installer",
+        "requires_paths": ("scripts",),
+        "requires_modules": (),
+        "argument": None,
+        "coverage": ("scripts",),
+    },
+    "installer-update": {
+        "description": "update the installed client surface through its fixed installer",
+        "requires_paths": ("scripts",),
+        "requires_modules": (),
+        "argument": None,
+        "coverage": ("scripts",),
+    },
+    "git-status": {
+        "description": "inspect branch, upstream and worktree status without modifying Git state",
+        "requires_paths": (".git",),
+        "requires_modules": (),
+        "argument": None,
+        "coverage": (),
+    },
+    "git-head": {
+        "description": "read the checked-out Git commit without modifying Git state",
+        "requires_paths": (".git",),
+        "requires_modules": (),
+        "argument": None,
+        "coverage": (),
+    },
+    "git-origin-codex": {
+        "description": "read origin's codex ref without modifying local Git state",
+        "requires_paths": (".git",),
+        "requires_modules": (),
+        "argument": None,
+        "coverage": (),
+    },
 }
 
 # A test process inherits only what it needs to start; everything else (tokens, proxy
@@ -187,6 +229,20 @@ def _resolve_paths(root: Path, paths) -> list[str]:
     return resolved
 
 
+def _installer_script(root: Path) -> Path:
+    """Return this client package's fixed installer entry point.
+
+    Both supported client packages keep their installer under ``scripts/`` but use
+    different names. Choosing only between these two package-owned files does not
+    admit a caller-provided program or flag.
+    """
+    for name in ("global_installer.py", "opencode_installer.py"):
+        candidate = root / "scripts" / name
+        if candidate.is_file():
+            return candidate
+    raise StateError("verification_capability_missing", "No supported installer entry point exists")
+
+
 def build_argv(action: str, root, path: str | None = None, python: str | None = None,
                paths=None) -> list[str]:
     """The exact argv for an action; callers never supply flags or a command string."""
@@ -210,6 +266,21 @@ def build_argv(action: str, root, path: str | None = None, python: str | None = 
         if resolved is not None:
             argv.append("tests/" + resolved)
         return argv
+    if action == "package-validate":
+        return [program, str(root / "runtime" / "scripts" / "validate_package.py"), "--root", str(root)]
+    if action == "installer-verify":
+        return [program, str(_installer_script(root)), "verify"]
+    if action == "installer-update":
+        script = _installer_script(root)
+        if script.name == "global_installer.py":
+            return [program, str(script), "update", "--skip-preflight"]
+        return [program, str(script), "update", "--skip-preflight", "--skip-plugin-install"]
+    if action == "git-status":
+        return ["git", "status", "--short", "--branch"]
+    if action == "git-head":
+        return ["git", "rev-parse", "HEAD"]
+    if action == "git-origin-codex":
+        return ["git", "ls-remote", "--exit-code", "origin", "refs/heads/codex"]
     raise StateError(
         "verification_action_untrusted", f"Untrusted verification action: {action!r}"
     )
