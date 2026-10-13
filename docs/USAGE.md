@@ -147,7 +147,10 @@ chmod +x runtime/opencode/install.sh
   `opencode.json`），并注册固定版本的会话 Goal 控制器
   `@prevalentware/opencode-goal-plugin@0.1.60`。
 - 自动创建带时间戳的备份到 `<home>/backups/<action>-<stamp>/`。
-- 可选 MCP 在 `opencode.json` 的 `mcp` 段按需声明，安装器不强制安装任何可选 MCP。
+- 框架默认随包提供一套 MCP 工具带（`context7`、`gh_grep`、`document-loader`、
+  `github`、`playwright`、`sequential-thinking`、`web-search`、`wikipedia`），
+  由安装器写入 `mcp` 段；用户已有的同名条目、修改过的条目和删除过的条目都不会被覆盖或复活。
+  不需要的可以自行删除，安装器不会重新加回。
 - 不静默删除用户已有配置；安装、升级、卸载对其触及的文件是事务性的。
 
 可选 MCP 直接在 `opencode.json` 的 `mcp` 段添加即可（例如 `context7`、`github`、`playwright`），
@@ -566,7 +569,8 @@ Vibe Coding 的规则和项目日志与接入端无关；本版面向 OpenCode �
 
 ## 8. 可选 MCP
 
-新安装默认只启用核心能力。可选 MCP 需要明确选择，并受网络、代理、Node/uvx/npm 或外部服务影响。
+新安装默认写入框架的 MCP 工具带；每一项都受网络、代理、Node/uvx/npm 或外部服务影响，
+按需删除即可（安装器尊重用户的删除，不会复活）。
 
 OpenCode 版的可选 MCP 直接在 `opencode.json` 的 `mcp` 段声明（`type`、`command`/`url`、
 `enabled`），安装器不强制安装任何一项：

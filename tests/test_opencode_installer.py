@@ -41,6 +41,14 @@ def run_installer(*arguments: str, env: dict[str, str] | None = None) -> subproc
     )
 
 
+# Plugins the installer registers on the user's behalf; mirrors
+# MANAGED_PLUGIN_SPECS in scripts/opencode_installer.py.
+MANAGED_PLUGINS = [
+    "@prevalentware/opencode-goal-plugin@0.1.60",
+    "opencode-agent-memory",
+]
+
+
 class OpenCodeInstallerTests(unittest.TestCase):
     def install(self, home: Path, *extra: str) -> subprocess.CompletedProcess[str]:
         return run_installer(
@@ -105,7 +113,10 @@ class OpenCodeInstallerTests(unittest.TestCase):
             config = json.loads((home / "opencode.json").read_text(encoding="utf-8"))
             self.assertIn("user-plugin", config["plugin"])
             self.assertNotIn("./plugins/vibe-workflow.ts", config["plugin"])
-            self.assertEqual(config["mcp"], original["mcp"])
+            # The package ships a default MCP toolbelt; the user's own server is
+            # preserved and the shipped ones are added alongside it.
+            self.assertEqual(config["mcp"]["user"], original["mcp"]["user"])
+            self.assertIn("context7", config["mcp"])
             self.assertEqual(config["default_agent"], "vibe-main")
 
             second = run_installer(
@@ -175,6 +186,54 @@ class OpenCodeInstallerTests(unittest.TestCase):
             self.assertIn("another-user-plugin", updated["plugin"])
             self.assertNotIn("./plugins/vibe-workflow.ts", updated["plugin"])
             self.assertEqual(updated["model"], "user/model")
+
+    def test_managed_mcp_servers_follow_the_user_ownership_contract(self) -> None:
+        """MCP entries use the same contract as the managed permission rules.
+
+        The framework ships a default toolbelt, but the user stays in charge: an
+        entry they already had is never overwritten, one they edited is handed back,
+        and one they deleted is not resurrected on the next update.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary) / "opencode"
+            home.mkdir()
+            own = {"mine": {"type": "remote", "url": "https://example.invalid/mcp"}}
+            (home / "opencode.json").write_text(
+                json.dumps({"mcp": own}, indent=2), encoding="utf-8"
+            )
+
+            self.assertEqual(self.install(home).returncode, 0)
+            config_path = home / "opencode.json"
+            config = json.loads(config_path.read_text(encoding="utf-8"))
+            self.assertEqual(config["mcp"]["mine"], own["mine"])
+            self.assertIn("wikipedia", config["mcp"])
+
+            # The user edits a managed server and deletes another one.
+            config["mcp"]["wikipedia"] = {"type": "local", "command": ["my-wikipedia"]}
+            config["mcp"].pop("playwright")
+            config_path.write_text(json.dumps(config, indent=2), encoding="utf-8")
+
+            update = run_installer(
+                "update", "--opencode-home", str(home),
+                "--skip-preflight", "--skip-plugin-install",
+            )
+            self.assertEqual(update.returncode, 0, update.stdout)
+            updated = json.loads(config_path.read_text(encoding="utf-8"))
+            self.assertEqual(updated["mcp"]["wikipedia"], {"type": "local", "command": ["my-wikipedia"]})
+            self.assertNotIn("playwright", updated["mcp"])
+            self.assertEqual(updated["mcp"]["mine"], own["mine"])
+
+            uninstall = run_installer("uninstall", "--opencode-home", str(home))
+            self.assertEqual(uninstall.returncode, 0, uninstall.stdout)
+            left = json.loads(config_path.read_text(encoding="utf-8"))
+            # Everything the installer added is gone; the user's own server and their
+            # edited entry survive.
+            self.assertEqual(left.get("mcp", {}).get("mine"), own["mine"])
+            self.assertEqual(
+                left.get("mcp", {}).get("wikipedia"), {"type": "local", "command": ["my-wikipedia"]}
+            )
+            for name in ("context7", "gh_grep", "github", "sequential-thinking", "web-search"):
+                self.assertNotIn(name, left.get("mcp", {}))
 
     def test_local_skill_modification_is_preserved(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -574,7 +633,7 @@ class OpenCodeInstallerTests(unittest.TestCase):
             self.assertTrue((home / "plugins/vibe-workflow/index.ts").is_file())
             config = json.loads(config_path.read_text(encoding="utf-8"))
             self.assertEqual(
-                config["plugin"], ["user-plugin", "@prevalentware/opencode-goal-plugin@0.1.60"]
+                config["plugin"], ["user-plugin", *MANAGED_PLUGINS]
             )
             verify = run_installer("verify", "--opencode-home", str(home))
             self.assertEqual(verify.returncode, 0, verify.stdout)
@@ -597,7 +656,7 @@ class OpenCodeInstallerTests(unittest.TestCase):
             config = json.loads(config_path.read_text(encoding="utf-8"))
             self.assertNotIn("plugin", config)
             self.assertEqual(
-                config["plugins"], ["user-plugin", "@prevalentware/opencode-goal-plugin@0.1.60"]
+                config["plugins"], ["user-plugin", *MANAGED_PLUGINS]
             )
             verify = run_installer("verify", "--opencode-home", str(home))
             self.assertEqual(verify.returncode, 0, verify.stdout)
@@ -628,7 +687,7 @@ class OpenCodeInstallerTests(unittest.TestCase):
             update = run_installer("update", "--opencode-home", str(home), "--skip-preflight")
             self.assertEqual(update.returncode, 0, update.stdout)
             config = json.loads(config_path.read_text(encoding="utf-8"))
-            self.assertEqual(config["plugins"], ["user-a", "@prevalentware/opencode-goal-plugin@0.1.60"])
+            self.assertEqual(config["plugins"], ["user-a", *MANAGED_PLUGINS])
             self.assertEqual(config["plugin"], ["user-b"])
 
             uninstall = run_installer("uninstall", "--opencode-home", str(home))
@@ -1055,6 +1114,7 @@ class OpenCodeInstallerTests(unittest.TestCase):
             self.assertEqual(list(outside.iterdir()), [])
             self.assertFalse((home / ".vibe-opencode-installation-state.json").exists())
 
+    @skip_unless_symlink
     def test_symlinked_node_modules_is_refused_before_package_manager(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             workspace = Path(temporary)

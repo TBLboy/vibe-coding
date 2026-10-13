@@ -19,7 +19,9 @@ AI 必须完成：
 4. 安装全局主 Agent、八个受限 subagent、七个生命周期命令、全部内置 Skills、runtime、
    `vibe-workflow` V2 目录插件（`plugins/vibe-workflow/index.ts`，由 OpenCode 自动发现，不写入
    `opencode.json`），并注册固定版本的会话 Goal 控制器
-   `@prevalentware/opencode-goal-plugin@0.1.60`。
+   `@prevalentware/opencode-goal-plugin@0.1.60` 与 `opencode-agent-memory`，同时把框架的 MCP
+   工具带（`context7`、`gh_grep`、`document-loader`、`github`、`playwright`、
+   `sequential-thinking`、`web-search`、`wikipedia`）合并进 `mcp` 段。
 5. 在临时项目中初始化并验证 `.project-log`。
 6. 输出安装路径、备份路径、保留的本地修改和未安装的可选能力。
 
@@ -76,7 +78,8 @@ printf '%s\n' '/absolute/path/to/miniforge3/envs/vibe-coding/bin/python' \
 
 要求：
 1. 安装前先运行 preflight，并阅读现有的 AGENTS.md 与 opencode.json。
-2. 不得覆盖用户已有的 AGENTS.md 内容、opencode.json 插件/MCP/权限设置。
+2. 不得覆盖用户已有的 AGENTS.md 内容、opencode.json 插件/MCP/权限设置。受管条目只在用户
+   没有同名条目时写入；用户改过或删过的受管条目不会被覆盖，也不会在下次 update 复活。
 3. 安装后运行 verify，并在临时项目中完成一次初始化与校验。
 4. 输出：安装路径、备份路径、保留的本地修改、未安装的可选能力。
 5. 遇到冲突（同名文件内容不一致）必须停止并报告，不要强制覆盖。

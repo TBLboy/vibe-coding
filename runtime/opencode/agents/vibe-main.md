@@ -5,7 +5,26 @@ request:
   body:
     temperature: 0.1
 permissions:
-  - { action: "*", resource: "*", effect: deny }
+  # The primary agent runs on OpenCode's documented base policy, which allows every
+  # action and only asks for external directories and `.env` reads, so it carries no
+  # catch-all `deny`. V2 names a plugin tool's permission action after the tool and an
+  # MCP tool's after `<server>_<tool>`, and OpenCode hides every action that resolves to
+  # deny. A `* * deny` baseline therefore silently removes the tools of whatever the
+  # user installed -- that is what hid the goal plugin's tools while the plugin's own
+  # reminder still reached the prompt (ALIGN-FW-008). Installed plugins and MCP servers
+  # work by default here. Every rule below is a restriction and comes last, because the
+  # last matching rule wins.
+  - { action: subagent, resource: "*", effect: deny }
+  - { action: subagent, resource: "alignment-reviewer", effect: allow }
+  - { action: subagent, resource: "business-analyst", effect: allow }
+  - { action: subagent, resource: "codebase-onboarder", effect: allow }
+  - { action: subagent, resource: "implementation-builder", effect: allow }
+  - { action: subagent, resource: "paper-reader", effect: allow }
+  - { action: subagent, resource: "solution-researcher", effect: allow }
+  - { action: subagent, resource: "verification-reviewer", effect: allow }
+  - { action: subagent, resource: "workflow-distiller", effect: allow }
+  # The built-in actions stay listed explicitly so the primary agent's posture does not
+  # silently depend on the base policy staying what it is today.
   - { action: read, resource: "**", effect: allow }
   - { action: glob, resource: "**", effect: allow }
   - { action: grep, resource: "**", effect: allow }
@@ -15,22 +34,9 @@ permissions:
   - { action: websearch, resource: "*", effect: allow }
   - { action: edit, resource: "**", effect: allow }
   - { action: shell, resource: "*", effect: allow }
-  - { action: subagent, resource: "alignment-reviewer", effect: allow }
-  - { action: subagent, resource: "business-analyst", effect: allow }
-  - { action: subagent, resource: "codebase-onboarder", effect: allow }
-  - { action: subagent, resource: "implementation-builder", effect: allow }
-  - { action: subagent, resource: "paper-reader", effect: allow }
-  - { action: subagent, resource: "solution-researcher", effect: allow }
-  - { action: subagent, resource: "verification-reviewer", effect: allow }
-  - { action: subagent, resource: "workflow-distiller", effect: allow }
-  # Third-party plugins register their tools as V2 actions named after the tool, and
-  # the `* * deny` baseline above would otherwise filter every one of them out of the
-  # session. That is what hid the goal plugin's tools while its system reminder still
-  # appeared (ALIGN-FW-008). Current goal tools: get_goal, get_goal_history,
-  # list_all_goals, create_goal, set_goal, replace_goal, update_goal,
-  # update_goal_plan, update_goal_objective, update_goal_status, pause_goal,
-  # resume_goal, stop_goal, clear_goal.
-  - { action: "*goal*", resource: "*", effect: allow }
+  # Code Mode stays off: the framework does not rely on generated code running with the
+  # session's authority.
+  - { action: execute, resource: "*", effect: deny }
   - { action: read, resource: "**/.env", effect: deny }
   - { action: read, resource: ".env", effect: deny }
   - { action: read, resource: "**/.env.*", effect: deny }

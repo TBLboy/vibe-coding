@@ -67,12 +67,15 @@ What the installer does:
 - Copies `agents/`, `commands/`, `plugins/`, the top-level `skills/`, and the `runtime/` tree into
   the OpenCode config directory.
 - Merges — never overwrites — `opencode.json`: it sets `default_agent` and registers the session
-  Goal plugin and permission rules while preserving user `plugin`/`plugins`, `mcp`, `model`,
-  `permission` and other keys. One plugin entry is managed: the pinned session Goal controller
-  `@prevalentware/opencode-goal-plugin@0.1.60`, written to the user's existing `plugins` list (V2)
-  or `plugin` list (which V2 still normalizes). The version is pinned because the global rule names
-  it; the entry records whether the user already had it, so `uninstall` removes only what the
-  installer added.
+  the plugins it registers, the MCP toolbelt and permission rules while preserving user
+  `plugin`/`plugins`, `mcp`, `model`, `permission` and other keys. Two plugin entries are
+  managed: the pinned session Goal controller `@prevalentware/opencode-goal-plugin@0.1.60`
+  (pinned because the global rule names that version) and `opencode-agent-memory`, written to
+  the user's existing `plugins` list (V2) or `plugin` list (which V2 still normalizes). The MCP
+  toolbelt (`context7`, `gh_grep`, `document-loader`, `github`, `playwright`,
+  `sequential-thinking`, `web-search`, `wikipedia`) is merged into `mcp`. Every managed entry
+  records whether the user already had it, and a user edit or deletion is respected, so
+  `uninstall` removes only what the installer added and never resurrects a user choice.
 - Does **not** list `plugins/vibe-workflow/` in `opencode.json`: V2 discovers plugin directories
   under the config `plugins/` folder by itself, and listing it as well loads it twice.
 - Installs no npm dependency. V2 provides the plugin API (`@opencode/plugin`) itself; `update`

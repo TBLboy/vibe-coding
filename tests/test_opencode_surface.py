@@ -392,19 +392,38 @@ class OpenCodeStaticSurfaceTests(unittest.TestCase):
             ):
                 self.assertNotEqual(resolve(rules, "read", secret), "allow", f"{role}: {secret}")
 
-    def test_primary_agent_may_use_the_goal_plugin_tools(self) -> None:
-        """Plugin tools are V2 actions named after the tool.
+    def test_primary_agent_exposes_installed_plugins_and_mcp_tools(self) -> None:
+        """Installed plugin and MCP tools must reach the primary agent's session.
 
-        The `* * deny` baseline filters any action it does not allow, so without an
-        explicit allow the goal plugin's tools never reach the session even though
-        the plugin loads and injects its reminder (ALIGN-FW-008).
+        Plugin tools are V2 actions named after the tool and MCP tools are
+        `<server>_<tool>`; OpenCode hides every action that resolves to `deny`, so a
+        catch-all `* * deny` baseline silently removes whatever the user installed.
+        That is what hid the goal plugin's tools while its own reminder still reached
+        the prompt (ALIGN-FW-008). The primary agent therefore carries no catch-all
+        deny, while restricted roles keep theirs on purpose.
         """
         main = agent_rules("vibe-main")
-        for tool in ("get_goal", "create_goal", "set_goal", "update_goal_plan",
-                     "update_goal_status", "list_all_goals"):
-            self.assertEqual(resolve(main, tool, "*"), "allow", tool)
+        self.assertNotIn(
+            {"action": "*", "resource": "*", "effect": "deny"}, main,
+            "a catch-all deny hides every installed plugin and MCP tool",
+        )
+        # OpenCode's documented base policy, prepended the way the runtime orders it.
+        base = [
+            {"action": "*", "resource": "*", "effect": "allow"},
+            {"action": "external_directory", "resource": "*", "effect": "ask"},
+            {"action": "read", "resource": "*.env", "effect": "ask"},
+            {"action": "read", "resource": "*.env.*", "effect": "ask"},
+            {"action": "read", "resource": "*.env.example", "effect": "allow"},
+        ]
+        ordered = [*base, *main]
+        for action in ("get_goal", "create_goal", "update_goal_plan", "list_all_goals",
+                       "memory_set", "memory_get", "context7_resolve-library-id",
+                       "wikipedia_search", "playwright_navigate", "web-search_search"):
+            self.assertEqual(resolve(ordered, action, "*"), "allow", action)
         for role in ("business-analyst", "verification-reviewer"):
-            self.assertNotEqual(resolve(agent_rules(role), "get_goal", "*"), "allow", role)
+            rules = agent_rules(role)
+            for action in ("get_goal", "memory_set", "wikipedia_search"):
+                self.assertNotEqual(resolve(rules, action, "*"), "allow", f"{role}: {action}")
 
     def test_commands_are_thin_primary_agent_entrypoints(self) -> None:
         paths = sorted((OPENCODE / "commands").glob("*.md"))

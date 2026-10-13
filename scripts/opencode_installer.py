@@ -41,7 +41,13 @@ GOAL_PLUGIN_SPEC = f"{GOAL_PLUGIN_PACKAGE}@{GOAL_PLUGIN_VERSION}"
 # Earlier pins of the same controller. An entry the installer itself wrote is migrated to
 # the current pin on update; an entry the user owned is still reported as a conflict.
 LEGACY_GOAL_PLUGIN_SPECS = (f"{GOAL_PLUGIN_PACKAGE}@0.1.51",)
-MANAGED_PLUGIN_SPECS = (GOAL_PLUGIN_SPEC,)
+# Plugins the framework registers on the user's behalf. `opencode-agent-memory` is
+# the one third-party plugin whose V2 build is known to load; the V1-era plugins
+# (opencode-background-agents, opencode-notify, @tarquinen/opencode-smart-title)
+# fail with "Plugin must export a default definition with an id and an effect or
+# setup function" and are deliberately not shipped (ALIGN-FW-009).
+MEMORY_PLUGIN_SPEC = "opencode-agent-memory"
+MANAGED_PLUGIN_SPECS = (GOAL_PLUGIN_SPEC, MEMORY_PLUGIN_SPEC)
 AGENTS_RELATIVE = "AGENTS.md"
 AGENTS_BEGIN = "<!-- VIBE-OPENCODE-GLOBAL:BEGIN -->"
 AGENTS_END = "<!-- VIBE-OPENCODE-GLOBAL:END -->"
@@ -404,6 +410,9 @@ def validate_state_shape(state: dict[str, Any]) -> None:
     permissions = state.get("permissions_added")
     if permissions is not None and not isinstance(permissions, dict):
         raise RuntimeError("installation state field 'permissions_added' is malformed")
+    mcp_added = state.get("mcp_added")
+    if mcp_added is not None and not isinstance(mcp_added, dict):
+        raise RuntimeError("installation state field 'mcp_added' is malformed")
     created = state.get("created_dirs")
     if created is not None and not (
         isinstance(created, list) and all(isinstance(item, str) for item in created)
@@ -910,6 +919,63 @@ def merge_config(home: Path, root: Path, previous_ownership: Any) -> dict[str, A
     else:
         merged.pop("permission", None)
     ownership["permissions_added"] = permissions_ownership
+    # --- managed MCP servers ----------------------------------------------
+    # Same ownership contract as the permission rules above: the package ships a default
+    # toolbelt, an update installs what is missing, and a server the user already had,
+    # edited, or deleted is never overwritten or resurrected.
+    source_mcp = source.get("mcp") if isinstance(source.get("mcp"), dict) else {}
+    existing_mcp = existing.get("mcp") if isinstance(existing.get("mcp"), dict) else {}
+    previous_mcp = previous.get("mcp_added")
+    if not isinstance(previous_mcp, dict):
+        previous_mcp = {}
+    merged_mcp = dict(existing_mcp)
+    mcp_ownership: dict[str, dict[str, Any]] = {}
+    for name in sorted(set(source_mcp) | set(previous_mcp)):
+        entry = source_mcp.get(name)
+        info = previous_mcp.get(name)
+        if not isinstance(info, dict):
+            info = {}
+        owned = "present" in info and not info.get("present")
+        if entry is None:
+            # The package no longer ships this server.
+            if not owned:
+                continue
+            if name in merged_mcp and merged_mcp[name] != info.get("installed"):
+                mcp_ownership[name] = {"present": True, "previous": merged_mcp[name]}
+            else:
+                merged_mcp.pop(name, None)
+            continue
+        if "present" not in info:
+            if name in merged_mcp:
+                mcp_ownership[name] = {
+                    "present": True, "previous": merged_mcp[name], "installed": entry,
+                }
+            else:
+                merged_mcp[name] = entry
+                mcp_ownership[name] = {"present": False, "installed": entry}
+        elif info.get("present"):
+            # The server predates the installer; never overwrite the user's own entry.
+            mcp_ownership[name] = info
+        else:
+            installed = info.get("installed")
+            if name not in merged_mcp:
+                notes.append(
+                    f"mcp.{name}: managed server removed by the user; not restoring it"
+                )
+                continue
+            if installed is not None and merged_mcp[name] != installed:
+                # The user edited a server the installer owns; hand ownership back to them.
+                mcp_ownership[name] = {
+                    "present": True, "previous": merged_mcp[name], "installed": entry,
+                }
+            else:
+                merged_mcp[name] = entry
+                mcp_ownership[name] = {"present": False, "installed": entry}
+    if merged_mcp:
+        merged["mcp"] = merged_mcp
+    else:
+        merged.pop("mcp", None)
+    ownership["mcp_added"] = mcp_ownership
     ownership["notes"] = notes
     write_json(config_path, merged)
     return ownership
@@ -1140,6 +1206,20 @@ def remove_managed_config(home: Path, ownership: Any) -> None:
                 permissions.pop(group, None)
         if not permissions:
             config.pop("permission", None)
+    mcp = config.get("mcp")
+    managed_mcp = own.get("mcp_added")
+    if isinstance(mcp, dict) and isinstance(managed_mcp, dict):
+        for name, info in managed_mcp.items():
+            if not isinstance(info, dict):
+                continue
+            if info.get("present"):
+                mcp[name] = info.get("previous")
+            elif mcp.get(name) == info.get("installed"):
+                mcp.pop(name, None)
+        if mcp:
+            config["mcp"] = mcp
+        else:
+            config.pop("mcp", None)
     if own.get("file_created") and not config:
         config_path.unlink()
         return

@@ -2,6 +2,76 @@
   "$schema": "https://opencode.ai/config.json",
   "default_agent": "vibe-main",
   "plugin": [
-    "@prevalentware/opencode-goal-plugin@0.1.60"
-  ]
+    "@prevalentware/opencode-goal-plugin@0.1.60",
+    "opencode-agent-memory"
+  ],
+  "mcp": {
+    "context7": {
+      "type": "remote",
+      "url": "https://mcp.context7.com/mcp"
+    },
+    "gh_grep": {
+      "type": "remote",
+      "url": "https://mcp.grep.app"
+    },
+    "document-loader": {
+      "type": "local",
+      "command": [
+        "uvx",
+        "awslabs.document-loader-mcp-server@latest"
+      ],
+      "environment": {
+        "FASTMCP_LOG_LEVEL": "ERROR"
+      },
+      "timeout": 120000
+    },
+    "github": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "@modelcontextprotocol/server-github"
+      ],
+      "environment": {
+        "GITHUB_TOKEN": "{env:GITHUB_TOKEN}"
+      }
+    },
+    "playwright": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "@playwright/mcp"
+      ]
+    },
+    "sequential-thinking": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "@modelcontextprotocol/server-sequential-thinking"
+      ]
+    },
+    "web-search": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "open-websearch@latest"
+      ],
+      "environment": {
+        "MODE": "stdio",
+        "DEFAULT_SEARCH_ENGINE": "bing",
+        "ALLOWED_SEARCH_ENGINES": "bing,baidu,duckduckgo"
+      }
+    },
+    "wikipedia": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "wikipedia-mcp"
+      ]
+    }
+  }
 }
