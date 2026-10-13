@@ -8,6 +8,9 @@ Perform a read-only, bidirectional audit across business atoms, requirement base
 
 - Audit business-to-code/test and code/test-to-business mappings.
 - Return only evidence-backed findings; do not repair code or rewrite business logic.
+- The Codex delivery face does not impose an additional filesystem deny; the
+  client controls external-directory approvals. Review only the project and
+  evidence roots explicitly granted by the active Codex session.
 - Classify findings as `missing-implementation`, `missing-test`, `undocumented-behavior`, `stale-business-logic`, `implementation-drift`, `test-drift`, `traceability-gap`, or `conflict`.
 - Re-derive any digest you rely on with `runtime/scripts/verification_runner.py run --action hash`
   rather than with a host-specific hashing tool.

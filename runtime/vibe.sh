@@ -8,13 +8,7 @@ source "$runtime/scripts/vibe_python.sh"
 # A source-tree checkout has no vibe-python beside it, so it falls back to the
 # Codex default (~/.codex). There is deliberately no further fallback: silently
 # using an interpreter that lacks the Vibe requirements is worse than failing.
-if [[ -n "${CODEX_HOME:-}" ]]; then
-  config_home="$CODEX_HOME"
-elif [[ -f "$runtime/../vibe-python" ]]; then
-  config_home="$(cd -- "$runtime/.." && pwd)"
-else
-  config_home="$HOME/.codex"
-fi
+config_home="${CODEX_HOME:-}"
 forward=()
 while (( $# )); do
   case "$1" in
@@ -28,6 +22,17 @@ while (( $# )); do
     *) forward+=("$1"); shift ;;
   esac
 done
+if [[ -z "$config_home" ]]; then
+  if [[ -f "$runtime/../vibe-python" ]]; then
+    config_home="$(cd -- "$runtime/.." && pwd)"
+  elif [[ -n "${HOME:-}" ]]; then
+    config_home="$HOME/.codex"
+  else
+    printf '%s\n' 'Cannot resolve the Codex config directory: HOME is unset.' >&2
+    printf '%s\n' 'Pass --codex-home <dir> or set CODEX_HOME.' >&2
+    exit 2
+  fi
+fi
 python_bin="$(vibe_resolve_python "$config_home")"
 export CODEX_HOME="$config_home" PYTHONUTF8=1 PYTHONIOENCODING=utf-8
 exec "$python_bin" -B "$runtime/scripts/vibe.py" "${forward[@]}"

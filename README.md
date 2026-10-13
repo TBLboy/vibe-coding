@@ -187,8 +187,11 @@ vibe status
 vibe validate
 vibe route --signal ...
 vibe task begin|update|wait|resume|handoff|finish|cancel
-vibe record create|update|link
+vibe record show|list|links|create|update|link
 vibe evidence record|invalidate|refresh
+vibe state-evidence-check --id EVIDENCE-ID
+vibe ledger list|export|verify
+vibe memory read|sync --file <json>
 vibe review record
 vibe gate --task TASK-ID
 vibe goal update|complete --id GOAL-ID

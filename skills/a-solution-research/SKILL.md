@@ -32,7 +32,7 @@ When handing off:
 1. State the decision question, included/excluded scope, and what would make a recommendation invalid.
 2. Run `a-deep-research` to the needed depth (`quick scan` / `standard research` / `deep decision research`).
 3. Return here with: narrowed problem, hard constraints, options still in play, contrary evidence, and open questions that must not be silently assumed.
-4. Record the handoff and resulting constraints in `.project-log/research/solution-research.yaml` and, when material, `decision-log.yaml`.
+4. Record the handoff and resulting constraints with `vibe record create|update --kind research` and, when material, `--kind decision`.
 
 Do not treat `a-deep-research` output as an automatic architecture or vendor lock-in decision. Implementation strategy (`direct-use` / `wrapper-adapter` / `reference-implementation` / `custom` / `spike-first`) is still decided in this skill.
 
@@ -112,10 +112,11 @@ State confidence and contrary evidence.
 
 Update:
 
-- `.project-log/research/solution-research.yaml`;
-- `.project-log/decisions/decision-log.yaml`;
+- the research record (`vibe record create|update --kind research`);
+- the decision record when the recommendation binds the architecture (`--kind decision`);
 - affected tasks and workflow phase;
-- architecture constraints when appropriate.
+- architecture constraints when appropriate;
+- `.project-log/current-session.md` when the recommendation changes the active task.
 
 A recommendation must include conditions under which it would no longer be valid.
 

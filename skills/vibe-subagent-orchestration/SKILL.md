@@ -15,12 +15,11 @@ parallel work, implementation, or verification.
 
 ## Agent roles
 
-The Vibe runtime stores role contracts under:
+The installed Codex configuration stores role contracts under:
 
 ```bash
 VIBE_CONFIG="${CODEX_HOME:-$HOME/.codex}"
-VIBE_RUNTIME="${VIBE_RUNTIME:-$VIBE_CONFIG/vibe-workflow}"
-ls "$VIBE_RUNTIME/agents"
+ls "$VIBE_CONFIG/agents"
 ```
 
 Supported roles:
@@ -34,28 +33,18 @@ Supported roles:
 - `paper-reader`
 - `workflow-distiller`
 
-Render the role contract into a bounded prompt and hand the result to the subagent. Put the project
-root, delegated outcome, allowed scope, read/write boundary, required evidence, and stop condition in
-the rendered prompt:
-
-```bash
-python3 "$VIBE_RUNTIME/scripts/render_subagent_prompt.py" \
-  --role <role> \
-  --project-root <project-root> \
-  --task "<precise delegated outcome>" \
-  --scope "<allowed files/modules or read-only boundary>"
-```
-
-The role template and the installed agent configuration enforce the role boundary.
+Use the Codex `task` tool and name the role exactly. Put the project root, delegated outcome,
+allowed scope, read/write boundary, required evidence, and stop condition in the task prompt.
+The `permission.task` rules in `codex.json` and each agent frontmatter enforce the role boundary.
 
 ## Delegation protocol
 
 1. Recover project state and select a role only after identifying its lifecycle purpose.
 2. Delegate a narrow, independently reviewable outcome. Do not delegate the entire project.
 3. State project root, task, allowed scope, read/write boundary, required evidence, and deadline/stop condition.
-4. Use Codex's native subagent facility when available. For multiple agents, parallelize only independent work and use disjoint write scopes.
+4. Use Codex's native `task` tool when available. For multiple agents, parallelize only independent work and use disjoint write scopes.
 5. The main agent retains user interaction, C-level decisions, integration, task status, and global-rule authority.
-6. If native subagents are unavailable, perform the role serially and label the result `serial-role-fallback`.
+6. If `task` is unavailable, perform the role serially and label the result `serial-role-fallback`.
 7. Do not ask an implementation-builder to self-certify completion. Send completed work to verification-reviewer.
 8. Subagents must not invoke other subagents; `vibe-main` performs the cross-role composition.
 

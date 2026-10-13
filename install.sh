@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-config_home="${CODEX_HOME:-$HOME/.codex}"
+config_home="${CODEX_HOME:-}"
 args=("$@")
 for ((i = 0; i < ${#args[@]}; i++)); do
   if [[ "${args[$i]}" == "--codex-home" ]]; then
@@ -13,6 +13,15 @@ for ((i = 0; i < ${#args[@]}; i++)); do
     config_home="${args[$i]#--codex-home=}"
   fi
 done
+if [[ -z "$config_home" ]]; then
+  if [[ -n "${HOME:-}" ]]; then
+    config_home="$HOME/.codex"
+  else
+    printf '%s\n' 'Cannot resolve the Codex config directory: HOME is unset.' >&2
+    printf '%s\n' 'Pass --codex-home <dir> or set CODEX_HOME.' >&2
+    exit 2
+  fi
+fi
 if [[ -z "$config_home" ]]; then printf '%s\n' '--codex-home requires a path.' >&2; exit 2; fi
 source "$root/runtime/scripts/vibe_python.sh"
 bootstrap_python="$(vibe_resolve_python "$config_home" bootstrap)"

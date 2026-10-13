@@ -70,6 +70,6 @@ Do not store transient mood, accidental wording, or sensitive personal facts as 
 
 ## Outputs
 
-Update `.project-log/distillation/candidates.yaml` and create proposed patches under `.project-log/distillation/proposals/` when appropriate.
+Persist each candidate with `vibe record create|update --kind distillation` (status `candidate`; `approved` / `rejected` / `encoded` as it moves), and, when a patch is warranted, keep the proposed patch text under `.project-log/distillation/proposals/`.
 
 Never silently overwrite global Skills or constitution files. Use diff → review → backup → apply → validate → rollback.

@@ -107,6 +107,7 @@ AI 应：
 - `vibe validate` 通过。
 - 原生 `/goal` 是唯一 continuation 控制器。
 - Stop Hook 未安装。
+- `vibe version` 报告的 `store_schema` 与状态库实现一致。
 
 ## 回滚
 

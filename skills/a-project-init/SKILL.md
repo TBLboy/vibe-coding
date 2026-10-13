@@ -31,12 +31,11 @@ metadata:
 3. 运行确定性脚本（脚本内部会调用默认 format 2 的 `.project-log` 创建链路）：
    ```bash
    VIBE_CONFIG="${CODEX_HOME:-$HOME/.codex}"
-   VIBE_RUNTIME="${VIBE_RUNTIME:-$VIBE_CONFIG/vibe-workflow}"
    VIBE_PYTHON="${VIBE_PYTHON:-$(cat "$VIBE_CONFIG/vibe-python")}"
-   "$VIBE_PYTHON" "$VIBE_RUNTIME/scripts/init_project_agents.py" \
+   "$VIBE_PYTHON" "$VIBE_CONFIG/skills/a-project-init/scripts/init_project_agents.py" \
      --target <project-root> [--project-rules "<项目级规则>"]
    ```
-   - 若脚本不在运行时中，可在仓库内运行 `skills/a-project-init/scripts/init_project_agents.py`。
+   - 脚本随本 Skill 安装，位于 Skill 目录的 `scripts/` 下（运行时 `vibe-workflow/scripts/` 中**没有**该文件）；在框架仓库内开发时可直接运行 `skills/a-project-init/scripts/init_project_agents.py`。脚本按 `VIBE_RUNTIME` → `$VIBE_CONFIG/vibe-workflow` 的顺序查找 `init_project.py`。
 4. 判断项目级规则输入：
    - 目标根目录有 `README.md` 或 `docs/` 主要说明文档：阅读后凝炼项目级规则（架构边界、模块约定、构建/运行方式、团队约束等），通过 `--project-rules` 传入。
    - 没有可用文档：不传 `--project-rules`，脚本会写入占位提示，并向用户说明项目级规则留空、可手动补充。

@@ -65,9 +65,7 @@ Identify externally observable behavior, persistent state changes, permissions, 
 
 ## Output
 
-Write `.project-log/alignment/findings.yaml`, create repair tasks, and update references in atoms/tasks after verified fixes.
-
-Each finding must include severity, confidence, affected atoms, code/tests, evidence, recommended action, authority, status, and resolution.
+Record each finding with `vibe record create|update --kind alignment` (including severity, confidence, affected atoms, code/tests, evidence, recommended action, authority, status, and resolution), link it to the affected records with `vibe record link`, and create a repair task for every fix that is not applied immediately.
 
 ## Completion Gate
 

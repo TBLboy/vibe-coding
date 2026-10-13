@@ -54,7 +54,7 @@
   （`state_migrate`）、兼容入口（`loopctl`/`loop_state`）与三个分步退役关口一并移除。
 - format 1 的历史文件完整保留、不被清理：`.project-log/legacy/`（含 `legacy/unmapped/`）
   与 `.project-log/docs/archive/legacy-format1/`。这些存档只供人工查阅，不参与状态库、
-  校验或门禁。退役过程不改写任何持久化值（`store_schema` 仍为 3、各 `schema_version` 仍为 1），
+  校验或门禁。退役过程不改写任何持久化值（各 `schema_version` 仍为 1），
   也不追溯改写历史。
 
 ## 0.5.0 —— format 2 转正为新项目默认

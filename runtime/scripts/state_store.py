@@ -1056,6 +1056,25 @@ class Store:
                 raise StateError("not_found", f"Unknown record: {kind}/{record_id}")
             return self._record(row)
 
+    def find_record(self, record_id: str) -> dict:
+        """Read one record by id alone, rejecting ambiguous ids."""
+        _text(record_id, "record_id", 256)
+        with self._connection() as connection:
+            connection.execute("BEGIN")
+            self._metadata(connection)
+            rows = connection.execute(
+                "SELECT * FROM records WHERE id = ?", (record_id,)
+            ).fetchall()
+            if not rows:
+                raise StateError("not_found", f"Unknown record: {record_id}")
+            if len(rows) > 1:
+                kinds = ", ".join(sorted(row["kind"] for row in rows))
+                raise StateError(
+                    "state_conflict",
+                    f"Record id {record_id!r} exists in several kinds ({kinds}); pass --kind",
+                )
+            return self._record(rows[0])
+
     def list_records(self, kind: str | None = None) -> list[dict]:
         if kind is not None and kind not in RECORD_KINDS:
             raise StateError("unsupported_record_kind", f"Unsupported record kind: {kind!r}")

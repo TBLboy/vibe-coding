@@ -83,8 +83,12 @@ def main() -> int:
     state_fingerprint.add_argument("--path", required=True)
     state_fingerprint.add_argument("--selector", choices=["raw-file", "text-lf", "json-field"], default="raw-file")
     state_fingerprint.add_argument("--field")
-    state_evidence = sub.add_parser("state-evidence-check")
-    state_evidence.add_argument("--file", required=True, help="UTF-8 JSON evidence record")
+    state_evidence = sub.add_parser(
+        "state-evidence-check",
+        help="compare a recorded evidence record with the bytes it covers",
+    )
+    state_evidence.add_argument("--file", help="UTF-8 JSON evidence record")
+    state_evidence.add_argument("--id", help="id of a stored evidence record (alternative to --file)")
     state_gate = sub.add_parser("state-gate")
     state_gate.add_argument("--file", required=True, help="UTF-8 JSON list of evidence records")
     state_gate.add_argument("--task")
@@ -139,13 +143,30 @@ def main() -> int:
     context = sub.add_parser("context", help="read bounded task context")
     context.add_argument("task_id")
     context.add_argument("--budget-bytes", type=int, default=4096)
+    memory = sub.add_parser("memory", help="Agent-maintained semantic project memory")
+    memory_sub = memory.add_subparsers(dest="memory_action", required=True)
+    memory_sub.add_parser("read", help="read current-session.md and progress.md with digests")
+    memory_sync = memory_sub.add_parser("sync", help="atomically replace one or both notes")
+    memory_sync.add_argument("--file", required=True, help="JSON object with current_session and/or progress; prefix a path with @ to read it from disk")
     ledger = sub.add_parser("ledger", help="manage the Git-tracked Project Log ledger")
     ledger_sub = ledger.add_subparsers(dest="ledger_action", required=True)
     ledger_sub.add_parser("export")
     ledger_sub.add_parser("verify")
+    ledger_list = ledger_sub.add_parser("list", help="print recent ledger entries")
+    ledger_list.add_argument("--limit", type=int, default=20)
     sub.add_parser("portability-status", help="report local consistency and remote durability separately")
     record = sub.add_parser("record", help="manage lifecycle records")
     record_sub = record.add_subparsers(dest="record_action", required=True)
+    record_show = record_sub.add_parser("show", help="read one structured record")
+    record_show.add_argument("--kind")
+    record_show.add_argument("--id", required=True)
+    record_list = record_sub.add_parser("list", help="list persisted records")
+    record_list.add_argument("--kind")
+    record_list.add_argument("--limit", type=int, default=50)
+    record_list.add_argument("--full", action="store_true")
+    record_links = record_sub.add_parser("links", help="read record references")
+    record_links.add_argument("--kind")
+    record_links.add_argument("--id")
     record_create = record_sub.add_parser("create")
     record_create.add_argument("--kind", required=True)
     record_create.add_argument("--id", required=True)
@@ -288,8 +309,14 @@ def main() -> int:
         elif args.command == "state-fingerprint":
             result = fingerprint_file(args.path, args.selector, args.field)
         elif args.command == "state-evidence-check":
-            with Path(args.file).open(encoding="utf-8") as stream:
-                result = applicability(json.load(stream), root)
+            if (args.file is None) == (args.id is None):
+                raise ValueError("pass exactly one of --file or --id")
+            if args.id is not None:
+                store = open_store(root, heal=True)
+                result = store.evidence_applicability(root, store.get_evidence(args.id))
+            else:
+                with Path(args.file).open(encoding="utf-8") as stream:
+                    result = applicability(json.load(stream), root)
         elif args.command == "state-gate":
             with Path(args.file).open(encoding="utf-8") as stream:
                 result = evidence_gate(json.load(stream), root, args.task, None, args.risk_class)
@@ -354,6 +381,9 @@ def main() -> int:
             result = route(args.path, args.signal or None, args.files_touched, not args.irreversible)
         elif args.command == "context":
             result = task_context(open_store(root, heal=True), args.task_id, args.budget_bytes)
+        elif args.command == "memory":
+            from project_memory import read_memory, sync_memory
+            result = read_memory(root) if args.memory_action == "read" else sync_memory(root, _json_argument(args.file, "memory payload"))
         elif args.command == "ledger":
             from state_ledger import export_ledger, verify_ledger
 
@@ -365,6 +395,15 @@ def main() -> int:
                 store = open_store(root)
                 store.reconcile_with_ledger()
                 result = export_ledger(store)
+            elif args.ledger_action == "list":
+                from state_ledger import ledger_path, read_ledger
+                if not 1 <= args.limit <= 100:
+                    raise ValueError("limit must be between 1 and 100")
+                rows = read_ledger(ledger_path(root))
+                result = {"count": len(rows), "entries": [
+                    {"created_at": row.get("created_at"), "action": row.get("action"), "local_sequence": row.get("local_sequence")}
+                    for row in rows[-args.limit:]
+                ]}
             else:
                 result = verify_ledger(root)
         elif args.command == "portability-status":
@@ -374,7 +413,18 @@ def main() -> int:
         elif args.command == "render":
             result = refresh_views(root)
         elif args.command == "record":
-            if args.record_action == "create":
+            if args.record_action in ("show", "list", "links"):
+                store = open_store(root, heal=True)
+                if args.record_action == "show":
+                    result = store.get_record(args.kind, args.id) if args.kind else store.find_record(args.id)
+                elif args.record_action == "links":
+                    result = store.list_record_links(args.kind, args.id)
+                else:
+                    if not 1 <= args.limit <= 100:
+                        raise ValueError("limit must be between 1 and 100")
+                    rows = store.list_records(args.kind)[:args.limit]
+                    result = rows if args.full else [{key: value for key, value in row.items() if key != "payload"} for row in rows]
+            elif args.record_action == "create":
                 payload = {
                     "kind": args.kind, "id": args.id, "title": args.title,
                     "status": args.status,

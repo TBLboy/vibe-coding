@@ -93,6 +93,22 @@ class RecordStoreTests(unittest.TestCase):
             "relation": "invented", "to_kind": "business-atom", "to_id": "BL-001",
         })
 
+    def test_a_record_can_be_read_by_id_without_knowing_its_kind(self) -> None:
+        self.apply("record.create", {"kind": "alignment", "id": "A-001", "title": "A", "status": "open"})
+        self.apply("record.create", {"kind": "decision", "id": "D-001", "title": "D", "status": "active"})
+        self.assertEqual(self.store.find_record("A-001")["kind"], "alignment")
+        self.assertEqual(self.store.find_record("D-001")["kind"], "decision")
+
+    def test_unknown_or_ambiguous_record_id_fails_closed(self) -> None:
+        with self.assertRaises(StateError) as caught:
+            self.store.find_record("NOPE-001")
+        self.assertEqual(caught.exception.code, "not_found")
+        self.apply("record.create", {"kind": "alignment", "id": "X-001", "title": "A", "status": "open"})
+        self.apply("record.create", {"kind": "decision", "id": "X-001", "title": "D", "status": "active"})
+        with self.assertRaises(StateError) as caught:
+            self.store.find_record("X-001")
+        self.assertEqual(caught.exception.code, "state_conflict")
+
     def test_c_level_decision_requires_explicit_user_approval(self) -> None:
         self.assert_error("invalid_input", "record.create", {
             "kind": "decision", "id": "DEC-001", "title": "C decision",

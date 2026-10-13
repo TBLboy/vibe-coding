@@ -46,6 +46,7 @@ vibe_resolve_python() {
     done
   fi
   for name in miniforge3 mambaforge miniconda3 anaconda3; do
+    [[ -n "${HOME:-}" ]] || break
     candidates+=("$HOME/$name/bin/python" "$HOME/$name/python.exe")
   done
   candidates+=("$(command -v python3 || true)" "$(command -v python || true)")

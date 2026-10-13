@@ -16,12 +16,11 @@ Create a temporary but explicit contract for the current increment. A baseline i
 
 ## Inputs
 
-- `.project-log/business-logic/atoms.yaml`
-- `.project-log/business-logic/clarification.yaml`
-- `.project-log/business-logic/open-questions.md`
-- `.project-log/requirements.md`
-- `.project-log/decisions/decision-log.yaml`
-- current scope and user confirmations
+- `vibe record list --kind business-atom` (clarified atoms)
+- `vibe record list --kind open-question` (deferred or answered questions)
+- `vibe record list --kind requirement` (the previous baseline, if any)
+- `vibe record list --kind decision` (decisions that constrain the scope)
+- `vibe context <task-id>` for the active increment, plus current user confirmations
 
 ## Baseline Rules
 
@@ -59,7 +58,7 @@ When a new statement conflicts with an active baseline:
 
 ## Outputs
 
-Write `.project-log/requirements/baseline.yaml` and maintain a readable summary in `.project-log/requirements.md`.
+Persist the baseline with `vibe record create|update --kind requirement` and link it to the atoms it covers (`vibe record link`). When the increment changes what the user should know, summarize it in `.project-log/progress.md` and the active work in `.project-log/current-session.md` via `vibe memory sync --file <json>`. Do not write format 1 YAML files.
 
 The baseline must include:
 

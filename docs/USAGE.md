@@ -876,7 +876,11 @@ format 2 是框架**唯一支持**的格式：新建项目直接生成新格式�
 --root <project> validate
 --root <project> task create|reopen|begin|update|wait|resume|handoff|finish|cancel
 --root <project> record create|update|link
+--root <project> record show|list|links
 --root <project> evidence record|invalidate|refresh
+--root <project> state-evidence-check --id <EVIDENCE-ID>
+--root <project> ledger list|export|verify
+--root <project> memory read|sync --file <json>
 --root <project> review record
 --root <project> gate --task TASK-001
 --root <project> goal create|update|cancel|complete --id GOAL-001

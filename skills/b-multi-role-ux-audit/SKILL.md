@@ -31,4 +31,4 @@ Separate findings into:
 - correctness: severity, location, reproduction, expected, actual, impact, evidence;
 - experience: frequency × pain, role, user impact, why the flow is unfriendly, suggested improvement.
 
-State browser-tested, API-only, and untested coverage honestly. Save findings in `.project-log/alignment/findings.yaml` or linked audit evidence when the app is an active project.
+State browser-tested, API-only, and untested coverage honestly. When the app is an active project, persist each finding with `vibe record create|update --kind alignment` (or reference the audit evidence you recorded) instead of writing a format 1 findings file.

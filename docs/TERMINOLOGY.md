@@ -17,13 +17,13 @@
 |---|---|---|---|---|---|
 | 1 | `framework_version` | `0.6.0` | `runtime/scripts/framework_info.py` | **软件发布版本** | 每次发版 |
 | 2 | `format`（Project Log format） | `2` | `.project-log/state-format.json` | **Project Log 顶层持久化契约** | 顶层读写契约发生**破坏性**变化时 |
-| 3 | `store_schema`（SQLite store schema） | `3` | SQLite `metadata` 表 | **本地投影数据库结构** | 表结构变化时 |
+| 3 | `store_schema`（SQLite store schema） | `4` | SQLite `metadata` 表 | **本地投影数据库结构** | 表结构变化时 |
 | 4 | `schema_version`（command envelope schema） | `1` | 命令信封 + SQLite | **命令信封结构** | 信封字段变化时 |
 | 5 | `schema_version`（ledger event schema） | `1` | `ledger.jsonl` 每行 | **账本事件结构** | 事件字段变化时 |
 
 此外，生成的视图（`generated/`）与快照指针各自的 `schema_version = 1`，同属"具体数据结构的内部版本"。
 
-**为什么不能合并成一个号**：`store_schema` 历史上从 `1` 递增到 `3`，而 `format` 一直是 `2`。
+**为什么不能合并成一个号**：`store_schema` 历史上从 `1` 递增到 `4`，而 `format` 一直是 `2`。
 若合并，每次表结构变化都会被迫触发**全量迁移** —— 而使用者感知不到任何变化。版本号必须只表达
 它真正负责的兼容边界。
 
@@ -50,7 +50,7 @@
 ## 四、禁止事项
 
 1. **禁止裸写 `Format 2` / `Format 3`。**
-   必须写成 `Project Log format 2`，或 `SQLite store schema 3` / `ledger event schema 1`。
+   必须写成 `Project Log format 2`，或 `SQLite store schema 4` / `ledger event schema 1`。
 2. **禁止把架构代际命名为 `Format N`。**
    0.6.0 这一代架构称为 **`0.6 ledger architecture`**（简称 `ledger architecture`），
    它**不是**任何持久化标识。

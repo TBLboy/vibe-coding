@@ -3,7 +3,8 @@ $ErrorActionPreference = 'Stop'
 Assert-VibeLauncherArguments -Arguments $args
 $ConfigHome = if ($env:CODEX_HOME) { $env:CODEX_HOME }
     elseif (Test-Path (Join-Path (Split-Path $PSScriptRoot -Parent) 'vibe-python')) { Split-Path $PSScriptRoot -Parent }
-    else { Join-Path $HOME '.codex' }
+    elseif ($HOME) { Join-Path $HOME '.codex' }
+    else { throw 'Cannot resolve the Codex config directory: HOME is unset. Pass --codex-home <dir> or set CODEX_HOME.' }
 $Forward = @()
 for ($Index = 0; $Index -lt $args.Count; $Index++) {
     if ($args[$Index] -eq '--codex-home') {

@@ -33,7 +33,7 @@ For every lesson, state its source evidence, applicable context, exclusions, con
 
 ## Outputs
 
-Update `.project-log/retrospective/retrospective.yaml` with the project-specific review. Create candidates in `.project-log/distillation/candidates.yaml` only for reusable lessons that meet the `a-operator-distill` promotion rules. Use `b-personal-knowledge-distill` only when the user wants an approved candidate curated into a separate personal knowledge base.
+Persist the project-specific review with `vibe record create|update --kind retrospective`, and record candidates with `--kind distillation` only for reusable lessons that meet the `a-operator-distill` promotion rules. Use `b-personal-knowledge-distill` only when the user wants an approved candidate curated into a separate personal knowledge base.
 
 ## Completion Gate
 

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 VERSION = "0.6.0"
 DEFAULT_FORMAT = 2
-STORE_SCHEMA = 3
+STORE_SCHEMA = 4
 SUPPORTED_FORMATS = (2,)
 
 

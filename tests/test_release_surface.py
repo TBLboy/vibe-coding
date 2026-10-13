@@ -52,7 +52,7 @@ class ReleaseSurfaceTests(unittest.TestCase):
         payload = json.loads(result.stdout)
         self.assertEqual(payload["framework_version"], VERSION)
         self.assertEqual(payload["default_format"], 2)
-        self.assertEqual(payload["store_schema"], 3)
+        self.assertEqual(payload["store_schema"], 4)
         self.assertEqual(payload["supported_formats"], [2])
         self.assertNotIn("retirement_stages", payload)
         self.assertNotIn("legacy_guidance", payload)
