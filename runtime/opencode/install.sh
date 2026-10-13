@@ -16,11 +16,17 @@ python_candidates=()
 if [[ -n "${VIBE_PYTHON:-}" ]]; then
   python_candidates+=("$VIBE_PYTHON")
 fi
-for config_home in "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}"; do
-  if [[ -n "$config_home" && -f "$config_home/vibe-python" ]]; then
-    python_candidates+=("$(<"$config_home/vibe-python")")
-  fi
-done
+# The interpreter pointer lives in the *ambient* config home (OPENCODE_CONFIG_DIR or the
+# OpenCode default), not in a per-invocation --opencode-home, which is usually a scratch
+# directory. Runs under `set -u`, so the HOME default is guarded: a stripped environment
+# has no HOME, and an explicit OPENCODE_CONFIG_DIR makes it irrelevant.
+config_home="${OPENCODE_CONFIG_DIR:-}"
+if [[ -z "$config_home" && -n "${HOME:-}" ]]; then
+  config_home="$HOME/.config/opencode"
+fi
+if [[ -n "$config_home" && -f "$config_home/vibe-python" ]]; then
+  python_candidates+=("$(<"$config_home/vibe-python")")
+fi
 python_candidates+=(python3 python)
 
 python_bin=""

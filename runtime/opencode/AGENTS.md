@@ -187,7 +187,7 @@ OpenCode 原生提供 primary/subagent、`task` 工具和按 Agent 的权限边�
 ## A / B / C 决策权限
 
 - **A：** 低风险可逆实现细节，直接决定并执行。
-- **B：** 可自主决定但影响值得追溯，决定后记录到 `decision-log.yaml`。
+- **B：** 可自主决定但影响值得追溯，决定后以 `vibe record create/update --kind decision` 写入状态库，而不是手写 YAML。
 - **C：** 产品语义、数据、安全、公开接口、费用、范围或不可逆选择，先解决可自主部分，再只问一个影响最高的问题，并给出推荐答案与影响。
 
 ## 工程与验证纪律

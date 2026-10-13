@@ -177,6 +177,84 @@ class OptionalIntegrationTests(unittest.TestCase):
             )
             self.assertFalse((home / "opencode.json").exists())
 
+    def test_migrated_ownership_is_still_removable_by_uninstall(self) -> None:
+        """A schema-2 install upgraded in place must not become unremovable."""
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary) / "opencode"
+            home.mkdir()
+            config_path = home / "opencode.json"
+            original = {"plugin": ["user-plugin"], "model": "user/model"}
+            config_path.write_text(json.dumps(original, indent=2), encoding="utf-8")
+
+            self.assertEqual(self.install(home).returncode, 0)
+            state_path = home / ".vibe-opencode-installation-state.json"
+            state = self.state(home)
+            state["schema"] = 2
+            state.pop("selected_integrations")
+            state.pop("state_migrations", None)
+            state_path.write_text(json.dumps(state, indent=2), encoding="utf-8")
+
+            upgrade = run_installer("update", "--opencode-home", str(home), "--skip-preflight")
+            self.assertEqual(upgrade.returncode, 0, upgrade.stdout)
+
+            uninstall = run_installer("uninstall", "--opencode-home", str(home))
+            self.assertEqual(uninstall.returncode, 0, uninstall.stdout)
+            self.assertEqual(json.loads(config_path.read_text(encoding="utf-8")), original)
+
+    def test_deselecting_the_goal_plugin_keeps_verify_passing(self) -> None:
+        """verify() must gate on the recorded selection, not on a hard-coded plugin."""
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary) / "opencode"
+            self.assertEqual(self.install(home).returncode, 0)
+            drop = run_installer("update", "--opencode-home", str(home), "--skip-preflight",
+                                 "--without-plugin", "goal")
+            self.assertEqual(drop.returncode, 0, drop.stdout)
+            self.assertNotIn(
+                "@prevalentware/opencode-goal-plugin@0.1.60", self.config(home)["plugin"]
+            )
+            verify = run_installer("verify", "--opencode-home", str(home))
+            self.assertEqual(verify.returncode, 0, verify.stdout)
+
+    def test_a_user_owned_catalog_named_mcp_is_never_overwritten_or_removed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary) / "opencode"
+            home.mkdir()
+            config_path = home / "opencode.json"
+            mine = {"type": "remote", "url": "https://example.invalid/mine"}
+            config_path.write_text(
+                json.dumps({"mcp": {"context7": mine}}, indent=2), encoding="utf-8"
+            )
+
+            self.assertEqual(self.install(home).returncode, 0)
+            self.assertEqual(self.config(home)["mcp"]["context7"], mine)
+
+            self.assertEqual(
+                run_installer("update", "--opencode-home", str(home), "--skip-preflight",
+                              "--without-mcp", "context7").returncode, 0
+            )
+            self.assertEqual(self.config(home)["mcp"]["context7"], mine)
+
+            self.assertEqual(
+                run_installer("uninstall", "--opencode-home", str(home)).returncode, 0
+            )
+            self.assertEqual(json.loads(config_path.read_text(encoding="utf-8")), {"mcp": {"context7": mine}})
+
+    def test_a_recorded_selection_naming_a_removed_catalog_entry_is_ignored(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary) / "opencode"
+            self.assertEqual(self.install(home).returncode, 0)
+            state_path = home / ".vibe-opencode-installation-state.json"
+            state = self.state(home)
+            state["selected_integrations"]["plugins"].append("retired-plugin")
+            state["selected_integrations"]["mcp"].append("retired-mcp")
+            state_path.write_text(json.dumps(state, indent=2), encoding="utf-8")
+
+            update = run_installer("update", "--opencode-home", str(home), "--skip-preflight")
+            self.assertEqual(update.returncode, 0, update.stdout)
+            selection = self.state(home)["selected_integrations"]
+            self.assertNotIn("retired-plugin", selection["plugins"])
+            self.assertNotIn("retired-mcp", selection["mcp"])
+
 
 class OpenCodeInstallerTests(unittest.TestCase):
     def install(self, home: Path, *extra: str) -> subprocess.CompletedProcess[str]:
@@ -879,11 +957,16 @@ class OpenCodeInstallerTests(unittest.TestCase):
             )
         with tempfile.TemporaryDirectory() as temporary:
             home = Path(temporary) / "opencode"
+            # Hermetic: the wrapper resolves its interpreter from VIBE_PYTHON, the ambient
+            # config home's vibe-python pointer, or PATH. Relying on the ambient HOME would
+            # make this test pass or fail depending on the developer's machine and on
+            # whatever environment a sandbox happens to pass through.
+            environment = dict(os.environ, VIBE_PYTHON=sys.executable)
             result = subprocess.run(
                 [bash, str(INSTALL_SH), "--opencode-home", str(home),
                 "--skip-preflight"],
                 text=True, encoding="utf-8", stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT, check=False,
+                stderr=subprocess.STDOUT, check=False, env=environment,
             )
             self.assertEqual(result.returncode, 0, result.stdout)
             self.assertTrue((home / "opencode.json").is_file())

@@ -539,7 +539,7 @@ Agent 通常可以直接决定，例如：
 
 ### B 级：可以自主决定，但需要留痕
 
-Agent 可以推进，但应写入 `decision-log.yaml`，例如：
+Agent 可以推进，但应以 `vibe record create/update --kind decision` 写入状态库留痕，例如：
 
 - 在多个等价技术实现中选择一个。
 - 调整内部模块边界。
