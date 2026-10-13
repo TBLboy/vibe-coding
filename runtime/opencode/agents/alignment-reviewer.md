@@ -25,6 +25,14 @@ permissions:
   - { action: shell, resource: "git log --pretty=*", effect: allow }
   - { action: shell, resource: "*verification_runner.py preflight*", effect: allow }
   - { action: shell, resource: "*verification_runner.py run*", effect: allow }
+   # Independent alignment reviews may compare the Codex worktree and the
+   # pinned simple source archive; keep these evidence roots explicit.
+  - { action: external_directory, resource: "D:/Project/vibe-coding-codex/*", effect: allow }
+  - { action: external_directory, resource: "C:/Users/12187/AppData/Local/Temp/opencode/*", effect: allow }
+  - { action: read, resource: "D:/Project/vibe-coding-codex/*", effect: allow }
+  - { action: read, resource: "C:/Users/12187/AppData/Local/Temp/opencode/*", effect: allow }
+  - { action: glob, resource: "D:/Project/vibe-coding-codex/*", effect: allow }
+  - { action: glob, resource: "C:/Users/12187/AppData/Local/Temp/opencode/*", effect: allow }
   # Read-only roles must be able to inspect the deployed control layer (TASK-140):
   # V2 gates an outside path with the separate `external_directory` action before its
   # `read`, so allowing `read` alone is not enough. The allow is per subdirectory on

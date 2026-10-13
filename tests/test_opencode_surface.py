@@ -392,6 +392,16 @@ class OpenCodeStaticSurfaceTests(unittest.TestCase):
             ):
                 self.assertNotEqual(resolve(rules, "read", secret), "allow", f"{role}: {secret}")
 
+    def test_reviewers_may_inspect_explicit_cross_client_evidence_roots(self) -> None:
+        for role in ("verification-reviewer", "alignment-reviewer"):
+            rules = agent_rules(role)
+            for root in (
+                "D:/Project/vibe-coding-codex/runtime/scripts/state_store.py",
+                "C:/Users/12187/AppData/Local/Temp/opencode/opencode-simple-b1876e5/runtime/scripts/state_store.py",
+            ):
+                self.assertEqual(resolve(rules, "external_directory", root), "allow", f"{role}: {root}")
+                self.assertEqual(resolve(rules, "read", root), "allow", f"{role}: {root}")
+
     def test_primary_agent_exposes_installed_plugins_and_mcp_tools(self) -> None:
         """Installed plugin and MCP tools must reach the primary agent's session.
 
