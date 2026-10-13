@@ -64,6 +64,9 @@ Vibe Coding OpenCode Global Core 升级到本包版本。
   仍按冲突处理，需先手动对齐。
 - 不再安装 `@opencode-ai/plugin` npm 依赖，并撤销旧版写入 `package.json` 的该依赖；
   `node_modules/` 留给用户自行清理。
+- 把安装状态从 schema 2 自动升级到 schema 3：记录当前的可选集成选择，既有所有权全部保留，
+  因此之后仍可干净卸载。schema 1 也能读入并升级。比本安装器更新的状态 schema 会被明确拒绝，
+  而不是猜测处理。
 
 曾按手工方式移植过插件的机器（例如手动创建了 `plugins/vibe-workflow/index.ts`、把旧插件改名为
 `plugins/vibe-workflow.ts.v1-disabled`）：先把这些手工文件移出 `plugins/`，否则 update 会因
