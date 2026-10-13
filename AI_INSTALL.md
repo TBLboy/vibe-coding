@@ -18,10 +18,13 @@ AI 必须完成：
 3. 运行安装器 preflight。
 4. 安装全局主 Agent、八个受限 subagent、七个生命周期命令、全部内置 Skills、runtime、
    `vibe-workflow` V2 目录插件（`plugins/vibe-workflow/index.ts`，由 OpenCode 自动发现，不写入
-   `opencode.json`），并注册固定版本的会话 Goal 控制器
-   `@prevalentware/opencode-goal-plugin@0.1.60` 与 `opencode-agent-memory`，同时把框架的 MCP
-   工具带（`context7`、`gh_grep`、`document-loader`、`github`、`playwright`、
-   `sequential-thinking`、`web-search`、`wikipedia`）合并进 `mcp` 段。
+   `opencode.json`），并按其选择把可选集成目录
+   `runtime/opencode/optional-integrations.json` 里的插件（默认含固定版本的会话 Goal 控制器
+   `@prevalentware/opencode-goal-plugin@0.1.60` 与 `opencode-agent-memory`）与 MCP 工具带
+   （`context7`、`gh_grep`、`document-loader`、`github`、`playwright`、
+   `sequential-thinking`、`web-search`、`wikipedia`）合并进 `plugin`/`plugins` 与 `mcp` 段。
+   可用 `--list-integrations` 查看清单与当前选择，用 `--with-plugin/--without-plugin/
+   --with-mcp/--without-mcp` 调整。
 5. 在临时项目中初始化并验证 `.project-log`。
 6. 输出安装路径、备份路径、保留的本地修改和未安装的可选能力。
 
@@ -99,7 +102,9 @@ chmod +x runtime/opencode/install.sh
 | 选项 | 作用 |
 |---|---|
 | `--opencode-home <dir>` | 目标配置目录，默认 `${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}` |
-| `--skip-plugin-install` | 兼容旧调用而保留，无任何作用：OpenCode V2 自带插件 API，不再安装 npm 依赖 |
+| `--with-plugin NAME` / `--without-plugin NAME` | 启用/停用可选插件（可重复；名称见 `optional-integrations.json`） |
+| `--with-mcp NAME` / `--without-mcp NAME` | 启用/停用可选 MCP 服务（可重复） |
+| `--list-integrations` | 打印可选集成目录、默认值与当前选择，不写任何文件 |
 | `--skip-preflight` | 跳过工具探测，仅用于隔离的包测试 |
 
 ## 临时项目验收

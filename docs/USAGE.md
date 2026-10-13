@@ -135,21 +135,27 @@ chmod +x runtime/opencode/install.sh
 默认安装行为：
 
 - 以标记块合并用户级 `AGENTS.md`，保留用户已有规则。
-- 合并而非覆盖 `opencode.json`：设置 `default_agent`、注册会话 Goal 插件与权限规则，保留用户自己的
+- 合并而非覆盖 `opencode.json`：只设置 `default_agent`，保留用户自己的
   `plugin`/`plugins`、`mcp`、`model`、`permission` 等键。
 - 安装主 Agent、八个受限 subagent、七个生命周期命令、全部内置 Skills、runtime 与
   `vibe-workflow` V2 目录插件（`plugins/vibe-workflow/index.ts`，由 OpenCode 自动发现，不写入
-  `opencode.json`），并注册固定版本的会话 Goal 控制器
-  `@prevalentware/opencode-goal-plugin@0.1.60`。
-- 自动创建带时间戳的备份到 `<home>/backups/<action>-<stamp>/`。
-- 框架默认随包提供一套 MCP 工具带（`context7`、`gh_grep`、`document-loader`、
-  `github`、`playwright`、`sequential-thinking`、`web-search`、`wikipedia`），
-  由安装器写入 `mcp` 段；用户已有的同名条目、修改过的条目和删除过的条目都不会被覆盖或复活。
-  不需要的可以自行删除，安装器不会重新加回。
-- 不静默删除用户已有配置；安装、升级、卸载对其触及的文件是事务性的。
+  `opencode.json`）。
+- 第三方插件与 MCP 写入包内的可选集成目录 `runtime/opencode/optional-integrations.json`，
+  按选择合并进 `plugin`/`plugins` 与 `mcp` 段。默认安装 Goal 控制器
+  `@prevalentware/opencode-goal-plugin@0.1.60`（全局规则点名该版本，故固定）与
+  `opencode-agent-memory`，以及 MCP 工具带；不需要时用 `--without-plugin` / `--without-mcp` 停用，
+  停用后再次空参运行不会被复活。查看可选清单与当前选择：
 
-可选 MCP 直接在 `opencode.json` 的 `mcp` 段添加即可（例如 `context7`、`github`、`playwright`），
-不需要 `--mcp` 参数。
+  ```bash
+  ./runtime/opencode/install.sh install --list-integrations
+  ./runtime/opencode/install.sh update --with-mcp context7
+  ./runtime/opencode/install.sh update --without-plugin goal --without-mcp github
+  ```
+
+- 自动创建带时间戳的备份到 `<home>/backups/<action>-<stamp>/`。
+- 用户已有的同名条目、修改过的条目和删除过的条目都不会被覆盖或复活。
+- 不静默删除用户已有配置；安装、升级、卸载对其触及的文件是事务性的。
+- 安装状态从 schema 2 自动升级到 schema 3（记录当前选择），保留既有所有权，可干净卸载。
 
 安装完成后建议验证：
 
@@ -454,9 +460,17 @@ Project Goal = 这个项目/增量要达到什么结果
 
 ### 5.2 会话 Goal（OpenCode 插件）
 
-会话级 `/goal`、`/pause_goal`、`/resume_goal` 由固定版本的
-`@prevalentware/opencode-goal-plugin@0.1.60` 承担，负责当前会话的运行、暂停、恢复、预算和
-continuation。它是会话控制器，不应被项目日志中的临时措辞替代。
+会话级 `/goal`、`/pause_goal`、`/resume_goal` 由 `goal` 可选集成承担。默认安装会启用它，并固定为
+`@prevalentware/opencode-goal-plugin@0.1.60`（全局规则点名该版本；0.1.51 在 OpenCode V2 注入的
+Effect v4 下会崩溃）。它是会话控制器，不应被项目日志中的临时措辞替代。不需要时可用
+`--without-plugin goal` 停用；停用后 Vibe 核心任务、Project Goal 与证据门禁仍然照常工作，只是
+没有会话级续跑。查看与调整：
+
+```bash
+./runtime/opencode/install.sh install --list-integrations
+./runtime/opencode/install.sh update --without-plugin goal
+./runtime/opencode/install.sh update --with-plugin goal
+```
 
 ```text
 会话 Goal = 当前 OpenCode 会话如何继续运行
@@ -567,8 +581,15 @@ Vibe Coding 的规则和项目日志与接入端无关；本版面向 OpenCode �
 新安装默认写入框架的 MCP 工具带；每一项都受网络、代理、Node/uvx/npm 或外部服务影响，
 按需删除即可（安装器尊重用户的删除，不会复活）。
 
-OpenCode 版的可选 MCP 直接在 `opencode.json` 的 `mcp` 段声明（`type`、`command`/`url`、
-`enabled`），安装器不强制安装任何一项：
+OpenCode 版的可选 MCP 由包内目录 `runtime/opencode/optional-integrations.json` 声明，安装器按当前选择
+合并进 `opencode.json` 的 `mcp` 段：
+
+```bash
+./runtime/opencode/install.sh install --list-integrations
+./runtime/opencode/install.sh update --with-mcp context7 --without-mcp github
+```
+
+也可以直接手写该段（`type`、`command`/`url`），安装器不会覆盖用户已有的同名条目：
 
 ```json
 {

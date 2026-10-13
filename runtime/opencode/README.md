@@ -56,7 +56,9 @@ Common options:
 | Option | Effect |
 |---|---|
 | `--opencode-home <dir>` | Target config directory instead of `${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}` |
-| `--skip-plugin-install` | Accepted for compatibility and ignored: V2 provides the plugin API, no npm dependency is installed |
+| `--with-plugin NAME` / `--without-plugin NAME` | Enable/disable an optional plugin (repeatable; names come from `optional-integrations.json`) |
+| `--with-mcp NAME` / `--without-mcp NAME` | Enable/disable an optional MCP server (repeatable) |
+| `--list-integrations` | Print the integration catalog, its defaults and the current selection; writes nothing |
 | `--skip-preflight` | Skip tool detection; intended only for isolated package tests |
 
 What the installer does:
@@ -66,15 +68,15 @@ What the installer does:
   had in that file are preserved instead of overwritten.
 - Copies `agents/`, `commands/`, `plugins/`, the top-level `skills/`, and the `runtime/` tree into
   the OpenCode config directory.
-- Merges — never overwrites — `opencode.json`: it sets `default_agent` and registers the session
-  the plugins it registers, the MCP toolbelt and permission rules while preserving user
-  `plugin`/`plugins`, `mcp`, `model`, `permission` and other keys. Two plugin entries are
-  managed: the pinned session Goal controller `@prevalentware/opencode-goal-plugin@0.1.60`
-  (pinned because the global rule names that version) and `opencode-agent-memory`, written to
-  the user's existing `plugins` list (V2) or `plugin` list (which V2 still normalizes). The MCP
-  toolbelt (`context7`, `gh_grep`, `document-loader`, `github`, `playwright`,
-  `sequential-thinking`, `web-search`, `wikipedia`) is merged into `mcp`. Every managed entry
-  records whether the user already had it, and a user edit or deletion is respected, so
+- Merges — never overwrites — `opencode.json`: the shipped file is two lines
+  (`$schema`, `default_agent`) and the installer merges the selected integrations into the
+  user's `plugin`/`plugins` and `mcp` keys, preserving `model`, `permission` and anything
+  else. What gets installed comes from `runtime/opencode/optional-integrations.json` plus
+  the selection recorded in the installation state, so an empty install ships no
+  third-party entry at all. A plugin entry with `pinned_spec` keeps that exact version --
+  the Goal controller is pinned because the global rule names one version; the others are
+  registered by bare package name and OpenCode resolves them. Every managed entry records
+  whether the user already had it, and a user edit or deletion is respected, so
   `uninstall` removes only what the installer added and never resurrects a user choice.
 - Does **not** list `plugins/vibe-workflow/` in `opencode.json`: V2 discovers plugin directories
   under the config `plugins/` folder by itself, and listing it as well loads it twice.

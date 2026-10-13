@@ -41,12 +41,141 @@ def run_installer(*arguments: str, env: dict[str, str] | None = None) -> subproc
     )
 
 
-# Plugins the installer registers on the user's behalf; mirrors
-# MANAGED_PLUGIN_SPECS in scripts/opencode_installer.py.
+# Plugins a default install registers on the user's behalf; mirrors
+# MANAGED_PLUGIN_SPECS in scripts/opencode_installer.py plus the catalog defaults.
 MANAGED_PLUGINS = [
     "@prevalentware/opencode-goal-plugin@0.1.60",
     "opencode-agent-memory",
 ]
+
+
+class OptionalIntegrationTests(unittest.TestCase):
+    """The layered catalog: defaults, --with/--without, and selection idempotence."""
+
+    def install(self, home: Path, *extra: str) -> subprocess.CompletedProcess[str]:
+        return run_installer(
+            "install", "--opencode-home", str(home), "--skip-preflight", *extra,
+        )
+
+    def config(self, home: Path) -> dict:
+        return json.loads((home / "opencode.json").read_text(encoding="utf-8"))
+
+    def state(self, home: Path) -> dict:
+        return json.loads(
+            (home / ".vibe-opencode-installation-state.json").read_text(encoding="utf-8")
+        )
+
+    def test_a_fresh_install_records_a_schema_3_selection(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary) / "opencode"
+            self.assertEqual(self.install(home).returncode, 0)
+            state = self.state(home)
+            self.assertEqual(state["schema"], 3)
+            self.assertEqual(state["selected_integrations"]["plugins"], ["goal", "memory"])
+            # Every default MCP is selected and none is missing.
+            self.assertIn("github", state["selected_integrations"]["mcp"])
+
+    def test_the_shipped_config_stays_minimal(self) -> None:
+        """The package's own opencode.json must not hard-wire third-party entries."""
+        source = json.loads(
+            (ROOT / "runtime/opencode/opencode.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(sorted(source), ["$schema", "default_agent"])
+
+    def test_mcp_entries_do_not_leak_catalog_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary) / "opencode"
+            self.assertEqual(self.install(home).returncode, 0)
+            for name, entry in self.config(home)["mcp"].items():
+                self.assertNotIn("default_installed", entry, name)
+
+    def test_without_then_bare_rerun_keeps_the_integration_disabled(self) -> None:
+        """Deselecting is sticky: a later flagless update must not resurrect it."""
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary) / "opencode"
+            self.assertEqual(self.install(home).returncode, 0)
+            drop = run_installer(
+                "update", "--opencode-home", str(home), "--skip-preflight",
+                "--without-plugin", "memory", "--without-mcp", "github",
+            )
+            self.assertEqual(drop.returncode, 0, drop.stdout)
+            self.assertNotIn("opencode-agent-memory", self.config(home)["plugin"])
+            self.assertNotIn("github", self.config(home)["mcp"])
+
+            rerun = run_installer("update", "--opencode-home", str(home), "--skip-preflight")
+            self.assertEqual(rerun.returncode, 0, rerun.stdout)
+            self.assertNotIn("opencode-agent-memory", self.config(home)["plugin"])
+            self.assertNotIn("github", self.config(home)["mcp"])
+            self.assertNotIn("opencode-agent-memory", self.state(home)["selected_integrations"]["plugins"])
+
+    def test_with_restores_a_previously_deselected_integration(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary) / "opencode"
+            self.assertEqual(self.install(home).returncode, 0)
+            run_installer("update", "--opencode-home", str(home), "--skip-preflight",
+                          "--without-plugin", "memory")
+            restore = run_installer("update", "--opencode-home", str(home), "--skip-preflight",
+                                    "--with-plugin", "memory")
+            self.assertEqual(restore.returncode, 0, restore.stdout)
+            self.assertIn("opencode-agent-memory", self.config(home)["plugin"])
+
+    def test_an_unknown_integration_name_is_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary) / "opencode"
+            result = self.install(home, "--with-mcp", "nope")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("unknown mcp integration", result.stdout)
+            self.assertFalse((home / "opencode.json").exists())
+
+    def test_schema_2_state_migrates_without_losing_ownership(self) -> None:
+        """A pre-layering state keeps exactly the set it already owned."""
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary) / "opencode"
+            self.assertEqual(self.install(home).returncode, 0)
+            state_path = home / ".vibe-opencode-installation-state.json"
+            state = self.state(home)
+            state["schema"] = 2
+            state.pop("selected_integrations")
+            state.pop("state_migrations", None)
+            state_path.write_text(json.dumps(state, indent=2), encoding="utf-8")
+
+            update = run_installer("update", "--opencode-home", str(home), "--skip-preflight")
+            self.assertEqual(update.returncode, 0, update.stdout)
+            self.assertIn("upgraded from schema 2 to 3", update.stdout)
+            migrated = self.state(home)
+            self.assertEqual(migrated["schema"], 3)
+            self.assertIn("schema-2-to-3", migrated["state_migrations"])
+            # Everything the old state owned is still registered and still owned.
+            for spec in MANAGED_PLUGINS:
+                self.assertIn(spec, self.config(home)["plugin"])
+            self.assertIn("github", self.config(home)["mcp"])
+
+    def test_a_newer_state_schema_is_refused_not_guessed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary) / "opencode"
+            self.assertEqual(self.install(home).returncode, 0)
+            state_path = home / ".vibe-opencode-installation-state.json"
+            state = self.state(home)
+            state["schema"] = 99
+            state_path.write_text(json.dumps(state, indent=2), encoding="utf-8")
+
+            result = run_installer("update", "--opencode-home", str(home), "--skip-preflight")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("newer than this installer understands", result.stdout)
+
+    def test_list_integrations_reports_selection_without_installing(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary) / "opencode"
+            result = run_installer(
+                "install", "--opencode-home", str(home), "--list-integrations",
+            )
+            self.assertEqual(result.returncode, 0, result.stdout)
+            report = json.loads(result.stdout)
+            self.assertFalse(report["installed"])
+            self.assertEqual(
+                sorted(report["available"]["plugins"]), ["goal", "memory"]
+            )
+            self.assertFalse((home / "opencode.json").exists())
 
 
 class OpenCodeInstallerTests(unittest.TestCase):
@@ -56,7 +185,6 @@ class OpenCodeInstallerTests(unittest.TestCase):
             "--opencode-home",
             str(home),
             "--skip-preflight",
-            "--skip-plugin-install",
             *extra,
         )
 
@@ -121,7 +249,7 @@ class OpenCodeInstallerTests(unittest.TestCase):
 
             second = run_installer(
                 "update", "--opencode-home", str(home),
-                "--skip-preflight", "--skip-plugin-install",
+                "--skip-preflight",
             )
             self.assertEqual(second.returncode, 0, second.stdout)
             config = json.loads((home / "opencode.json").read_text(encoding="utf-8"))
@@ -179,7 +307,7 @@ class OpenCodeInstallerTests(unittest.TestCase):
 
             update = run_installer(
                 "update", "--opencode-home", str(home),
-                "--skip-preflight", "--skip-plugin-install",
+                "--skip-preflight",
             )
             self.assertEqual(update.returncode, 0, update.stdout)
             updated = json.loads(config_path.read_text(encoding="utf-8"))
@@ -215,7 +343,7 @@ class OpenCodeInstallerTests(unittest.TestCase):
 
             update = run_installer(
                 "update", "--opencode-home", str(home),
-                "--skip-preflight", "--skip-plugin-install",
+                "--skip-preflight",
             )
             self.assertEqual(update.returncode, 0, update.stdout)
             updated = json.loads(config_path.read_text(encoding="utf-8"))
@@ -244,7 +372,7 @@ class OpenCodeInstallerTests(unittest.TestCase):
 
             update = run_installer(
                 "update", "--opencode-home", str(home),
-                "--skip-preflight", "--skip-plugin-install",
+                "--skip-preflight",
             )
             self.assertEqual(update.returncode, 0, update.stdout)
             self.assertIn("PRESERVED local modification", update.stdout)
@@ -336,7 +464,7 @@ class OpenCodeInstallerTests(unittest.TestCase):
 
             update = run_installer(
                 "update", "--opencode-home", str(home),
-                "--skip-preflight", "--skip-plugin-install",
+                "--skip-preflight",
             )
             self.assertEqual(update.returncode, 0, update.stdout)
             self.assertIn("legacy path key(s)", update.stdout)
@@ -521,7 +649,7 @@ class OpenCodeInstallerTests(unittest.TestCase):
 
             update = run_installer(
                 "update", "--opencode-home", str(home),
-                "--skip-preflight", "--skip-plugin-install",
+                "--skip-preflight",
             )
             self.assertEqual(update.returncode, 0, update.stdout)
             self.assertIn("PRESERVED local modification", update.stdout)
@@ -628,7 +756,7 @@ class OpenCodeInstallerTests(unittest.TestCase):
             update = run_installer("update", "--opencode-home", str(home), "--skip-preflight")
             self.assertEqual(update.returncode, 0, update.stdout)
             self.assertIn("V1 single-file plugin", update.stdout)
-            self.assertIn("migrated the session Goal controller", update.stdout)
+            self.assertIn("updated the installer-owned plugin", update.stdout)
             self.assertFalse(legacy.exists())
             self.assertTrue((home / "plugins/vibe-workflow/index.ts").is_file())
             config = json.loads(config_path.read_text(encoding="utf-8"))
@@ -753,7 +881,7 @@ class OpenCodeInstallerTests(unittest.TestCase):
             home = Path(temporary) / "opencode"
             result = subprocess.run(
                 [bash, str(INSTALL_SH), "--opencode-home", str(home),
-                 "--skip-preflight", "--skip-plugin-install"],
+                "--skip-preflight"],
                 text=True, encoding="utf-8", stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT, check=False,
             )
@@ -775,7 +903,7 @@ class OpenCodeInstallerTests(unittest.TestCase):
 
             update = run_installer(
                 "update", "--opencode-home", str(home),
-                "--skip-preflight", "--skip-plugin-install",
+                "--skip-preflight",
             )
             self.assertEqual(update.returncode, 0, update.stdout)
             updated = json.loads(config_path.read_text(encoding="utf-8"))
@@ -842,7 +970,7 @@ class OpenCodeInstallerTests(unittest.TestCase):
         installer.verify = broken_verify
         with self.assertRaises(RuntimeError):
             installer.install_or_update(
-                installer.package_root(), home, skip_preflight=True, skip_plugin_install=True,
+                installer.package_root(), home, skip_preflight=True,
             )
 
     def test_failure_rolls_back_all_writes(self) -> None:
@@ -877,7 +1005,7 @@ class OpenCodeInstallerTests(unittest.TestCase):
 
             update = run_installer(
                 "update", "--opencode-home", str(home),
-                "--skip-preflight", "--skip-plugin-install",
+                "--skip-preflight",
             )
             self.assertEqual(update.returncode, 0, update.stdout)
             self.assertIn("PRESERVED local modification", update.stdout)
@@ -1043,7 +1171,7 @@ class OpenCodeInstallerTests(unittest.TestCase):
 
             update = run_installer(
                 "update", "--opencode-home", str(home),
-                "--skip-preflight", "--skip-plugin-install",
+                "--skip-preflight",
             )
             self.assertEqual(update.returncode, 0, update.stdout)
             self.assertEqual(

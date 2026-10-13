@@ -28,8 +28,9 @@ format 2 是唯一受支持的 Project Log 格式，format 1 的退役与历史�
   `codebase-onboarder`、`solution-researcher`、`implementation-builder`、
   `verification-reviewer`、`alignment-reviewer`、`paper-reader`、`workflow-distiller`），
   通过 OpenCode 原生 `task` 工具编排，权限按角色边界收窄。
-- 会话 Goal 控制面由固定版本 `@prevalentware/opencode-goal-plugin@0.1.60` 承担
-  （`/goal`、`/pause_goal`、`/resume_goal`）；**Project Goal 仍是唯一完成契约**，
+- 会话 Goal 控制面由默认启用的 `goal` 可选集成承担，固定为
+  `@prevalentware/opencode-goal-plugin@0.1.60`（`/goal`、`/pause_goal`、`/resume_goal`）；
+  可用 `--without-plugin goal` 停用。**Project Goal 仍是唯一完成契约**，
   插件状态永不作为完成依据。
 - 七个生命周期命令：`/vibe-start`、`/vibe-resume`、`/vibe-plan`、`/vibe-implement`、
   `/vibe-verify`、`/vibe-status`、`/vibe-retro`。
@@ -70,14 +71,17 @@ chmod +x runtime/opencode/install.sh
 | 选项 | 作用 |
 |---|---|
 | `--opencode-home <dir>` | 目标配置目录，默认 `${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}` |
-| `--skip-plugin-install` | 兼容旧调用而保留，无任何作用：OpenCode V2 自带插件 API，不再安装 npm 依赖 |
+| `--with-plugin NAME` / `--without-plugin NAME` | 启用/停用可选插件（可重复；名称见 `optional-integrations.json`） |
+| `--with-mcp NAME` / `--without-mcp NAME` | 启用/停用可选 MCP 服务（可重复） |
+| `--list-integrations` | 打印可选集成目录、默认值与当前选择，不写任何文件 |
 | `--skip-preflight` | 跳过工具探测，仅用于隔离的包测试 |
 
 默认行为：
 
 - `AGENTS.md` 以标记块（`<!-- VIBE-OPENCODE-GLOBAL:BEGIN -->` … `END`）合并，用户已有规则被保留。
-- `opencode.json` 采用合并而非覆盖：设置 `default_agent`、注册会话 Goal 插件，同时保留用户
-  自己的 `plugin`/`plugins`、`mcp`、`model`、`permission` 等键。角色权限边界写在
+- `opencode.json` 采用合并而非覆盖：只设置 `default_agent`，同时保留用户
+  自己的 `plugin`/`plugins`、`mcp`、`model`、`permission` 等键。第三方插件与 MCP 不再硬编码在
+  包内配置里，而由可选集成目录按选择写入。角色权限边界写在
   `agents/*.md` 的 V2 `permissions` 有序规则里，不再通过顶层 `permission` 块下发：顶层块
   会在每个 agent 的规则之前合并，把声明为只读的角色实际放开（V2 取最后匹配的规则）。
 - `vibe-workflow` 是 V2 目录插件 `plugins/vibe-workflow/index.ts`，由 OpenCode 从配置目录自动发现，

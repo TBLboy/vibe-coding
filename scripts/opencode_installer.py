@@ -48,6 +48,13 @@ LEGACY_GOAL_PLUGIN_SPECS = (f"{GOAL_PLUGIN_PACKAGE}@0.1.51",)
 # setup function" and are deliberately not shipped (ALIGN-FW-009).
 MEMORY_PLUGIN_SPEC = "opencode-agent-memory"
 MANAGED_PLUGIN_SPECS = (GOAL_PLUGIN_SPEC, MEMORY_PLUGIN_SPEC)
+# Optional integrations live in a separate catalog so the shipped opencode.json can stay a
+# two-line file: nothing third-party is hard-wired into the client config, and the
+# installer decides what to register from the catalog plus the recorded selection.
+INTEGRATIONS_RELATIVE = "runtime/opencode/optional-integrations.json"
+# The installation-state format this release writes. Reading accepts 1 and 2 and migrates
+# them forward (see read_state); it never silently accepts an unknown future format.
+INSTALLER_STATE_SCHEMA = 3
 AGENTS_RELATIVE = "AGENTS.md"
 AGENTS_BEGIN = "<!-- VIBE-OPENCODE-GLOBAL:BEGIN -->"
 AGENTS_END = "<!-- VIBE-OPENCODE-GLOBAL:END -->"
@@ -104,10 +111,58 @@ def read_json(path: Path, default: Any = None) -> Any:
 
 
 def read_state(home: Path) -> dict[str, Any]:
+    """Read the installation state, migrating an older schema forward.
+
+    The state file records which files the installer owns and where it backed them up, so
+    losing it means losing the ability to uninstall cleanly. That is why an older schema
+    is upgraded in place instead of being rejected: a clean uninstall is the user's
+    safety net, and an installer that refuses to read its own predecessor's state would
+    strand an installation it could otherwise remove.
+    """
     value = read_json(state_path(home), {})
-    if not isinstance(value, dict):
+    if not isinstance(value, dict) or not value:
+        # No state file: this home has no installation, and migrating an empty object
+        # would fabricate one (and make an install look like an update).
         return {}
-    return heal_state(value)
+    return migrate_state(value)
+
+
+def migrate_state(state: dict[str, Any]) -> dict[str, Any]:
+    """Bring a state file up to ``INSTALLER_STATE_SCHEMA`` without losing ownership.
+
+    Both older schemas are readable as-is: schema 1 predates the version marker and
+    schema 2 recorded the same ownership, differing only in that it had no notion of a
+    *selection* -- the third-party plugins and MCP servers were hard-wired. The migration
+    is therefore a version marker plus a record of what happened; the selection for a
+    schema-1/2 install is derived at run time from the ownership already recorded, not
+    from today's catalog defaults.
+    """
+    state = heal_state(state)
+    version = state.get("schema")
+    if version is None:
+        state["schema"] = 1
+        version = 1
+    if not isinstance(version, int):
+        raise RuntimeError(f"installation state has a non-integer schema: {version!r}")
+    if version > INSTALLER_STATE_SCHEMA:
+        raise RuntimeError(
+            f"installation state schema {version} is newer than this installer "
+            f"understands (max {INSTALLER_STATE_SCHEMA}); use the newer package to manage "
+            "this installation. Project .project-log/ data is not affected."
+        )
+    migrations: list[str] = list(state.get("state_migrations") or [])
+    if version < 3:
+        if version < 2:
+            migrations.append("schema-1-to-2")
+        migrations.append("schema-2-to-3")
+    if migrations:
+        state["state_migrations"] = migrations
+    if version < INSTALLER_STATE_SCHEMA:
+        # Reported once, so an operator can see the host was upgraded rather than freshly
+        # installed; not persisted, because the next write is already at the new schema.
+        state["migrated_from_schema"] = version
+    state["schema"] = INSTALLER_STATE_SCHEMA
+    return state
 
 
 def heal_state(state: dict[str, Any]) -> dict[str, Any]:
@@ -529,6 +584,7 @@ def validate_source(root: Path) -> None:
     for required in ("scripts/vibe.py", "project-log-template"):
         if not (root / "runtime" / required).exists():
             raise RuntimeError(f"runtime/{required} is required for the OpenCode installation")
+    integrations_catalog(root)
 
 
 def detect_python(root: Path, home: Path) -> str:
@@ -588,13 +644,8 @@ def opencode_version(executable: str) -> str | None:
     return ".".join(match.groups()) if match else None
 
 
-def preflight(root: Path, home: Path, *, skip_plugin_install: bool = False) -> dict[str, Any]:
-    """Probe the host before writing anything.
-
-    ``skip_plugin_install`` is accepted for compatibility with older callers; OpenCode V2
-    provides the plugin API itself, so there is no npm dependency left to install.
-    """
-    del skip_plugin_install
+def preflight(root: Path, home: Path) -> dict[str, Any]:
+    """Probe the host before writing anything (the installer itself downloads nothing)."""
     validate_source(root)
     warnings: list[str] = []
     opencode = detect_opencode()
@@ -637,7 +688,7 @@ def preflight(root: Path, home: Path, *, skip_plugin_install: bool = False) -> d
 
 
 def backup(home: Path, action: str) -> Path:
-    stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
+    stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S-%f")
     backup_dir = destination_for(home, "backups") / f"{action}-{stamp}"
     backup_dir.mkdir(parents=True, exist_ok=True)
     for relative in ("AGENTS.md", "opencode.json", "vibe-workflow", "vibe-python", *ASSET_DIRECTORIES):
@@ -717,7 +768,149 @@ def dedupe_plugins(items: list[Any]) -> list[Any]:
     return ordered
 
 
-def merge_config(home: Path, root: Path, previous_ownership: Any) -> dict[str, Any]:
+def catalog_path(root: Path) -> Path:
+    return root / INTEGRATIONS_RELATIVE
+
+
+def integrations_catalog(root: Path) -> dict[str, Any]:
+    """Load and check the optional-integration catalog.
+
+    The catalog is the single description of every third-party integration the installer
+    can add. It is deliberately *not* part of ``runtime/``: ``runtime_assets()`` ships the
+    whole tree into the user's config directory, and both the plugins here and the
+    ``pinned_spec`` fields would then be duplicated on the host for nothing.
+    """
+    catalog = read_json(catalog_path(root), None)
+    if catalog is None:
+        raise RuntimeError(f"optional integration catalog is missing: {INTEGRATIONS_RELATIVE}")
+    if not isinstance(catalog, dict):
+        raise RuntimeError("optional integration catalog must be a JSON object")
+    for kind in ("plugins", "mcp"):
+        if not isinstance(catalog.get(kind), dict):
+            raise RuntimeError(f"optional integration catalog has invalid {kind!r}")
+    for name, item in catalog["plugins"].items():
+        package = item.get("package") if isinstance(item, dict) else None
+        if not isinstance(package, str) or not package:
+            raise RuntimeError(f"optional plugin {name!r} must name a package")
+    for name, item in catalog["mcp"].items():
+        if not isinstance(item, dict) or item.get("type") not in ("local", "remote"):
+            raise RuntimeError(f"optional mcp {name!r} must be a local or remote server definition")
+    return catalog
+
+
+def mcp_definition(item: dict[str, Any]) -> dict[str, Any]:
+    """An OpenCode MCP server entry: the catalog's install metadata is not config."""
+    return {key: value for key, value in item.items() if key != "default_installed"}
+
+
+def default_integrations(root: Path) -> dict[str, list[str]]:
+    """The integrations selected when the user passes no --with/--without flag.
+
+    Defaulting lives in the catalog (``default_installed``) so a user can see and edit
+    what a bare install does without reading the installer.
+    """
+    catalog = integrations_catalog(root)
+    return {
+        kind: sorted(
+            name for name, item in catalog[kind].items()
+            if isinstance(item, dict) and item.get("default_installed")
+        )
+        for kind in ("plugins", "mcp")
+    }
+
+
+def selected_integrations(
+    root: Path,
+    state: dict[str, Any],
+    *,
+    add_plugins: list[str],
+    drop_plugins: list[str],
+    add_mcp: list[str],
+    drop_mcp: list[str],
+) -> dict[str, list[str]]:
+    """Resolve the next selection from the recorded one, the flags and the defaults.
+
+    ``state`` is the whole installation state, because the recorded selection lives
+    beside ``opencode_config`` rather than inside it. A rerun with no flags is
+    idempotent: it keeps exactly what the state already records, so a deselected
+    integration stays deselected until it is asked for again.
+    """
+    catalog = integrations_catalog(root)
+    recorded = state.get("selected_integrations")
+    if isinstance(recorded, dict) and recorded:
+        current = {
+            kind: [name for name in recorded.get(kind, []) if name in catalog[kind]]
+            for kind in ("plugins", "mcp")
+        }
+    else:
+        current = {"plugins": [], "mcp": []}
+    chosen: dict[str, set[str]] = {}
+    for kind, add, drop in (("plugins", add_plugins, drop_plugins), ("mcp", add_mcp, drop_mcp)):
+        for name in [*add, *drop]:
+            if name not in catalog[kind]:
+                raise RuntimeError(
+                    f"unknown {kind} integration {name!r}; choose from "
+                    f"{', '.join(sorted(catalog[kind]))}"
+                )
+        selected = set(current[kind])
+        selected.update(add)
+        selected.difference_update(drop)
+        chosen[kind] = selected
+    return {"plugins": sorted(chosen["plugins"]), "mcp": sorted(chosen["mcp"])}
+
+
+def migration_selection(root: Path, state: dict[str, Any]) -> dict[str, list[str]]:
+    """The selection a pre-selection state file (schema 1 or 2) implies.
+
+    Schema 2 recorded no selection because the third-party set was hard-wired, so what
+    the installation actually owns is the only honest source. Deriving it from today's
+    catalog defaults would resurrect an integration the user had deselected, or that
+    this package no longer ships, on the next update.
+    """
+    catalog = integrations_catalog(root)
+    defaults = default_integrations(root)
+    config = state.get("opencode_config")
+    config = config if isinstance(config, dict) else {}
+
+    plugins_added = config.get("plugins_added")
+    plugins_added = plugins_added if isinstance(plugins_added, dict) else {}
+    owned_packages = {
+        plugin_package_name(_unquote(key))
+        for key, present in plugins_added.items()
+        if not present
+    }
+    plugins = [
+        name for name, item in catalog["plugins"].items() if item["package"] in owned_packages
+    ]
+    if not plugins and not plugins_added:
+        # A schema-1 state may predate plugin ownership entirely; the release that wrote
+        # it shipped the whole built-in pair, so the defaults are the honest answer.
+        plugins = defaults["plugins"]
+
+    mcp_added = config.get("mcp_added")
+    mcp_added = mcp_added if isinstance(mcp_added, dict) else {}
+    mcp = [name for name in mcp_added if name in catalog["mcp"]]
+    if not mcp and not mcp_added:
+        mcp = defaults["mcp"]
+    return {"plugins": sorted(plugins), "mcp": sorted(mcp)}
+
+
+def install_selection(root: Path, state: dict[str, Any]) -> dict[str, list[str]]:
+    """The stored selection when present, otherwise what the state's migration implies."""
+    recorded = state.get("selected_integrations")
+    if isinstance(recorded, dict) and recorded:
+        return selected_integrations(
+            root, state, add_plugins=[], drop_plugins=[], add_mcp=[], drop_mcp=[],
+        )
+    return migration_selection(root, state)
+
+
+def merge_config(
+    home: Path,
+    root: Path,
+    previous_ownership: Any,
+    selections: dict[str, list[str]] | None = None,
+) -> dict[str, Any]:
     """Merge managed keys into the user config, preserving everything else.
 
     Returns the ownership record so uninstall can restore exactly what the user
@@ -730,6 +923,13 @@ def merge_config(home: Path, root: Path, previous_ownership: Any) -> dict[str, A
     if not isinstance(existing, dict):
         raise RuntimeError(f"{config_path} must contain a JSON object")
     source = read_json(root / "runtime" / "opencode" / "opencode.json", {})
+    # The catalog is only consulted when a selection names plugins; a direct call with
+    # nothing selected (an ownership-only merge) must not require it.
+    selections = selections if selections is not None else {"plugins": [], "mcp": []}
+    catalog = (
+        integrations_catalog(root) if any(selections.values())
+        else {"plugins": {}, "mcp": {}}
+    )
     previous = previous_ownership if isinstance(previous_ownership, dict) else {}
     ownership: dict[str, Any] = {}
     notes: list[str] = []
@@ -771,8 +971,8 @@ def merge_config(home: Path, root: Path, previous_ownership: Any) -> dict[str, A
 
     # --- plugin registration ----------------------------------------------
     # V2 names the list `plugins`; it still normalizes the older `plugin` key, and a
-    # config may carry both. Every check below runs across both lists; the managed spec
-    # is written to the primary one (`plugins` when present) and removed from the other.
+    # config may carry both. Every check below runs across both lists; managed specs are
+    # written to the primary one (`plugins` when present) and removed from the other.
     list_key = plugin_list_key(existing)
     lists: dict[str, list[Any]] = {}
     for key_name in ("plugins", "plugin"):
@@ -802,52 +1002,87 @@ def merge_config(home: Path, root: Path, previous_ownership: Any) -> dict[str, A
             + "; OpenCode V2 discovers plugins/vibe-workflow/ on its own"
         )
     drop(legacy_local)
+
     # Third-party specs the installer registers on the user's behalf, each recorded with
     # whether the user already had it so uninstall removes only what the installer added.
     plugins_added = previous.get("plugins_added")
     if not isinstance(plugins_added, dict):
         plugins_added = {}
-    # Migrate older pins of the Goal controller that the installer itself wrote.
-    for legacy in LEGACY_GOAL_PLUGIN_SPECS:
-        key = plugin_key(legacy)
-        if key in plugins_added and not plugins_added[key]:
-            if any(plugin_key(item) == key for item in all_plugins()):
-                notes.append(f"migrated the session Goal controller {legacy!r} to {GOAL_PLUGIN_SPEC!r}")
-            drop({key})
-            plugins_added = {
-                **{k: v for k, v in plugins_added.items() if k != key},
-                plugin_key(GOAL_PLUGIN_SPEC): False,
-            }
+    # What the catalog says each selected integration should look like on disk. A plugin
+    # entry with `pinned_spec` keeps its exact version (the global rules name one Goal
+    # version); every other plugin is registered by bare package name so OpenCode
+    # resolves it. `wanted` is keyed by package name, the only stable identity.
+    wanted: dict[str, str] = {}
+    for name in selections["plugins"]:
+        item = catalog["plugins"][name]
+        wanted[item["package"]] = item.get("pinned_spec") or item["package"]
+
     managed_ownership: dict[str, bool] = {}
-    managed_keys = {plugin_key(spec) for spec in MANAGED_PLUGIN_SPECS}
-    for spec in MANAGED_PLUGIN_SPECS:
+    for package, spec in sorted(wanted.items()):
         key = plugin_key(spec)
-        if key in plugins_added:
-            managed_ownership[key] = bool(plugins_added[key])
-        else:
-            managed_ownership[key] = any(
-                plugin_package_name(item) == plugin_package_name(spec) for item in all_plugins()
+        # Entries the installer owns for this package: the canonical spec and any other
+        # pin of the same package. A pin the user wrote is deliberately not included, so
+        # it is never silently rewritten or removed.
+        owned = {
+            candidate for candidate in
+            (plugin_key(item) for item in all_plugins() if plugin_package_name(item) == package)
+            if candidate in plugins_added and not plugins_added[candidate]
+        }
+        for stale_key in sorted(owned - {key}):
+            # Any pin the installer wrote for this package is superseded by the canonical
+            # spec; e.g. the Goal controller's 0.1.51 entry becomes 0.1.60.
+            notes.append(
+                f"updated the installer-owned plugin {stale_key!r} to the current spec {spec!r}"
             )
-    ownership["plugins_added"] = managed_ownership
-    # The global rules name one version, so a second entry for the same package would make
-    # the rule ambiguous and could double-register the controller. Refuse instead.
-    for spec in MANAGED_PLUGIN_SPECS:
-        name = plugin_package_name(spec)
-        conflicts = [
+        # Entries that are neither ours nor the canonical spec: a pin the user wrote. Two
+        # versions of a controller the global rules pin by name would be ambiguous, so a
+        # user-owned one is refused rather than silently rewritten.
+        user_owned = [
             item for item in all_plugins()
-            if plugin_package_name(item) == name and plugin_key(item) != plugin_key(spec)
+            if plugin_package_name(item) == package
+            and plugin_key(item) not in owned | {key}
         ]
-        if conflicts:
+        if user_owned:
             raise RuntimeError(
-                f"opencode.json already registers {name} as {conflicts[0]!r}, but this "
-                f"package pins {spec!r}. Remove or align that entry first: the session Goal "
-                "controller version is declared by the global rules, so two versions would "
-                "be ambiguous."
+                f"opencode.json already registers {package} as {user_owned[0]!r}, but this "
+                f"package installs {spec!r}. Remove or align that entry first: the session "
+                "Goal controller version is declared by the global rules, so two versions "
+                "would be ambiguous."
             )
-    drop(managed_keys)
-    lists[list_key] = dedupe_plugins([*lists[list_key], *MANAGED_PLUGIN_SPECS])
+        if key not in plugins_added:
+            # First time the canonical spec is written. It is installer-owned unless the
+            # config already carried an entry for the package that is not ours.
+            plugins_added[key] = bool([
+                item for item in all_plugins()
+                if plugin_package_name(item) == package and plugin_key(item) not in owned
+            ])
+        drop(owned | {key})
+        managed_ownership[key] = bool(plugins_added.get(key, False))
+    # A managed spec that is no longer selected loses the entries the installer wrote,
+    # while an entry the user owns survives untouched.
+    for spec in MANAGED_PLUGIN_SPECS:
+        package = plugin_package_name(spec)
+        if package in wanted:
+            continue
+        owned = {
+            candidate for candidate in
+            (plugin_key(item) for item in all_plugins() if plugin_package_name(item) == package)
+            if candidate in plugins_added and not plugins_added[candidate]
+        }
+        for key in owned:
+            plugins_added.pop(key, None)
+        if owned:
+            drop(owned)
+            notes.append(f"optional plugin {package!r}: deselected; removed the installer's entry")
+    ownership["plugins_added"] = managed_ownership
+    named_specs = [wanted[package] for package in sorted(wanted)]
+    if named_specs:
+        lists[list_key] = dedupe_plugins([*lists[list_key], *named_specs])
     for key_name, entries in lists.items():
-        merged[key_name] = entries
+        if entries:
+            merged[key_name] = dedupe_plugins(entries)
+        else:
+            merged.pop(key_name, None)
 
     # --- managed permission rules -----------------------------------------
     permissions = dict(existing.get("permission")) if isinstance(existing.get("permission"), dict) else {}
@@ -923,7 +1158,7 @@ def merge_config(home: Path, root: Path, previous_ownership: Any) -> dict[str, A
     # Same ownership contract as the permission rules above: the package ships a default
     # toolbelt, an update installs what is missing, and a server the user already had,
     # edited, or deleted is never overwritten or resurrected.
-    source_mcp = source.get("mcp") if isinstance(source.get("mcp"), dict) else {}
+    source_mcp = {name: mcp_definition(catalog["mcp"][name]) for name in selections["mcp"]}
     existing_mcp = existing.get("mcp") if isinstance(existing.get("mcp"), dict) else {}
     previous_mcp = previous.get("mcp_added")
     if not isinstance(previous_mcp, dict):
@@ -1014,17 +1249,30 @@ def install_or_update(
     home: Path,
     *,
     skip_preflight: bool,
-    skip_plugin_install: bool,
+    add_plugins: list[str] | None = None,
+    drop_plugins: list[str] | None = None,
+    add_mcp: list[str] | None = None,
+    drop_mcp: list[str] | None = None,
 ) -> None:
     home.mkdir(parents=True, exist_ok=True)
     old_state = read_state(home)
     previous_managed = old_state.get("managed_files", {})
     if not isinstance(previous_managed, dict):
         previous_managed = {}
-    del skip_plugin_install  # accepted for compatibility; V2 has no npm dependency to install
     probe = old_state.get("preflight") if skip_preflight else preflight(root, home)
     if not isinstance(probe, dict):
         probe = {}
+    # A fresh install starts from the catalog defaults; an existing one keeps the
+    # selection it recorded (or, for a pre-selection schema, what it actually owns).
+    base = default_integrations(root) if not old_state else install_selection(root, old_state)
+    selections = selected_integrations(
+        root,
+        {"selected_integrations": base},
+        add_plugins=add_plugins or [],
+        drop_plugins=drop_plugins or [],
+        add_mcp=add_mcp or [],
+        drop_mcp=drop_mcp or [],
+    )
 
     sources = managed_sources(root)
     operations, conflicts, preserved, managed = plan_sync(home, sources, previous_managed)
@@ -1045,7 +1293,7 @@ def install_or_update(
     created_dirs = sorted(set(old_state.get("created_dirs") or []) | set(snapshot["created_dirs"]))
     backup_dir = backup(home, "update" if old_state else "install")
     try:
-        config_ownership = merge_config(home, root, old_state.get("opencode_config", {}))
+        config_ownership = merge_config(home, root, old_state.get("opencode_config", {}), selections)
         install_agents_block(root, home)
         apply_sync(home, sources, operations)
 
@@ -1071,7 +1319,7 @@ def install_or_update(
             restore_package_json(home, old_state.get("package_json"))
 
         state = {
-            "schema": 2,
+            "schema": INSTALLER_STATE_SCHEMA,
             "package_version": PACKAGE_VERSION,
             "installed_at": old_state.get("installed_at") or utc_now(),
             "updated_at": utc_now(),
@@ -1081,7 +1329,11 @@ def install_or_update(
             "created_dirs": created_dirs,
             "preflight": probe,
             "opencode_config": config_ownership,
+            "selected_integrations": selections,
         }
+        migrations = old_state.get("state_migrations")
+        if migrations:
+            state["state_migrations"] = migrations
         assert_canonical_state(state)
         write_json(state_path(home), state)
         verify(root, home)
@@ -1089,6 +1341,12 @@ def install_or_update(
         rollback_transaction(home, snapshot)
         raise
 
+    previous_version = old_state.get("migrated_from_schema")
+    if previous_version is not None and previous_version < INSTALLER_STATE_SCHEMA:
+        print(
+            f"[*] Installation state upgraded from schema {previous_version} to "
+            f"{INSTALLER_STATE_SCHEMA}; existing ownership was preserved."
+        )
     if old_state.get("legacy_separator_keys"):
         print(
             f"[!] Normalized {old_state['legacy_separator_keys']} legacy path key(s) "
@@ -1131,11 +1389,20 @@ def verify(root: Path, home: Path) -> None:
             f"opencode.json still registers the V1 single-file plugin {legacy[0]!r}, which "
             "OpenCode V2 rejects; rerun the installer update to migrate it"
         )
-    if GOAL_PLUGIN_SPEC not in registered:
-        raise RuntimeError(
-            f"opencode.json does not register the pinned session Goal controller "
-            f"({GOAL_PLUGIN_SPEC}); the global rules declare it for OpenCode"
-        )
+    # A selected integration must actually be registered. This is a property of the
+    # selection, not of the package: `--without-plugin goal` is a supported state.
+    selections = state.get("selected_integrations")
+    selections = selections if isinstance(selections, dict) else {}
+    for name in selections.get("plugins", []) or []:
+        item = integrations_catalog(root)["plugins"].get(name)
+        if item is None:
+            continue
+        spec = item.get("pinned_spec") or item["package"]
+        if not any(plugin_package_name(entry) == item["package"] for entry in registered):
+            raise RuntimeError(
+                f"opencode.json does not register the selected {name!r} plugin "
+                f"({spec}); rerun the installer update to restore it"
+            )
     python_pointer = destination_for(home, "vibe-python")
     if not python_pointer.is_file() or not python_pointer.read_text(encoding="utf-8").strip():
         raise RuntimeError("vibe-python pointer is missing")
@@ -1274,6 +1541,44 @@ def uninstall(root: Path, home: Path) -> None:
     print("[*] Project .project-log/ directories were not touched.")
 
 
+def integration_report(root: Path, home: Path) -> dict[str, Any]:
+    """The catalog plus the current selection, for ``--list-integrations``."""
+    catalog = integrations_catalog(root)
+    state = read_state(home)
+    selection = install_selection(root, state)
+    return {
+        "catalog": INTEGRATIONS_RELATIVE,
+        "installed": bool(state),
+        "selected": selection,
+        "available": {
+            kind: {
+                name: {
+                    "activated": name in selection[kind],
+                    "default_installed": bool(item.get("default_installed")),
+                    **({"package": item["package"]} if kind == "plugins" else {"type": item["type"]}),
+                    **({"pinned_spec": item["pinned_spec"]} if item.get("pinned_spec") else {}),
+                }
+                for name, item in catalog[kind].items()
+            }
+            for kind in ("plugins", "mcp")
+        },
+        "usage": (
+            "install.sh install|update --with-plugin NAME --without-plugin NAME "
+            "--with-mcp NAME --without-mcp NAME"
+        ),
+    }
+
+
+def _unquote(value: Any) -> Any:
+    """Undo the historical ``json.dumps`` string used as a plugin ownership key."""
+    if isinstance(value, str) and len(value) >= 2 and value.startswith('"') and value.endswith('"'):
+        try:
+            return json.loads(value)
+        except ValueError:
+            return value
+    return value
+
+
 def main() -> int:
     # A Windows console defaults to a legacy codepage (for example cp1252); printing this
     # CLI's non-ASCII output there raises UnicodeEncodeError. The output contract is UTF-8
@@ -1287,25 +1592,47 @@ def main() -> int:
     parser.add_argument("action", choices=("install", "update", "verify", "preflight", "uninstall"))
     parser.add_argument("--opencode-home", help="Override the OpenCode config directory.")
     parser.add_argument("--skip-preflight", action="store_true", help="Only for isolated package tests.")
-    parser.add_argument("--skip-plugin-install", action="store_true", help="Accepted for compatibility; OpenCode V2 needs no npm plugin dependency.")
+    parser.add_argument(
+        "--with-plugin", action="append", default=[], metavar="NAME",
+        help="Enable an optional plugin from the catalog (repeatable).",
+    )
+    parser.add_argument(
+        "--without-plugin", action="append", default=[], metavar="NAME",
+        help="Disable a previously enabled optional plugin (repeatable).",
+    )
+    parser.add_argument(
+        "--with-mcp", action="append", default=[], metavar="NAME",
+        help="Enable an optional MCP server from the catalog (repeatable).",
+    )
+    parser.add_argument(
+        "--without-mcp", action="append", default=[], metavar="NAME",
+        help="Disable a previously enabled optional MCP server (repeatable).",
+    )
+    parser.add_argument(
+        "--list-integrations", action="store_true",
+        help="Print the optional integrations, their defaults and the current selection.",
+    )
     args = parser.parse_args()
     root = package_root()
     home = config_dir(args.opencode_home)
     try:
+        if args.list_integrations:
+            print(json.dumps(integration_report(root, home), ensure_ascii=False, indent=2))
+            return 0
         if args.action in {"install", "update"}:
             install_or_update(
                 root,
                 home,
                 skip_preflight=args.skip_preflight,
-                skip_plugin_install=args.skip_plugin_install,
+                add_plugins=args.with_plugin,
+                drop_plugins=args.without_plugin,
+                add_mcp=args.with_mcp,
+                drop_mcp=args.without_mcp,
             )
         elif args.action == "verify":
             verify(root, home)
         elif args.action == "preflight":
-            print(json.dumps(
-                preflight(root, home, skip_plugin_install=args.skip_plugin_install),
-                ensure_ascii=False, indent=2,
-            ))
+            print(json.dumps(preflight(root, home), ensure_ascii=False, indent=2))
         else:
             uninstall(root, home)
         return 0
