@@ -3,7 +3,6 @@ name: a-project-log
 description: 维护以原子业务逻辑为事实源的项目记忆、需求基线、架构、生命周期任务、决策行动结果、验证证据、三方对齐、工作留痕和会话恢复状态。
 compatibility: opencode
 metadata:
-  version: "2.0-draft"
   workflow: "vibe-goal"
 ---
 
