@@ -392,6 +392,20 @@ class OpenCodeStaticSurfaceTests(unittest.TestCase):
             ):
                 self.assertNotEqual(resolve(rules, "read", secret), "allow", f"{role}: {secret}")
 
+    def test_primary_agent_may_use_the_goal_plugin_tools(self) -> None:
+        """Plugin tools are V2 actions named after the tool.
+
+        The `* * deny` baseline filters any action it does not allow, so without an
+        explicit allow the goal plugin's tools never reach the session even though
+        the plugin loads and injects its reminder (ALIGN-FW-008).
+        """
+        main = agent_rules("vibe-main")
+        for tool in ("get_goal", "create_goal", "set_goal", "update_goal_plan",
+                     "update_goal_status", "list_all_goals"):
+            self.assertEqual(resolve(main, tool, "*"), "allow", tool)
+        for role in ("business-analyst", "verification-reviewer"):
+            self.assertNotEqual(resolve(agent_rules(role), "get_goal", "*"), "allow", role)
+
     def test_commands_are_thin_primary_agent_entrypoints(self) -> None:
         paths = sorted((OPENCODE / "commands").glob("*.md"))
         self.assertEqual({path.stem for path in paths}, EXPECTED_COMMANDS)

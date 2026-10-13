@@ -23,6 +23,14 @@ permissions:
   - { action: subagent, resource: "solution-researcher", effect: allow }
   - { action: subagent, resource: "verification-reviewer", effect: allow }
   - { action: subagent, resource: "workflow-distiller", effect: allow }
+  # Third-party plugins register their tools as V2 actions named after the tool, and
+  # the `* * deny` baseline above would otherwise filter every one of them out of the
+  # session. That is what hid the goal plugin's tools while its system reminder still
+  # appeared (ALIGN-FW-008). Current goal tools: get_goal, get_goal_history,
+  # list_all_goals, create_goal, set_goal, replace_goal, update_goal,
+  # update_goal_plan, update_goal_objective, update_goal_status, pause_goal,
+  # resume_goal, stop_goal, clear_goal.
+  - { action: "*goal*", resource: "*", effect: allow }
   - { action: read, resource: "**/.env", effect: deny }
   - { action: read, resource: ".env", effect: deny }
   - { action: read, resource: "**/.env.*", effect: deny }
