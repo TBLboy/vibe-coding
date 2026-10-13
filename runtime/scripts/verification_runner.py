@@ -280,7 +280,14 @@ def build_argv(action: str, root, path: str | None = None, python: str | None = 
     if action == "git-head":
         return ["git", "rev-parse", "HEAD"]
     if action == "git-origin-codex":
-        return ["git", "ls-remote", "--exit-code", "origin", "refs/heads/codex"]
+        # The controlled workstation reaches GitHub through its local proxy. Keep the
+        # network route inside this fixed, read-only action so an independent reviewer
+        # does not need a broad shell or a caller-supplied command/config.
+        return [
+            "git", "-c", "http.proxy=http://127.0.0.1:10808",
+            "-c", "https.proxy=http://127.0.0.1:10808",
+            "ls-remote", "--exit-code", "origin", "refs/heads/codex",
+        ]
     raise StateError(
         "verification_action_untrusted", f"Untrusted verification action: {action!r}"
     )
