@@ -23,8 +23,9 @@ permissions:
   # mishandling `--flag=value` queries; kept as redundant-but-harmless insurance.
   - { action: shell, resource: "git log --format=*", effect: allow }
   - { action: shell, resource: "git log --pretty=*", effect: allow }
-  - { action: shell, resource: "*verification_runner.py preflight*", effect: allow }
-  - { action: shell, resource: "*verification_runner.py run*", effect: allow }
+  # Match the trusted runner invocation regardless of Windows path quoting or
+  # whether the subcommand/options are reordered by the caller.
+  - { action: shell, resource: "*verification_runner.py*", effect: allow }
   # Independent reviewers may inspect external evidence roots; secret denies below apply.
   - { action: external_directory, resource: "*", effect: allow }
   - { action: read, resource: "*", effect: allow }

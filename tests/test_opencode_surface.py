@@ -285,14 +285,7 @@ class OpenCodeStaticSurfaceTests(unittest.TestCase):
                 for rule in rules
                 if rule["action"] == "shell" and rule["effect"] == "allow"
             }
-            self.assertIn(
-                "*verification_runner.py preflight*",
-                allow, role,
-            )
-            self.assertIn(
-                "*verification_runner.py run*",
-                allow, role,
-            )
+            self.assertIn("*verification_runner.py*", allow, role)
             self.assertFalse(
                 [pattern for pattern in allow if "sha256sum" in pattern],
                 f"{role} still advertises a POSIX-only hashing tool",
