@@ -107,17 +107,69 @@ class MemorySyncTests(unittest.TestCase):
 
 
 class RecordReadSurfaceTests(unittest.TestCase):
-    def test_record_help_exposes_the_read_only_commands(self) -> None:
+    def setUp(self) -> None:
+        self.temporary = tempfile.TemporaryDirectory()
+        self.root = Path(self.temporary.name)
+        initialized = run_vibe(self.root, "init")
+        self.assertEqual(initialized.returncode, 0, initialized.stderr)
+
+    def tearDown(self) -> None:
+        self.temporary.cleanup()
+
+    def create(self, kind: str, record_id: str, status: str) -> None:
+        result = run_vibe(
+            self.root, "record", "create", "--kind", kind, "--id", record_id,
+            "--title", "Title", "--status", status, "--payload", '{"note": "bulk"}',
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def help_of(self, *arguments: str) -> str:
         result = subprocess.run(
-            [sys.executable, str(VIBE), "record", "--help"],
+            [sys.executable, str(VIBE), *arguments, "--help"],
             text=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             check=False,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
+        return result.stdout
+
+    def test_record_help_exposes_the_read_only_commands(self) -> None:
+        stdout = self.help_of("record")
         for word in ("show", "list", "links"):
-            self.assertIn(word, result.stdout)
+            self.assertIn(word, stdout)
+
+    def test_show_reads_a_record_from_its_id_alone(self) -> None:
+        self.create("alignment", "A-001", "open")
+        result = run_vibe(self.root, "record", "show", "--id", "A-001")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["kind"], "alignment")
+        self.assertEqual(payload["payload"], {"note": "bulk"})
+
+    def test_show_still_accepts_an_explicit_kind(self) -> None:
+        self.create("decision", "D-001", "active")
+        result = run_vibe(self.root, "record", "show", "--kind", "decision", "--id", "D-001")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout)["id"], "D-001")
+
+    def test_show_reports_an_unknown_id(self) -> None:
+        result = run_vibe(self.root, "record", "show", "--id", "NOPE-001")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Unknown record", result.stdout + result.stderr)
+
+    def test_list_is_brief_by_default_and_carries_payloads_only_on_request(self) -> None:
+        # Listing every record used to dump every payload, which buries the ids a
+        # caller is actually looking for.
+        self.create("alignment", "A-001", "open")
+        brief = json.loads(run_vibe(self.root, "record", "list").stdout)
+        self.assertEqual([row["id"] for row in brief], ["A-001"])
+        self.assertNotIn("payload", brief[0])
+        full = json.loads(run_vibe(self.root, "record", "list", "--full").stdout)
+        self.assertEqual(full[0]["payload"], {"note": "bulk"})
+
+    def test_list_help_advertises_the_full_flag(self) -> None:
+        self.assertIn("--full", self.help_of("record", "list"))
 
 
 if __name__ == "__main__":

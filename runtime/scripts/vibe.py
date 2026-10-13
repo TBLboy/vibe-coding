@@ -83,8 +83,14 @@ def main() -> int:
     state_fingerprint.add_argument("--path", required=True)
     state_fingerprint.add_argument("--selector", choices=["raw-file", "text-lf", "json-field"], default="raw-file")
     state_fingerprint.add_argument("--field")
-    state_evidence = sub.add_parser("state-evidence-check")
-    state_evidence.add_argument("--file", required=True, help="UTF-8 JSON evidence record")
+    state_evidence = sub.add_parser(
+        "state-evidence-check",
+        help="compare a recorded evidence record with the bytes it covers",
+    )
+    state_evidence.add_argument("--file", help="UTF-8 JSON evidence record")
+    state_evidence.add_argument(
+        "--id", help="id of a stored evidence record (alternative to --file)"
+    )
     state_gate = sub.add_parser("state-gate")
     state_gate.add_argument("--file", required=True, help="UTF-8 JSON list of evidence records")
     state_gate.add_argument("--task")
@@ -151,15 +157,22 @@ def main() -> int:
     ledger_sub = ledger.add_subparsers(dest="ledger_action", required=True)
     ledger_sub.add_parser("export")
     ledger_sub.add_parser("verify")
+    ledger_list = ledger_sub.add_parser("list", help="print recent ledger entries")
+    ledger_list.add_argument("--limit", type=int, default=20)
     sub.add_parser("portability-status", help="report local consistency and remote durability separately")
     record = sub.add_parser("record", help="manage lifecycle records")
     record_sub = record.add_subparsers(dest="record_action", required=True)
     record_show = record_sub.add_parser("show", help="read one structured record")
-    record_show.add_argument("--kind", required=True)
+    record_show.add_argument("--kind", help="record kind; inferred from the id when omitted")
     record_show.add_argument("--id", required=True)
     record_list = record_sub.add_parser("list", help="list persisted records")
     record_list.add_argument("--kind")
     record_list.add_argument("--limit", type=int, default=50)
+    record_list.add_argument(
+        "--full",
+        action="store_true",
+        help="include each record's payload (default: a kind/id/title/status projection)",
+    )
     record_links = record_sub.add_parser("links", help="read record references")
     record_links.add_argument("--kind")
     record_links.add_argument("--id")
@@ -183,7 +196,21 @@ def main() -> int:
     record_link.add_argument("--to-id", required=True)
     evidence = sub.add_parser("evidence", help="manage transactional evidence")
     evidence_sub = evidence.add_subparsers(dest="evidence_action", required=True)
-    evidence_record = evidence_sub.add_parser("record")
+    evidence_record = evidence_sub.add_parser(
+        "record",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""JSON shapes (each flag also accepts @file to read the JSON from disk):
+  --covers           {"files": [path, ...], "requirements": [id, ...], "tasks": [id, ...]}
+  --version-binding  {"git_commit": text|null, "diff_hash": text|null,
+                      "file_hashes": {path: sha256}}
+
+  --status is the historical result: candidate | valid | failed | stale | superseded | invalid.
+  Applicability is derived from the covered bytes and is never written here.
+
+Example:
+  vibe evidence record --id E-1 --kind test --subject 'unit tests' --status valid --task-id T-1 --covers '{"files": ["a.py"], "tasks": ["T-1"]}'
+""",
+    )
     evidence_record.add_argument("--id", required=True)
     evidence_record.add_argument("--kind", required=True)
     evidence_record.add_argument("--subject", required=True)
@@ -305,8 +332,14 @@ def main() -> int:
         elif args.command == "state-fingerprint":
             result = fingerprint_file(args.path, args.selector, args.field)
         elif args.command == "state-evidence-check":
-            with Path(args.file).open(encoding="utf-8") as stream:
-                result = applicability(json.load(stream), root)
+            if (args.file is None) == (args.id is None):
+                raise ValueError("pass exactly one of --file or --id")
+            if args.id is not None:
+                store = open_store(root, heal=True)
+                result = store.evidence_applicability(root, store.get_evidence(args.id))
+            else:
+                with Path(args.file).open(encoding="utf-8") as stream:
+                    result = applicability(json.load(stream), root)
         elif args.command == "state-gate":
             with Path(args.file).open(encoding="utf-8") as stream:
                 result = evidence_gate(json.load(stream), root, args.task, None, args.risk_class)
@@ -389,6 +422,23 @@ def main() -> int:
                 store = open_store(root)
                 store.reconcile_with_ledger()
                 result = export_ledger(store)
+            elif args.ledger_action == "list":
+                from state_ledger import ledger_path, read_ledger
+
+                if not 1 <= args.limit <= 100:
+                    raise ValueError("limit must be between 1 and 100")
+                rows = read_ledger(ledger_path(root))
+                result = {
+                    "count": len(rows),
+                    "entries": [
+                        {
+                            "created_at": row.get("created_at"),
+                            "action": row.get("action"),
+                            "local_sequence": row.get("local_sequence"),
+                        }
+                        for row in rows[-args.limit:]
+                    ],
+                }
             else:
                 result = verify_ledger(root)
         elif args.command == "portability-status":
@@ -401,13 +451,25 @@ def main() -> int:
             if args.record_action in ("show", "list", "links"):
                 store = open_store(root, heal=True)
                 if args.record_action == "show":
-                    result = store.get_record(args.kind, args.id)
+                    # `--kind` is optional: record ids are unique in practice, so a
+                    # caller holding only an id should not have to look the kind up.
+                    result = (
+                        store.get_record(args.kind, args.id)
+                        if args.kind
+                        else store.find_record(args.id)
+                    )
                 elif args.record_action == "links":
                     result = store.list_record_links(args.kind, args.id)
                 else:
                     if not 1 <= args.limit <= 100:
                         raise ValueError("limit must be between 1 and 100")
-                    result = store.list_records(args.kind)[:args.limit]
+                    rows = store.list_records(args.kind)[:args.limit]
+                    # The payload is the bulk of a record and rarely what a caller
+                    # listing records is after, so it stays behind an explicit flag.
+                    result = rows if args.full else [
+                        {key: value for key, value in row.items() if key != "payload"}
+                        for row in rows
+                    ]
             elif args.record_action == "create":
                 payload = {
                     "kind": args.kind, "id": args.id, "title": args.title,

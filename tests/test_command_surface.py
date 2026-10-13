@@ -58,6 +58,40 @@ class CommandSurfaceTests(unittest.TestCase):
         self.assertEqual(task["run_id"], "RUN-001")
         self.assertFalse((self.root / ".project-log/tasks/task-list.yaml").exists())
 
+    def test_ledger_list_prints_recent_entries(self) -> None:
+        # Reading the ledger used to mean exporting it or opening the JSONL by hand.
+        result = run_vibe(self.root, "ledger", "list", "--limit", "2")
+        self.assertEqual(result.returncode, 0, result.stdout)
+        payload = json.loads(result.stdout)
+        self.assertGreaterEqual(payload["count"], 2)
+        self.assertLessEqual(len(payload["entries"]), 2)
+        self.assertIn("action", payload["entries"][-1])
+
+    def test_ledger_list_rejects_an_out_of_range_limit(self) -> None:
+        result = run_vibe(self.root, "ledger", "list", "--limit", "0")
+        self.assertNotEqual(result.returncode, 0)
+
+    def test_evidence_help_documents_the_json_shapes(self) -> None:
+        # The flag help used to say only "JSON object", so the real schema had to
+        # be read out of state_store.py to write a record at all.
+        result = subprocess.run(
+            [sys.executable, str(VIBE), "evidence", "record", "--help"],
+            text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        for token in ("JSON shapes", "file_hashes", "requirements"):
+            self.assertIn(token, result.stdout)
+
+    def test_evidence_check_requires_exactly_one_source(self) -> None:
+        for arguments in (
+            ("state-evidence-check",),
+            ("state-evidence-check", "--file", "x.json", "--id", "E-001"),
+        ):
+            with self.subTest(arguments=arguments):
+                result = run_vibe(self.root, *arguments)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("exactly one of --file or --id", result.stdout)
+
     def test_task_update_records_attribution_through_the_formal_entry(self) -> None:
         result = run_vibe(
             self.root, "task", "update", "--task-id", "TASK-001",
