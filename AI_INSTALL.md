@@ -24,7 +24,8 @@ AI 必须完成：
    （`context7`、`gh_grep`、`document-loader`、`github`、`playwright`、
    `sequential-thinking`、`web-search`、`wikipedia`）合并进 `plugin`/`plugins` 与 `mcp` 段。
    可用 `--list-integrations` 查看清单与当前选择，用 `--with-plugin/--without-plugin/
-   --with-mcp/--without-mcp` 调整。
+   --with-mcp/--without-mcp` 调整。默认安装的会话 Goal 控制器带内建上限，装完必须按
+   下文《会话 Goal 插件的内建上限》处理，否则长任务会被它中途停下。
 5. 在临时项目中初始化并验证 `.project-log`。
 6. 输出安装路径、备份路径、保留的本地修改和未安装的可选能力。
 
@@ -51,6 +52,76 @@ AI 必须完成：
 原生 `task` 工具继承父会话模型，不受此影响，所以这种故障只在后台委派里出现。
 
 修改顶层 `model` 后需重启 OpenCode 才生效（配置不热加载）。
+
+## 会话 Goal 插件的内建上限（安装后必须处理）
+
+可选集成 `goal`（`@prevalentware/opencode-goal-plugin@0.1.60`）带内建上限。默认安装写入的是
+受管的**字符串**条目，插件因此使用自己的默认值，长任务会在跑到一半时被它停下：
+
+| 选项 | 插件默认值 | 到顶后的表现 |
+|---|---|---|
+| `max_auto_turns` | 25 | 累计自动续跑回合到顶，goal 变 `usageLimited`，停止续跑 |
+| `max_no_progress_turns` | 2 | 连续无进展的续跑回合到顶，暂停 |
+| `max_prompt_failures` | 3 | 续跑提示连续失败到顶，暂停 |
+| `default_token_budget` | 未设置 | 默认无 token 预算；只有 goal 显式带 `token_budget` 才 `budgetLimited` |
+| `max_goal_duration_seconds` | 未设置 | 默认无时长上限 |
+
+**`0` 不等于"无上限"。** 插件按 `positiveIntegerOrNull(v) => v > 0 ? v : null` 解析，写 `0`
+会被判为无效并**回退默认值**（例如 `max_auto_turns` 回到 25）。解除上限要写一个极大的合法整数。
+
+处理步骤（安装后执行一次，已在 `opencode 2.0.27` 上验证）：
+
+1. 把 goal 条目从字符串改成带选项的元组（配置 schema 明确支持 `["pkg", {options}]`；V2 通过
+   `setup(context).options` 把选项交给插件）：
+
+   ```json
+   "plugin": [
+     [
+       "@prevalentware/opencode-goal-plugin@0.1.60",
+       {
+         "max_auto_turns": 1000000000,
+         "max_no_progress_turns": 1000000000,
+         "max_prompt_failures": 1000000000
+       }
+     ],
+     "opencode-agent-memory"
+   ]
+   ```
+
+2. **紧接着**把该集成从安装器选择里去选择，交还给用户自有：
+
+   ```bash
+   ./runtime/opencode/install.sh update --without-plugin goal
+   ```
+
+   这一步不能省。安装器只按字符串识别受管插件（`plugin_package_name()` 对非字符串返回
+   `None`）：留着 goal 被选中时，`verify` 会因为"已选中的 goal 未被识别为已注册"报错；而不
+   报错的那条路径会再追加一条固定字符串条目，导致**同一插件被注册两次**。去选择后
+   `selected_integrations.plugins` 里不再有 `goal`，后续 `update` 不会改动这条元组。
+
+3. 使配置生效：
+
+   ```bash
+   opencode reload
+   ```
+
+   配置热加载，不必重启客户端；重载后 `/goal`、`/pause_goal`、`/resume_goal` 仍在，插件状态为
+   `active`。
+
+要确认选项真的送达了插件（排障时先做这一步）：临时加入 `"register_command": false` →
+`opencode reload` → `opencode api GET /api/command` 里 `goal` 消失；删掉该键再重载，命令恢复。
+
+其他要点：
+
+- **注入式提醒无法用配置关闭。** 插件在 `context` 钩子里每轮注入 "goal mode policy"（含"先调用
+  `get_goal`"），没有对应选项；它只读、无害。要彻底消除只能 `--without-plugin goal` 卸载该
+  插件（Project Goal 存在 `.project-log`，不受影响）。
+- **插件不会自己创建 goal。** 它没有自动创建路径，创建只来自显式工具调用；没有 goal 就不会自动
+  续跑，上表的上限也无从触发。
+- 只想去掉自动续跑、保留 `/goal` 手动控制：在选项里写 `"auto_continue": false`。两个
+  `reserveContinuation` 调用点都在 `if (!autoContinue) return;` 之后，上限因此全部不可达。
+- 要恢复插件默认上限：删掉元组里的选项（退回字符串条目）并
+  `./runtime/opencode/install.sh update --with-plugin goal`。
 
 ## Vibe Python 环境与安装流程
 
@@ -150,5 +221,8 @@ rm -rf "$TMP"
   `runtime/opencode/install.sh`。
 - 不得覆盖或删除用户已有的 `AGENTS.md` 内容、`opencode.json` 设置或 `.project-log/`。
 - 不得静默切换解释器版本，也不得在缺少 Conda 时静默使用系统 Python。
+- 不得给 `goal` 集成写入选项后仍让它留在安装器选择里——必须同时
+  `./runtime/opencode/install.sh update --without-plugin goal`，否则会重复注册或让 `verify`
+  失败。
 - 不得在源码树内创建 `.project-log/` 或临时测试产物。
 - Windows（PowerShell 5.1/7）实机矩阵尚未验证，本版支持范围为 Linux/WSL。

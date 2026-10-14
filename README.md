@@ -31,7 +31,9 @@ format 2 是唯一受支持的 Project Log 格式，format 1 的退役与历史�
 - 会话 Goal 控制面由默认启用的 `goal` 可选集成承担，固定为
   `@prevalentware/opencode-goal-plugin@0.1.60`（`/goal`、`/pause_goal`、`/resume_goal`）；
   可用 `--without-plugin goal` 停用。**Project Goal 仍是唯一完成契约**，
-  插件状态永不作为完成依据。
+  插件状态永不作为完成依据。该插件带内建上限（`max_auto_turns` 25 等，`0` 会被回退成默认值），
+  长任务会被它中途停下；解除步骤与必须同时执行的去选择操作见 `AI_INSTALL.md`
+  的《会话 Goal 插件的内建上限》。
 - 七个生命周期命令：`/vibe-start`、`/vibe-resume`、`/vibe-plan`、`/vibe-implement`、
   `/vibe-verify`、`/vibe-status`、`/vibe-retro`。
 - 逐文件三方升级，保护用户本地修改；升级冲突在写入前停止。

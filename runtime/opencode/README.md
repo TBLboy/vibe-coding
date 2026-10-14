@@ -34,10 +34,21 @@ plugin loads with status `active` and registers `/goal`, `/pause_goal` and `/res
 
 The plugin is only a session control surface. Project Goal lives in `.project-log` and is still
 the only completion contract: `vibe goal` evidence gating decides completion, and the plugin's
-own state never counts as evidence. Compaction survival, pause/resume semantics and the
-`max_auto_turns` ceiling are not yet verified. If the plugin is absent or disabled, session
-continuation falls back to explicit user instruction and must be labelled
-`serial-role-fallback`.
+own state never counts as evidence. Compaction survival and pause/resume semantics are not yet
+verified.
+
+The plugin's built-in ceilings are real on an installer-managed spec: `max_auto_turns` (`25`),
+`max_no_progress_turns` (`2`) and `max_prompt_failures` (`3`) default to values that stop a long
+run, and `0` is not a way out -- the plugin parses them with `positiveIntegerOrNull`, so `0` falls
+back to the default. They are configurable through the options tuple
+(`["@prevalentware/opencode-goal-plugin@0.1.60", { ... }]`); option delivery was verified on
+`opencode 2.0.27` (setting `register_command: false` removes `/goal` from `/api/command` after
+`opencode reload`). Because the installer only recognises string specs, such an entry must then be
+handed back with `--without-plugin goal`, or `verify` fails and a second spec gets appended.
+`AI_INSTALL.md` carries the procedure.
+
+If the plugin is absent or disabled, session continuation falls back to explicit user instruction
+and must be labelled `serial-role-fallback`.
 
 ## Installation
 

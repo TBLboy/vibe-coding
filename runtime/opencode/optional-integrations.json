@@ -5,7 +5,7 @@
       "package": "@prevalentware/opencode-goal-plugin",
       "default_installed": true,
       "pinned_spec": "@prevalentware/opencode-goal-plugin@0.1.60",
-      "purpose": "Session Goal control surface (/goal, /pause_goal, /resume_goal). The global rules declare this controller, so the default install pins 0.1.60 (0.1.51 crashes against the Effect v4 that OpenCode V2 injects)."
+      "purpose": "Session Goal control surface (/goal, /pause_goal, /resume_goal). The global rules declare this controller, so the default install pins 0.1.60 (0.1.51 crashes against the Effect v4 that OpenCode V2 injects). It also ships built-in ceilings (max_auto_turns 25, max_no_progress_turns 2, max_prompt_failures 3) that stop a long run; `0` falls back to those defaults, so lifting them means writing large integers in an options tuple and then handing the entry back with --without-plugin goal (procedure in AI_INSTALL.md)."
     },
     "memory": {
       "package": "opencode-agent-memory",
