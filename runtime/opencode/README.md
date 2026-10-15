@@ -216,10 +216,23 @@ matches `git log --format=%H -1`, so they were redundant insurance rather than a
 copy of the pattern list proves nothing about whether a command is actually permitted. The test now
 pins the resolved effect of a real command instead. A command the matcher denies is a capability gap
 to report, never a reason to widen the allowlist.
-Research, onboarding, paper-reading, `business-analyst` and `workflow-distiller` roles have Bash
-fully denied and rely on built-in read/search tools or web tools. `business-analyst` and
-`workflow-distiller` may write draft records under `.project-log/**`; they cannot edit product
-code. Subagents cannot invoke other subagents.
+Research, onboarding, paper-reading, `business-analyst` and `workflow-distiller` roles carry no
+general Bash access: they rely on the built-in read/search tools or web tools. They may run directory
+inspection only — `ls`, `pwd`, `wc`, `stat` — which is content-blind (none of these can print a file's
+bytes) and, unlike `find` or `git diff --no-index`, has no flag that writes or executes. `find` is
+deliberately absent because it ships `-exec`/`-delete`/`-fprint`; anything that can print contents
+(`cat`, `head`, an interpreter) stays denied, since a shell allow would otherwise bypass the secret
+`read` denies entirely. `business-analyst` and `workflow-distiller` may write draft records under
+`.project-log/**`; they cannot edit product code. Subagents cannot invoke other subagents.
+
+Measured on 2026-10-15 for that listing allowlist: `ls`, `pwd`, `ls -R`, `wc -l` and `stat` all run,
+while `cat`, `head`, `find`, `find -exec cat`, an interpreter and `rm -rf` are all denied, and **no
+listed verb printed a file's bytes**. Note the asymmetry the same probe exposed: the shell action
+matches the command *string*, not a parsed path, so `ls /etc` succeeded — the shell allowlist is
+verb-based and carries **no** outside-the-workspace gate, unlike the file tools, which do honour
+`external_directory`. A listing verb therefore discloses filenames outside the Location (no contents).
+Keep this set content-blind: one verb that can print bytes would step around the secret `read` denies
+that the file tools still enforce.
 
 These settings are OpenCode permission policies, not an OS sandbox. The test allowlist still
 executes project test code with the reviewer's user privileges.

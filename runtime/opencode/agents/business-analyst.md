@@ -11,6 +11,16 @@ permissions:
   - { action: grep, resource: "**", effect: allow }
   - { action: skill, resource: "*", effect: allow }
   - { action: edit, resource: ".project-log/**", effect: allow }
+  # Directory inspection only. Every entry here is content-blind -- none of these commands
+  # can print a file's bytes -- and none has a flag that writes or executes, so widening the
+  # pattern cannot quietly become a content read the way `git diff --no-index` or
+  # `find -exec` can. That is also why `find` is absent: it ships -exec/-delete/-fprint.
+  # Anything that can print contents (`cat`, `head`, an interpreter) stays denied by the
+  # catch-all above, because a shell allow would otherwise bypass the secret `read` denies.
+  - { action: shell, resource: "ls*", effect: allow }
+  - { action: shell, resource: "pwd*", effect: allow }
+  - { action: shell, resource: "wc*", effect: allow }
+  - { action: shell, resource: "stat*", effect: allow }
   - { action: read, resource: "**/.env", effect: deny }
   - { action: read, resource: ".env", effect: deny }
   - { action: read, resource: "**/.env.*", effect: deny }

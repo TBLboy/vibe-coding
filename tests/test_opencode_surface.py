@@ -75,7 +75,7 @@ SESSION_GOAL_NEGATION = re.compile(
     r"没有|不存在|无内建|不得调用|不得宣称|不是唯一|待实现|未实现|no built-in|does not provide",
 )
 CLAIM_SENTENCE_BOUNDARY = re.compile(r"[\n。；;.!?]")
-READ_ONLY_BASH_DENY_ROLES = {
+READ_ONLY_BASH_LISTING_ROLES = {
     "business-analyst",
     "codebase-onboarder",
     "solution-researcher",
@@ -203,8 +203,24 @@ class OpenCodeStaticSurfaceTests(unittest.TestCase):
             for action in ("webfetch", "websearch"):
                 self.assertEqual(resolve(agent_rules(role), action, "*"), expected, f"{role}/{action}")
 
-        for role in READ_ONLY_BASH_DENY_ROLES:
-            self.assertEqual(resolve(agent_rules(role), "shell", "ls"), "deny", role)
+        # The roles with no general Bash access still inspect directories. The allow is
+        # content-blind: it must never become a way to print a file, and it must not carry
+        # a flag that writes or executes.
+        for role in READ_ONLY_BASH_LISTING_ROLES:
+            rules = agent_rules(role)
+            for command in ("ls", "ls -la", "ls -R .", "pwd", "wc -l src/app.py", "stat src/app.py"):
+                self.assertEqual(resolve(rules, "shell", command), "allow", f"{role}: {command}")
+            for command in (
+                "cat .env",
+                "cat src/app.py",
+                "head -50 src/app.py",
+                "rm -rf .",
+                "sh -c 'cat .env'",
+                "python3 -c 'print(1)'",
+                "find . -exec cat {} +",
+                "git push origin main",
+            ):
+                self.assertNotEqual(resolve(rules, "shell", command), "allow", f"{role}: {command}")
 
         for role in READ_ONLY_BASH_ALLOWLIST_ROLES:
             rules = agent_rules(role)
