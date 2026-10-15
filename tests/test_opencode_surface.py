@@ -315,17 +315,15 @@ class OpenCodeStaticSurfaceTests(unittest.TestCase):
         if os.name == "posix":
             self.assertTrue(wrapper.stat().st_mode & 0o111, "bin/vibe-python must be executable")
 
-    def test_read_only_history_forms_are_listed_explicitly(self) -> None:
-        """The two explicit history entries stay listed and stay read-only.
+    def test_read_only_history_forms_resolve_to_allow(self) -> None:
+        """History queries with flags must stay allowed through the plain `git log*` pattern.
 
-        They were added after a session reported the matcher mishandling `--flag=value`
-        history queries; a later session found the plain `git log*` already matched them,
-        so they are redundant insurance rather than a fix. Whether the allowlist is read
-        once at start-up -- and therefore cannot be re-tested inside a running session --
-        is an assumption about OpenCode that nothing in this repository verifies. The test
-        pins the entries, the read-only boundary, and that the observed-to-match
-        alternatives (`git log --oneline`, `git show`, `git rev-parse`) stay covered by the
-        plain patterns above them.
+        `git log --format=*` and `git log --pretty=*` were listed explicitly after a session
+        reported the matcher mishandling `--flag=value` queries; a later session found the
+        plain `git log*` already matched them, i.e. they were redundant insurance rather than
+        a fix, and they were removed on 2026-10-15. What is worth pinning is the resolved
+        effect of a real command, not a literal copy of the pattern list: the literal
+        assertions kept passing while saying nothing about whether the command is permitted.
         """
         for role in ("verification-reviewer", "alignment-reviewer"):
             rules = agent_rules(role)
@@ -334,10 +332,17 @@ class OpenCodeStaticSurfaceTests(unittest.TestCase):
                 for rule in rules
                 if rule["action"] == "shell" and rule["effect"] == "allow"
             }
-            self.assertIn("git log --format=*", allow, role)
-            self.assertIn("git log --pretty=*", allow, role)
             for pattern in ("git log*", "git show*", "git rev-parse*"):
                 self.assertIn(pattern, allow, role)
+            # The flag-bearing forms the removed entries used to cover must still resolve.
+            for command in (
+                "git log --format=%H -1",
+                "git log --pretty=oneline -1",
+                "git log --oneline -1",
+                "git show HEAD",
+                "git rev-parse HEAD",
+            ):
+                self.assertEqual(resolve(rules, "shell", command), "allow", f"{role}: {command}")
             # Still read-only: resolved effect, not just the literal pattern list.
             for command in ("git commit -m x", "git push origin main", "git reset --hard", "git checkout ."):
                 self.assertNotEqual(resolve(rules, "shell", command), "allow", f"{role}: {command}")

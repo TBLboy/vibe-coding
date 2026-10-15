@@ -19,10 +19,6 @@ permissions:
   - { action: shell, resource: "git show*", effect: allow }
   - { action: shell, resource: "git rev-parse*", effect: allow }
   - { action: shell, resource: "git ls-files*", effect: allow }
-  # `git log*` already matches these, but an earlier session reported the matcher
-  # mishandling `--flag=value` queries; kept as redundant-but-harmless insurance.
-  - { action: shell, resource: "git log --format=*", effect: allow }
-  - { action: shell, resource: "git log --pretty=*", effect: allow }
   - { action: shell, resource: "*verification_runner.py preflight*", effect: allow }
   - { action: shell, resource: "*verification_runner.py run*", effect: allow }
   # Read-only roles must be able to inspect the deployed control layer (TASK-140):

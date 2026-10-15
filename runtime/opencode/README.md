@@ -210,15 +210,12 @@ is why the allowlist carries no `sha256sum`: a permission entry for a command th
 on this platform advertises a capability the reviewer cannot actually use. Independent review
 fails explicitly rather than silently falling back to a possibly older `python3` on `PATH`.
 Read-only `git` inspection is allowlisted as a small set of exact forms (`git status`, `git diff`,
-`git log`, `git show`, `git rev-parse`, `git ls-files`), plus explicit `git log --format=` /
-`git log --pretty=` entries. Those two were added after an earlier session reported the matcher
-mishandling `--flag=value` history queries; in the session that added them the plain `git log*`
-already matched `git log --format=%H -1`, so they are redundant-but-harmless insurance rather than
-a fix. Whether the allowlist is read once at start-up — and therefore cannot be re-tested inside a
-running session — is an **assumption** about OpenCode, not something this repository verifies: no
-test or document here establishes the permission-loading lifecycle. The forms observed to match
-are `git log --oneline`, `git show`, `git rev-parse`; a command the matcher denies is a capability
-gap to report, never a reason to widen the allowlist.
+`git log`, `git show`, `git rev-parse`, `git ls-files`). Explicit `git log --format=` /
+`git log --pretty=` entries were added, then removed on 2026-10-15: the plain `git log*` already
+matches `git log --format=%H -1`, so they were redundant insurance rather than a fix, and a literal
+copy of the pattern list proves nothing about whether a command is actually permitted. The test now
+pins the resolved effect of a real command instead. A command the matcher denies is a capability gap
+to report, never a reason to widen the allowlist.
 Research, onboarding, paper-reading, `business-analyst` and `workflow-distiller` roles have Bash
 fully denied and rely on built-in read/search tools or web tools. `business-analyst` and
 `workflow-distiller` may write draft records under `.project-log/**`; they cannot edit product
@@ -226,6 +223,27 @@ code. Subagents cannot invoke other subagents.
 
 These settings are OpenCode permission policies, not an OS sandbox. The test allowlist still
 executes project test code with the reviewer's user privileges.
+
+A path outside the Location is a hard deny for every read-only role. That is deliberate, not an
+oversight: `ask` is not a usable middle ground here. Measured on 2026-10-15 (OpenCode desktop 2.0.29),
+relaxing a role's rule to `external_directory: ask` made a `read` of `/etc/hosts` succeed silently
+with no prompt at all, where the same call had been a hard `Permission denied: external_directory`
+before the change. An `ask` that no client ever surfaces is a privilege grant, not a gate, so a role
+that must not reach a path keeps `deny` plus explicit directory allows. Outside the Location the
+runtime answers `Permission denied: external_directory`. Configuration changes of this kind take
+effect on `opencode reload`.
+
+Two further measured properties constrain how such a boundary may be drawn:
+
+- **Only the `<dir>/*` shape works.** A literal file entry (`~/.config/opencode/AGENTS.md`) and a
+  non-boundary wildcard (`~/.config/opencode/*.md`) both stayed denied, while `~/.config/opencode/*`
+  was honoured (measured 2026-10-15). The global `AGENTS.md` sits at the config root, so opening it for
+  one role would also admit `opencode.json` — which is why the boundary is drawn at subdirectories.
+- **The boundary is the only thing protecting the secrets inside it.** `grep`'s permission resource is
+  its search *pattern*, not its search path, so the `read` deny does not constrain it. Measured
+  2026-10-15 with `external_directory: ~/.config/opencode/*` in place: `read` on `opencode.json` was
+  denied (`Permission denied: read`), while `grep` pointed at that same file returned its content.
+  Keep the secrets outside every allow-listed boundary; never widen one to cover the config root.
 
 ## Commands
 
