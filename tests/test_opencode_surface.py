@@ -570,7 +570,12 @@ class OpenCodeIsolatedLoadTests(unittest.TestCase):
         if major is None or major < 2:
             self.skipTest(f"OpenCode V2 CLI is required (found major version {major})")
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            # On macOS `TMPDIR` lives under `/var`, which is a symlink to `/private/var`,
+            # while the runtime canonicalises the config path it reports back from
+            # `/api/plugin`. Comparing a raw `mkdtemp` path with a canonical one failed on
+            # macOS only (the CI runner is Linux, where `/tmp` is not a symlink), so the
+            # whole isolated-load test was unusable as a local gate.
+            root = Path(temporary).resolve()
             config = root / "config"
             home = root / "home"
             project = root / "project"
