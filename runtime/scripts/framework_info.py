@@ -13,7 +13,7 @@ VERSION = "0.6.0"
 DEFAULT_FORMAT = 2
 # Keep in lockstep with state_store.STORE_SCHEMA and the CHECK constraint on its
 # metadata table. tests/test_release_surface.py pins the agreement.
-STORE_SCHEMA = 4
+STORE_SCHEMA = 5
 SUPPORTED_FORMATS = (2,)
 
 

@@ -62,13 +62,17 @@ def _task_lines(task: dict) -> list[str]:
 
 def _render(snapshot: dict, portability: dict | None = None) -> dict[str, bytes]:
     session = _header("Current session", snapshot)
-    active = snapshot["current_task"]
-    session.extend(["## Active run", ""])
+    active = snapshot.get("active_tasks", [])
+    session.extend(["## Active runs", ""])
     if active:
-        session.append(f"Run: {_display(snapshot['current_run']['id'])}")
-        session.extend(_task_lines(active))
+        for run, task in zip(snapshot.get("active_runs", []), active):
+            session.append(f"Run: {_display(run['id'])} (owner: {_display(run.get('owner'))}; "
+                           f"session: {_display(run.get('session_id'))}; "
+                           f"scope: {_display(run.get('write_scope'))})")
+            session.extend(_task_lines(task))
+            session.append("")
     else:
-        session.append("No active run. Waiting and handed-off tasks do not occupy the active slot.")
+        session.append("No active runs. Waiting and handed-off tasks do not occupy an active scope.")
     session.extend(["", "## Recently updated tasks (bounded)", ""])
     for task in snapshot["tasks"]:
         session.extend(_task_lines(task))
@@ -89,7 +93,13 @@ def _render(snapshot: dict, portability: dict | None = None) -> dict[str, bytes]
     handoff = _header("Handoff", snapshot)
     handoff.extend(["Completion requires future evidence gates; implemented-unverified is not done.", ""])
     if active:
-        handoff.extend(["## Active task", "", *_task_lines(active), ""])
+        handoff.extend(["## Active runs", ""])
+        for run, task in zip(snapshot.get("active_runs", []), active):
+            handoff.append(f"Run: {_display(run['id'])} (owner: {_display(run.get('owner'))}; "
+                           f"session: {_display(run.get('session_id'))}; "
+                           f"scope: {_display(run.get('write_scope'))})")
+            handoff.extend(_task_lines(task))
+            handoff.append("")
     handoff.extend(["## Recent task context (bounded; not a complete backlog)", ""])
     for task in snapshot["tasks"]:
         handoff.extend(_task_lines(task))

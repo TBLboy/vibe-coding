@@ -50,6 +50,20 @@ handed back with `--without-plugin goal`, or `verify` fails and a second spec ge
 If the plugin is absent or disabled, session continuation falls back to explicit user instruction
 and must be labelled `serial-role-fallback`.
 
+## Concurrent Project Log Runs
+
+Project Log format 2 permits independent Runs to be active together only when their declared product
+write scopes are disjoint. `vibe task begin` requires immutable `--owner`, `--session-id`, and one or
+more literal project-relative `--write-scope` roots. Equal, parent/child, or workspace-wide (`.`)
+scopes conflict; `status` exposes `active_runs`/`active_tasks` rather than silently choosing a current
+Run. The SQLite write transaction, ledger-first append and revision/generation CAS remain global and
+atomic; the Run scope governs product-write coordination, not those Project Log maintenance writes.
+
+Owner/session fields are audit attribution only: the CLI envelope has no trustworthy caller identity,
+so they are not authorization. Schema-4 Runs migrate without ledger rewrites as
+`legacy`/`legacy`/`["."]`; a still-active legacy Run deliberately remains workspace-wide until its
+existing lifecycle closes it. See `docs/USAGE.md` for the exact scope grammar and command examples.
+
 ## Installation
 
 The OpenCode client surface is installed by `scripts/opencode_installer.py`, invoked through the

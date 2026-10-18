@@ -41,7 +41,7 @@ state_store.py:1128     _goal_completion_problems 调用 _document_drift_problem
 state_store.py:1239     _document_drift_problems: SELECT kind, id, payload FROM records ORDER BY kind, id
 ```
 
-> **文档未提到的一点**：`runs` 上除 `task_id UNIQUE` 外，还有 `one_active_run` 这个**全局部分唯一索引**（同一时刻只能有一个 `active` Run）。它不阻塞 N03 的"新 Task 继承旧 Task"重开方案（旧 Run 已是 `finished`），但长期若要支持并发任务会撞上，建议在 PR-05 的 reopen 设计里显式登记。
+> **已解决（2026-10-18）**：`runs` 上曾有 `one_active_run` 全局部分唯一索引（同一时刻只能有一个 `active` Run），与互斥范围任务可以并行的编排规则冲突。store schema 5 以不可变 owner/session/path-scope binding 和范围相交检测替代它；旧 schema 4 active Run 保守迁移为全工作区 legacy scope，避免破坏历史 ledger 或在升级后静默并发。
 
 ### 1.2 既有测试基线（完整复现）
 

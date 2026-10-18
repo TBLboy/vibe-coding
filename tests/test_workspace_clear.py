@@ -68,7 +68,8 @@ class StoreTestCase(unittest.TestCase):
             "id": "TASK-002", "title": "TASK-002", "goal_id": goal_id,
             "extensions": {"risk": "normal", "implementer": "builder"},
         })
-        self.apply("task.begin", {"task_id": "TASK-002", "run_id": "RUN-002", "next_action": "work"})
+        self.apply("task.begin", {"task_id": "TASK-002", "run_id": "RUN-002", "next_action": "work",
+            "owner": "test-agent", "session_id": "test-session", "write_scope": ["."]})
 
 
 class GoalCancelTests(StoreTestCase):
@@ -132,7 +133,8 @@ class GoalCancelTests(StoreTestCase):
         self.goal_with_tasks()
         self.apply("goal.cancel", {"id": "GOAL-001", "reason": "cancelled"})
         self.assert_error("state_conflict", "task.begin",
-                          {"task_id": "TASK-001", "run_id": "RUN-009", "next_action": "work"})
+                          {"task_id": "TASK-001", "run_id": "RUN-009", "next_action": "work",
+            "owner": "test-agent", "session_id": "test-session", "write_scope": ["."]})
         self.assert_error("state_conflict", "task.resume",
                           {"task_id": "TASK-002", "next_action": "work"})
         self.assertEqual(self.store.get_task("TASK-002")["status"], "cancelled")
@@ -275,7 +277,7 @@ class StoreUpgradeTests(unittest.TestCase):
             project_id, context_id = uuid.uuid4().hex, "c" * 64
             old_ddl = [
                 statement
-                .replace("CHECK(store_schema = 4)", "CHECK(store_schema = 3)")
+                .replace("CHECK(store_schema = 5)", "CHECK(store_schema = 3)")
                 .replace("'complete','cancelled'", "'complete'")
                 for statement in _DDL
             ]
@@ -296,9 +298,9 @@ class StoreUpgradeTests(unittest.TestCase):
 
             store = Store(path, project_id, context_id)
             report = store.upgrade()
-            self.assertEqual(report, {"status": "upgraded", "store_schema": 4})
+            self.assertEqual(report, {"status": "upgraded", "store_schema": 5})
             self.assertEqual(store.get_goal("GOAL-001")["status"], "active")
-            self.assertEqual(store.upgrade(), {"status": "current", "store_schema": 4})
+            self.assertEqual(store.upgrade(), {"status": "current", "store_schema": 5})
             store.apply({
                 "schema_version": 1, "command_id": uuid.uuid4().hex,
                 "expected_revision": store.status()["revision"], "action": "goal.cancel",

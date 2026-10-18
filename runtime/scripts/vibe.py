@@ -115,6 +115,12 @@ def main() -> int:
     task_begin.add_argument("--task-id", required=True)
     task_begin.add_argument("--run-id", required=True)
     task_begin.add_argument("--next-action", required=True)
+    task_begin.add_argument("--owner", required=True, help="immutable audit owner for this Run")
+    task_begin.add_argument("--session-id", required=True, help="immutable OpenCode/session audit identifier")
+    task_begin.add_argument(
+        "--write-scope", required=True, action="append",
+        help="literal project-relative product write root; repeat for disjoint roots",
+    )
     task_update = task_sub.add_parser("update", help="record task attribution (implementer/owner)")
     task_update.add_argument("--task-id", required=True)
     task_update.add_argument("--implementer")
@@ -368,6 +374,8 @@ Example:
                 result = apply_cli_action(root, "task.begin", {
                     "task_id": args.task_id, "run_id": args.run_id,
                     "next_action": args.next_action,
+                    "owner": args.owner, "session_id": args.session_id,
+                    "write_scope": args.write_scope,
                 })
             elif args.task_action == "update":
                 payload = {"task_id": args.task_id}

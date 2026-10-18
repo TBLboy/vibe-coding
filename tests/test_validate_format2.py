@@ -41,6 +41,7 @@ class FormatTwoValidationTests(unittest.TestCase):
         self.apply("task.create", {"id": "TASK-001", "title": "Task", "goal_id": "GOAL-001"})
         self.apply("task.begin", {
             "task_id": "TASK-001", "run_id": "RUN-001", "next_action": "verify",
+            "owner": "test-agent", "session_id": "test-session", "write_scope": ["."]
         })
         self.apply("evidence.record", {
             "id": "EVID-001", "kind": "test", "subject": "task",
@@ -59,6 +60,7 @@ class FormatTwoValidationTests(unittest.TestCase):
         self.apply("task.create", {"id": "TASK-001", "title": "Task", "goal_id": "GOAL-001"})
         self.apply("task.begin", {
             "task_id": "TASK-001", "run_id": "RUN-001", "next_action": "verify",
+            "owner": "test-agent", "session_id": "test-session", "write_scope": ["."]
         })
         connection = sqlite3.connect(self.store.path)
         connection.execute(

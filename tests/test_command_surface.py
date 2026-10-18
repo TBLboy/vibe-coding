@@ -51,12 +51,54 @@ class CommandSurfaceTests(unittest.TestCase):
         result = run_vibe(
             self.root, "task", "begin", "--task-id", "TASK-001",
             "--run-id", "RUN-001", "--next-action", "implement",
+            "--owner", "builder", "--session-id", "session-test",
+            "--write-scope", "src",
         )
         self.assertEqual(result.returncode, 0, result.stdout)
         task = open_store(self.root).get_task("TASK-001")
         self.assertEqual(task["status"], "in-progress")
         self.assertEqual(task["run_id"], "RUN-001")
+        self.assertEqual(task["run"]["owner"], "builder")
+        self.assertEqual(task["run"]["session_id"], "session-test")
+        self.assertEqual(task["run"]["write_scope"], '["src"]')
         self.assertFalse((self.root / ".project-log/tasks/task-list.yaml").exists())
+
+    def test_two_cli_sessions_can_begin_disjoint_scoped_tasks(self) -> None:
+        """End-to-end regression for the reported cross-session active-Run block."""
+        store = open_store(self.root)
+        store.apply({
+            "schema_version": 1, "command_id": uuid.uuid4().hex,
+            "expected_revision": 2, "action": "task.create",
+            "payload": {"id": "TASK-002", "title": "Independent", "goal_id": "GOAL-001"},
+        })
+        first = run_vibe(
+            self.root, "task", "begin", "--task-id", "TASK-001", "--run-id", "RUN-001",
+            "--next-action", "module a", "--owner", "agent-a", "--session-id", "session-a",
+            "--write-scope", "module_a",
+        )
+        self.assertEqual(first.returncode, 0, first.stdout)
+        second = run_vibe(
+            self.root, "task", "begin", "--task-id", "TASK-002", "--run-id", "RUN-002",
+            "--next-action", "module b", "--owner", "agent-b", "--session-id", "session-b",
+            "--write-scope", "module_b",
+        )
+        self.assertEqual(second.returncode, 0, second.stdout)
+        status = json.loads(run_vibe(self.root, "status").stdout)
+        self.assertEqual({row["id"] for row in status["active_runs"]}, {"RUN-001", "RUN-002"})
+
+        store = open_store(self.root)
+        store.apply({
+            "schema_version": 1, "command_id": uuid.uuid4().hex,
+            "expected_revision": store.status()["revision"], "action": "task.create",
+            "payload": {"id": "TASK-003", "title": "Conflicts", "goal_id": "GOAL-001"},
+        })
+        conflict = run_vibe(
+            self.root, "task", "begin", "--task-id", "TASK-003", "--run-id", "RUN-003",
+            "--next-action", "nested", "--owner", "agent-c", "--session-id", "session-c",
+            "--write-scope", "module_a/nested",
+        )
+        self.assertNotEqual(conflict.returncode, 0, conflict.stdout)
+        self.assertIn("scope_conflict", conflict.stdout)
 
     def test_ledger_list_prints_recent_entries(self) -> None:
         # Reading the ledger used to mean exporting it or opening the JSONL by hand.

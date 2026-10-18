@@ -296,14 +296,15 @@ def refresh_evidence(root: Path, reason: str | None = None, changed_paths=None) 
 def compact_context(root: Path) -> str:
     store = open_store(root, heal=True)
     state = store.status(limit=5)
-    # Work in hand is the active run's task, or — when a run is not active — the latest
+    # Work in hand is the sole active run's task, or — when a run is not active — the latest
     # task while it is still open (a blocked or handed-off task is paused, not history).
     # Only genuinely finished work is shown separately, and cancelled work is never
     # presented at all: falling back to it is how a resumed session revives what a
     # workspace clear already dropped.
+    active_tasks = state.get("active_tasks", [])
     task = state.get("current_task")
     last = state.get("latest_task")
-    if task is None and last is not None and last.get("execution_state") in {
+    if task is None and not active_tasks and last is not None and last.get("execution_state") in {
         "not-started", "active", "paused",
     }:
         task = last
@@ -333,12 +334,21 @@ def compact_context(root: Path) -> str:
         f"Revision: {state['revision']}",
         f"Workspace generation: {state['workspace_generation']}",
         f"Project goal: {goal_label}",
-        f"Run status: {(state.get('current_run') or state.get('latest_run') or {}).get('status', '-')}",
-        f"Task: {task['id'] if task else '- (no active work)'} "
-        f"[{task['status'] if task else '-'}]",
-        f"Next action: {task.get('next_action') if task and task.get('next_action') else '-'}",
+        f"Active runs: {len(state.get('active_runs', []))}",
         "Evidence: " + ", ".join(f"{name}={counts[name]}" for name in counts),
     ]
+    if len(active_tasks) > 1:
+        lines.append("Concurrent tasks: " + "; ".join(
+            f"{item['id']} [{item['status']}] next: {item.get('next_action') or '-'}"
+            for item in active_tasks
+        ))
+    else:
+        lines.extend([
+            f"Run status: {(state.get('current_run') or state.get('latest_run') or {}).get('status', '-')}",
+            f"Task: {task['id'] if task else '- (no active work)'} "
+            f"[{task['status'] if task else '-'}]",
+            f"Next action: {task.get('next_action') if task and task.get('next_action') else '-'}",
+        ])
     if task is None and last is not None:
         lines.append(
             f"Last task: {last['id']} [{last['status']}] — finished history, not current work"

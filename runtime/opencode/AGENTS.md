@@ -46,10 +46,10 @@
    "$VIBE_PYTHON" "$VIBE_RUNTIME/scripts/vibe.py" --root <project-root> status
    "$VIBE_PYTHON" "$VIBE_RUNTIME/scripts/vibe.py" --root <project-root> context <task-id>
    ```
-   恢复 Project Goal、任务、阻塞、证据有效性、活动 Run 和精确下一步。
+   恢复 Project Goal、任务、阻塞、证据有效性、所有活动 Run 及其 owner/session/write_scope 和精确下一步。
    同时记下 `status` 的 `workspace_generation`：后续写入把它作为 `expected_generation` 传回（`state-apply` 包络的可选字段），代次与磁盘不符的写入会被拒绝，因此清空前的旧执行器无法复活旧任务或在新代次里创建新工作。
 5. 会话 Goal 与自动续跑由 `@prevalentware/opencode-goal-plugin`（固定版本 `0.1.60`）承担，由 OpenCode 安装器写入客户端配置；真实运行时已验证该插件被加载注册，且 idle 自动续跑会自行驱动后续回合。插件状态是会话控制面而非业务事实源：宣告完成前必须运行 `vibe goal` 的证据门禁。插件未安装或被禁用时，会话续跑退回显式用户指令，并标注 `serial-role-fallback`。
-6. 恢复事实状态后再行动。恢复状态不是交付：对实质性用户任务，必须继续执行到完成、明确阻塞或用户要求暂停；不得只输出恢复摘要后结束。无活动 Run 时，先建立新 Run，再执行当前用户请求。没有非琐碎任务时，先建立最小任务记录；不要无计划地修改项目。
+6. 恢复事实状态后再行动。恢复状态不是交付：对实质性用户任务，必须继续执行到完成、明确阻塞或用户要求暂停；不得只输出恢复摘要后结束。无覆盖当前任务 write_scope 的活动 Run 时，先建立带 owner/session/write_scope 的新 Run，再执行当前用户请求；没有非琐碎任务时，先建立最小任务记录；不要无计划地修改项目。
 
 ## Project Log 长文档组织
 
@@ -120,7 +120,7 @@ business-intent
 | strict | 预检复核能力、可重放证据与用户验收；绝不偷偷放宽门禁 | C 级决策、不可逆范围变更、必需能力缺失时询问 |
 
 - **澄清阶段主动对话，工程执行阶段尽量安静。** 子 Agent 只向主 Agent 报告，由主 Agent 统一面向用户沟通。
-- `status` 默认只给：当前 Goal / 当前 Task、正在做什么、阻塞、需要用户决定什么、验证/复核结果、下一步；历史与细节通过 `--all` / `history` 查看。
+- `status` 默认只给：当前 Goal / 活动 Run（可能多个）及其 Task、正在做什么、阻塞、需要用户决定什么、验证/复核结果、下一步；历史与细节通过 `--all` / `history` 查看。并发 Run 必须绑定不同 Task、不可变 owner/session 审计归属与不重叠的项目内 write scope；owner/session 不是认证。
 - 每个任务同时报告三个派生维度：`execution_state`、`verification_state`、`review_verdict`。已完成不等于已验证；`go` 裁决必须基于被评范围与适用证据，不能用"测试跑过了"或"命令被允许执行"代替。
 - 历史完成事实与当前适用性拆开：`completed_at` 不变，适用性可以变成 `stale` 并需要重新验证，不回写历史事实。
 - 失败先归因（`implementation` / `specification` / `task-decomposition` / `technical-selection` / `functional-business-logic` / `technical-business-logic` / `environment` / `verification-harness` / `unknown`），再决定是否重试；同错误同输入不得无限重试。
@@ -181,7 +181,7 @@ OpenCode 原生提供 primary/subagent、`task` 工具和按 Agent 的权限边�
 - 论文理解使用 `paper-reader`；阶段完成或经验出现重复证据时使用 `workflow-distiller`。后者只能提出候选，不能私自修改全局规则或 Skills。
 - 主 Agent 保留用户沟通、C 级决策、跨子任务整合、任务状态、`.project-log` 一致性和最终完成判断。
 - 只有工作相互独立且写入范围互斥时才并行；否则串行执行。OpenCode `task` 工具不可用时，按相同角色契约串行完成，并明确标注 `serial-role-fallback`，不得虚称已委派。
-- 每个子 Agent 必须返回：确认事实与证据、推断与假设、产物或改动、命令/测试结果、风险与未解问题、给主 Agent 的下一步建议。
+- 每个子 Agent 必须返回：确认事实与证据、推断与假设、产物或改动、命令/测试结果、风险与未解问题、给主 Agent 的下一步建议。并行 Run 必须由主 Agent 在 `task begin` 记录 owner、session_id 和项目内 write_scope；范围相交时不得并行。
 - 子 Agent 不得继续调用其他子 Agent；需要跨角色组合时由 `vibe-main` 编排。
 
 ## A / B / C 决策权限

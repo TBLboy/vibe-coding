@@ -52,7 +52,104 @@ class GateStoreTests(unittest.TestCase):
         })
         self.apply("task.begin", {
             "task_id": "TASK-001", "run_id": "RUN-001", "next_action": "verify",
+            "owner": "test-agent", "session_id": "test-session", "write_scope": ["."]
         })
+
+    @staticmethod
+    def run_binding(owner: str, session_id: str, write_scope: list[str]) -> dict:
+        return {"owner": owner, "session_id": session_id, "write_scope": write_scope}
+
+    def test_disjoint_scoped_runs_can_be_active_together(self) -> None:
+        """The former global active slot must not serialize independent work."""
+        self.apply("goal.create", {"id": "GOAL-001", "title": "Goal"})
+        for task_id in ("TASK-A", "TASK-B"):
+            self.apply("task.create", {
+                "id": task_id, "title": task_id, "goal_id": "GOAL-001",
+                "extensions": {"risk": "normal", "implementer": task_id},
+            })
+        self.apply("task.begin", {
+            "task_id": "TASK-A", "run_id": "RUN-A", "next_action": "write a",
+            **self.run_binding("agent-a", "session-a", ["module_a"]),
+        })
+        self.apply("task.begin", {
+            "task_id": "TASK-B", "run_id": "RUN-B", "next_action": "write b",
+            **self.run_binding("agent-b", "session-b", ["module_b/subdir"]),
+        })
+        state = self.store.status()
+        self.assertEqual([row["id"] for row in state["active_runs"]], ["RUN-A", "RUN-B"])
+        self.assertEqual({row["id"] for row in state["active_tasks"]}, {"TASK-A", "TASK-B"})
+        self.assertIsNone(state["current_run"], "a scalar current Run is ambiguous under concurrency")
+        self.store._audit()
+
+    def test_overlapping_scoped_runs_are_rejected_without_changing_first_run(self) -> None:
+        self.apply("goal.create", {"id": "GOAL-001", "title": "Goal"})
+        for task_id in ("TASK-A", "TASK-B"):
+            self.apply("task.create", {"id": task_id, "title": task_id, "goal_id": "GOAL-001"})
+        self.apply("task.begin", {
+            "task_id": "TASK-A", "run_id": "RUN-A", "next_action": "write a",
+            **self.run_binding("agent-a", "session-a", ["module"]),
+        })
+        self.assert_error("scope_conflict", "task.begin", {
+            "task_id": "TASK-B", "run_id": "RUN-B", "next_action": "write b",
+            **self.run_binding("agent-b", "session-b", ["module/child"]),
+        })
+        self.assertEqual(self.store.get_task("TASK-B")["status"], "ready")
+        self.assertEqual([row["id"] for row in self.store.status()["active_runs"]], ["RUN-A"])
+
+    def test_run_binding_is_required_and_scope_is_literal_project_relative(self) -> None:
+        self.apply("goal.create", {"id": "GOAL-001", "title": "Goal"})
+        self.apply("task.create", {"id": "TASK-001", "title": "Task", "goal_id": "GOAL-001"})
+        self.assert_error("invalid_input", "task.begin", {
+            "task_id": "TASK-001", "run_id": "RUN-001", "next_action": "work",
+        })
+        self.assert_error("invalid_input", "task.begin", {
+            "task_id": "TASK-001", "run_id": "RUN-001", "next_action": "work",
+            **self.run_binding("agent", "session", ["../outside"]),
+        })
+
+    def test_generated_views_render_every_active_scoped_run(self) -> None:
+        """Concurrent state must not crash or hide an active Run in generated handoff."""
+        from state_views import publish
+
+        self.apply("goal.create", {"id": "GOAL-001", "title": "Goal"})
+        for task_id, run_id, scope in (("TASK-A", "RUN-A", "module_a"), ("TASK-B", "RUN-B", "module_b")):
+            self.apply("task.create", {"id": task_id, "title": task_id, "goal_id": "GOAL-001"})
+            self.apply("task.begin", {
+                "task_id": task_id, "run_id": run_id, "next_action": "work",
+                **self.run_binding(task_id, "session-" + task_id, [scope]),
+            })
+        result = publish(self.store, self.root / "generated")
+        generation = Path(result["destination"]) / result["generation"]
+        for name in ("current-session.md", "handoff.md"):
+            content = (generation / name).read_text(encoding="utf-8")
+            self.assertIn("RUN-A", content)
+            self.assertIn("RUN-B", content)
+            self.assertIn("owner: TASK-A", content)
+            self.assertIn("session: session-TASK-A", content)
+            # Views escape Markdown metacharacters, so the scope is visible but `_`
+            # is rendered as `\_` rather than being interpreted as emphasis.
+            self.assertIn("module\\_a", content)
+            self.assertIn("module\\_b", content)
+
+    def test_resume_rechecks_scope_against_a_new_active_run(self) -> None:
+        """A paused Run cannot regain an overlapping scope after another Run starts."""
+        self.apply("goal.create", {"id": "GOAL-001", "title": "Goal"})
+        for task_id in ("TASK-A", "TASK-B"):
+            self.apply("task.create", {"id": task_id, "title": task_id, "goal_id": "GOAL-001"})
+        self.apply("task.begin", {
+            "task_id": "TASK-A", "run_id": "RUN-A", "next_action": "work",
+            **self.run_binding("agent-a", "session-a", ["module"]),
+        })
+        self.apply("task.handoff", {"task_id": "TASK-A", "next_action": "resume later"})
+        self.apply("task.begin", {
+            "task_id": "TASK-B", "run_id": "RUN-B", "next_action": "work",
+            **self.run_binding("agent-b", "session-b", ["module/child"]),
+        })
+        self.assert_error("scope_conflict", "task.resume", {
+            "task_id": "TASK-A", "next_action": "resume now",
+        })
+        self.assertEqual(self.store.get_task("TASK-A")["status"], "handed-off")
+        self.assertEqual(self.store.get_task("TASK-B")["status"], "in-progress")
 
     def test_task_finish_requires_valid_evidence_covering_the_task(self) -> None:
         self.begin_task()
@@ -112,6 +209,7 @@ class GateStoreTests(unittest.TestCase):
         })
         apply("task.begin", {
             "task_id": "TASK-001", "run_id": "RUN-001", "next_action": "verify",
+            "owner": "test-agent", "session_id": "test-session", "write_scope": ["."]
         })
         apply("evidence.record", {
             "id": "EVID-001", "kind": "test", "subject": "artifact",
@@ -173,6 +271,7 @@ class GateStoreTests(unittest.TestCase):
         })
         self.apply("task.begin", {
             "task_id": "TASK-001", "run_id": "RUN-001", "next_action": "verify",
+            "owner": "test-agent", "session_id": "test-session", "write_scope": ["."]
         })
         self.apply("evidence.record", {
             "id": "EVID-001", "kind": "test", "subject": "task",
@@ -377,6 +476,7 @@ class GateStoreTests(unittest.TestCase):
         })
         apply("task.begin", {
             "task_id": "TASK-001", "run_id": "RUN-001", "next_action": "verify",
+            "owner": "test-agent", "session_id": "test-session", "write_scope": ["."]
         })
         apply("evidence.record", {
             "id": "EVID-001", "kind": "test", "subject": "task",
@@ -511,6 +611,7 @@ class GateStoreTests(unittest.TestCase):
         })
         self.apply("task.begin", {
             "task_id": "TASK-002", "run_id": "RUN-001", "next_action": "verify",
+            "owner": "test-agent", "session_id": "test-session", "write_scope": ["."]
         })
         self.apply("evidence.record", {
             "id": "EVID-002", "kind": "test", "subject": "task",
@@ -559,6 +660,7 @@ class GateStoreTests(unittest.TestCase):
         })
         self.apply("task.begin", {
             "task_id": "TASK-001", "run_id": "RUN-001", "next_action": "verify",
+            "owner": "test-agent", "session_id": "test-session", "write_scope": ["."]
         })
         self.assertIsNotNone(self.store.status()["current_run"])
 
@@ -749,6 +851,7 @@ class GateStoreTests(unittest.TestCase):
         })
         self.apply("task.begin", {
             "task_id": "TASK-001", "run_id": "RUN-001", "next_action": "verify",
+            "owner": "test-agent", "session_id": "test-session", "write_scope": ["."]
         })
         self.apply("evidence.record", {
             "id": "EVID-001", "kind": "test", "subject": "artifact",
@@ -820,6 +923,7 @@ class GateStoreTests(unittest.TestCase):
         })
         self.apply("task.begin", {
             "task_id": "TASK-001", "run_id": "RUN-001", "next_action": "review",
+            "owner": "test-agent", "session_id": "test-session", "write_scope": ["."]
         })
         self.apply("evidence.record", {
             "id": "EVID-001", "kind": "test", "subject": "artifact",

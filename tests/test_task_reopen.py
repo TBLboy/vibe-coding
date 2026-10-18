@@ -54,6 +54,7 @@ class ReopenTests(unittest.TestCase):
         })
         self.apply("task.begin", {
             "task_id": "TASK-1", "run_id": "RUN-1", "next_action": "implement",
+            "owner": "test-agent", "session_id": "test-session", "write_scope": ["."]
         })
         self.apply("evidence.record", {
             "id": "EVID-1", "kind": "test", "subject": "first attempt",
@@ -98,6 +99,7 @@ class ReopenTests(unittest.TestCase):
         })
         self.apply("task.begin", {
             "task_id": "TASK-2", "run_id": "RUN-2", "next_action": "reimplement",
+            "owner": "test-agent", "session_id": "test-session", "write_scope": ["."]
         })
         self.assertEqual(self.store.get_task("TASK-2")["status"], "in-progress")
         # The old run is not resurrected: one Run per Task, and history is not rewritten.
@@ -164,6 +166,7 @@ class DerivedStateTests(unittest.TestCase):
         self.apply("task.create", {"id": "TASK-1", "title": "Work", "goal_id": "GOAL-1"})
         self.apply("task.begin", {
             "task_id": "TASK-1", "run_id": "RUN-1", "next_action": "implement",
+            "owner": "test-agent", "session_id": "test-session", "write_scope": ["."]
         })
         self.apply("task.handoff", {"task_id": "TASK-1", "next_action": "verify"})
 
@@ -178,6 +181,7 @@ class DerivedStateTests(unittest.TestCase):
         self.apply("task.create", {"id": "TASK-1", "title": "Work", "goal_id": "GOAL-1"})
         self.apply("task.begin", {
             "task_id": "TASK-1", "run_id": "RUN-1", "next_action": "implement",
+            "owner": "test-agent", "session_id": "test-session", "write_scope": ["."]
         })
         self.apply("evidence.record", {
             "id": "EVID-1", "kind": "test", "subject": "work",

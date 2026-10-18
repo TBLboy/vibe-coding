@@ -31,11 +31,11 @@ VIBE_PYTHON="${VIBE_PYTHON:-$(cat "$VIBE_CONFIG/vibe-python")}"
 "$VIBE_PYTHON" "$VIBE_RUNTIME/scripts/vibe.py" --root <project-root> status
 ```
 
-Read the Project Goal, active run, current task, valid/stale evidence, open C-level questions, limits, and exact next action before changing product files.
+Read the Project Goal, every active Run and its Task/owner/session/write-scope, valid/stale evidence, open C-level questions, limits, and exact next action before changing product files. Do not silently choose one Run when more than one is active.
 
 ## Session Continuation
 
-At the start of a turn, restore the Project Goal, active Run, task status, valid evidence, blocking questions and exact next action. Continue until the task is complete, explicitly blocked, or the user pauses.
+At the start of a turn, restore the Project Goal, all active Runs, task status, valid evidence, blocking questions and exact next action. A new Run may begin only for a different Task with a disjoint declared write scope; continue until the scoped task is complete, explicitly blocked, or the user pauses.
 
 Do not claim automatic continuation, background resumption, or a session Goal binding that the installed OpenCode version does not provide. When TASK-072 ships a session runner, this section must be updated from the actual implemented interface before use.
 

@@ -44,6 +44,7 @@ class SessionRecoveryTests(unittest.TestCase):
         self.apply("task.create", {"id": "TASK-1", "title": "Work", "goal_id": "GOAL-1"})
         self.apply("task.begin", {
             "task_id": "TASK-1", "run_id": "RUN-1", "next_action": "implement",
+            "owner": "test-agent", "session_id": "test-session", "write_scope": ["."]
         })
 
     def clear_workspace(self, reason: str = "user asked to clear") -> dict:
@@ -71,7 +72,8 @@ class SessionRecoveryTests(unittest.TestCase):
 
         restored = open_store(self.root)
         for action, payload in (
-            ("task.begin", {"task_id": "TASK-1", "run_id": "RUN-OLD", "next_action": "revive"}),
+            ("task.begin", {"task_id": "TASK-1", "run_id": "RUN-OLD", "next_action": "revive",
+            "owner": "test-agent", "session_id": "test-session", "write_scope": ["."]}),
             ("task.resume", {"task_id": "TASK-1", "next_action": "revive"}),
             ("task.finish", {"task_id": "TASK-1", "summary": "revived"}),
         ):

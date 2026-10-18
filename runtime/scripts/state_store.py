@@ -13,7 +13,8 @@ from urllib.parse import quote
 
 SCHEMA_VERSION = 1
 # 3 adds the lifecycle record/evidence/review tables of the promoted format.
-STORE_SCHEMA = 4
+# 5 replaces the global one-active-run slot with immutable, path-scoped Run bindings.
+STORE_SCHEMA = 5
 MAX_LIMIT = 100
 MAX_REQUEST_BYTES = 65536
 MAX_REVISION = 9223372036854775806
@@ -442,6 +443,65 @@ def _version_binding(value) -> str:
     return _json(value)
 
 
+def _write_scope(value) -> list[str]:
+    """Return a conservative, portable set of project-relative write roots.
+
+    A scope is deliberately a list of literal POSIX-style paths rather than globs.
+    ``.`` means the complete worktree.  The Project Log's own ledger/SQLite writes
+    are serialized transactionally and are not product-artifact scope claims.
+    """
+    if type(value) is not list or not value:
+        raise StateError("invalid_input", "write_scope must be a nonempty list of project-relative paths")
+    normalized: set[str] = set()
+    for raw in value:
+        _text(raw, "write_scope item", 1024)
+        if raw == ".":
+            normalized.add(raw)
+            continue
+        if (raw.startswith("/") or raw.endswith("/") or "\\" in raw or ":" in raw
+                or any(character in raw for character in "*?[]{}")):
+            raise StateError("invalid_input", "write_scope paths must be literal relative POSIX paths")
+        parts = raw.split("/")
+        if any(part in {"", ".", ".."} for part in parts):
+            raise StateError("invalid_input", "write_scope paths must not contain empty, . or .. segments")
+        normalized.add("/".join(parts))
+    return sorted(normalized)
+
+
+def _scope_overlaps(left: list[str], right: list[str]) -> bool:
+    """Whether two canonical path-root scope lists conservatively overlap."""
+    return any(
+        first == "." or second == "." or first == second
+        or first.startswith(second + "/") or second.startswith(first + "/")
+        for first in left for second in right
+    )
+
+
+def _run_binding(payload: dict, *, legacy: bool = False) -> tuple[str, str, str]:
+    """Validate/run-normalize a Run's immutable audit binding.
+
+    Old ledger ``task.begin`` entries did not carry these fields.  Replay gives
+    them a conservative global legacy claim, so migration preserves historic
+    bytes while never lets an old active Run silently coexist with new work.
+    """
+    fields = {"owner", "session_id", "write_scope"}
+    supplied = fields & set(payload)
+    if not supplied:
+        if legacy:
+            return "legacy", "legacy", _json(["."])
+        raise StateError(
+            "invalid_input",
+            "task.begin requires owner, session_id and write_scope; migrate legacy runs first",
+        )
+    if supplied != fields:
+        raise StateError("invalid_input", "task.begin owner, session_id and write_scope must be supplied together")
+    return (
+        _text(payload["owner"], "owner", 256),
+        _text(payload["session_id"], "session_id", 256),
+        _json(_write_scope(payload["write_scope"])),
+    )
+
+
 def _evidence_refs(value) -> str:
     if type(value) is not list or any(type(item) is not str or not item.strip() for item in value):
         raise StateError("invalid_input", "evidence_refs must be a list of nonempty strings")
@@ -481,7 +541,7 @@ def _request(envelope: dict) -> tuple[dict, str, str]:
         "task.create": ({"id", "title", "goal_id"}, {"extensions"}),
         "task.reopen": ({"task_id", "new_task_id", "reason"}, {"title", "extensions"}),
         "task.update": ({"task_id"}, {"implementer", "owner"}),
-        "task.begin": ({"task_id", "run_id", "next_action"}, set()),
+        "task.begin": ({"task_id", "run_id", "next_action"}, {"owner", "session_id", "write_scope"}),
         "task.wait": ({"task_id", "kind", "reason", "resume_when"}, {"question_ref"}),
         "task.resume": ({"task_id", "next_action"}, set()),
         "task.handoff": ({"task_id", "next_action"}, set()),
@@ -501,7 +561,9 @@ def _request(envelope: dict) -> tuple[dict, str, str]:
     if type(payload) is not dict or not required <= set(payload) or set(payload) - required - optional:
         raise StateError("invalid_input", f"{action} payload has missing or unknown fields")
     for key, value in payload.items():
-        if key in {"extensions", "payload", "covers", "version_binding", "scope"}:
+        if key == "write_scope":
+            _write_scope(value)
+        elif key in {"extensions", "payload", "covers", "version_binding", "scope"}:
             if key == "scope" and action == "workspace.clear":
                 # workspace.clear records the scope *name* ("active"), while
                 # review.record's scope is an object; one rule cannot cover both.
@@ -532,6 +594,11 @@ def _request(envelope: dict) -> tuple[dict, str, str]:
             raise StateError("invalid_input", "Unknown wait kind")
         if (payload["kind"] == "user") != ("question_ref" in payload):
             raise StateError("invalid_input", "question_ref is required only for user waits")
+    elif action == "task.begin":
+        # Historic schema-4 ledger entries predate scoped Runs.  Parsing must still
+        # accept them so replay/audit can preserve their bytes; live admission calls
+        # _run_binding without legacy below and rejects any new unscoped begin.
+        _run_binding(payload, legacy=True)
     elif action in {"record.create", "record.update"}:
         kind = payload["kind"]
         if action == "record.create":
@@ -585,7 +652,8 @@ _BUNDLE_COLUMNS = {
     "goals": ("id", "title", "status", "extensions", "created_sequence", "updated_sequence"),
     "tasks": ("id", "title", "goal_id", "status", "run_id", "next_action", "summary",
               "cancel_reason", "extensions", "created_sequence", "updated_sequence"),
-    "runs": ("id", "task_id", "status", "created_sequence", "updated_sequence"),
+    "runs": ("id", "task_id", "status", "owner", "session_id", "write_scope",
+             "created_sequence", "updated_sequence"),
     "blockers": ("id", "task_id", "run_id", "kind", "reason", "question_ref", "resume_when",
                  "created_sequence", "resolved_sequence"),
     "records": ("kind", "id", "title", "status", "revision", "payload",
@@ -643,7 +711,7 @@ def _validate_bundle(bundle) -> dict:
 _DDL = (
     """CREATE TABLE metadata (
         singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
-        store_schema INTEGER NOT NULL CHECK(store_schema = 4),
+        store_schema INTEGER NOT NULL CHECK(store_schema = 5),
         schema_version INTEGER NOT NULL CHECK(schema_version = 1),
         project_id TEXT NOT NULL, context_id TEXT NOT NULL,
         local_revision INTEGER NOT NULL CHECK(local_revision >= 0))""",
@@ -662,8 +730,8 @@ _DDL = (
     """CREATE TABLE runs (
         id TEXT PRIMARY KEY, task_id TEXT NOT NULL UNIQUE REFERENCES tasks(id),
         status TEXT NOT NULL CHECK(status IN ('active','waiting-user','blocked','handed-off','finished','cancelled')),
+        owner TEXT NOT NULL, session_id TEXT NOT NULL, write_scope TEXT NOT NULL,
         created_sequence INTEGER NOT NULL, updated_sequence INTEGER NOT NULL)""",
-    "CREATE UNIQUE INDEX one_active_run ON runs(status) WHERE status = 'active'",
     "CREATE INDEX recent_tasks ON tasks(updated_sequence DESC, id)",
     "CREATE INDEX tasks_goal ON tasks(goal_id)",
     """CREATE TABLE blockers (
@@ -831,6 +899,24 @@ class Store:
         """
         if not self.path.is_file():
             return {"status": "absent", "store_schema": None}
+
+        def add_run_binding_columns(connection) -> None:
+            """Add the v5 columns once; tolerate test/repair projections with them.
+
+            A genuine schema-4 store has none.  A projection rebuilt from a newer
+            DDL but deliberately labelled schema 3 in migration fixtures can already
+            have them, and an interrupted operator repair must not fail on a duplicate
+            column after the ledger has remained untouched.
+            """
+            present = {row["name"] for row in connection.execute("PRAGMA table_info(runs)")}
+            for name, statement in (
+                ("owner", "ALTER TABLE runs ADD COLUMN owner TEXT NOT NULL DEFAULT 'legacy'"),
+                ("session_id", "ALTER TABLE runs ADD COLUMN session_id TEXT NOT NULL DEFAULT 'legacy'"),
+                ("write_scope", "ALTER TABLE runs ADD COLUMN write_scope TEXT NOT NULL DEFAULT '[\".\"]'"),
+            ):
+                if name not in present:
+                    connection.execute(statement)
+
         with self._connection(write=True, foreign_keys=False) as connection:
             connection.execute("BEGIN IMMEDIATE")
             row = connection.execute(
@@ -842,15 +928,43 @@ class Store:
             if current == STORE_SCHEMA:
                 connection.rollback()
                 return {"status": "current", "store_schema": current}
-            if current != 3:
+            if current not in {3, 4}:
                 raise StateError(
                     "state_conflict",
                     f"Unsupported store schema {current}; expected {STORE_SCHEMA}",
                 )
+            if current == 4:
+                connection.execute("DROP INDEX IF EXISTS one_active_run")
+                add_run_binding_columns(connection)
+                # metadata's old CHECK is literally ``store_schema = 4``; update
+                # it by replacement, not UPDATE, or a genuine v4 store cannot move.
+                connection.execute(
+                    """CREATE TABLE metadata_upgrade (
+                        singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
+                        store_schema INTEGER NOT NULL CHECK(store_schema = 5),
+                        schema_version INTEGER NOT NULL CHECK(schema_version = 1),
+                        project_id TEXT NOT NULL, context_id TEXT NOT NULL,
+                        local_revision INTEGER NOT NULL CHECK(local_revision >= 0))"""
+                )
+                connection.execute(
+                    """INSERT INTO metadata_upgrade
+                           (singleton, store_schema, schema_version, project_id, context_id, local_revision)
+                       SELECT singleton, ?, schema_version, project_id, context_id, local_revision
+                       FROM metadata""",
+                    (STORE_SCHEMA,),
+                )
+                connection.execute("DROP TABLE metadata")
+                connection.execute("ALTER TABLE metadata_upgrade RENAME TO metadata")
+                connection.commit()
+                with self._connection() as verified:
+                    verdict = verified.execute("PRAGMA integrity_check").fetchone()[0]
+                if verdict != "ok":
+                    raise StateError("state_conflict", f"Schema upgrade left a damaged store: {verdict}")
+                return {"status": "upgraded", "store_schema": STORE_SCHEMA}
             connection.execute(
                 """CREATE TABLE metadata_upgrade (
                     singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
-                    store_schema INTEGER NOT NULL CHECK(store_schema = 4),
+                    store_schema INTEGER NOT NULL CHECK(store_schema = 5),
                     schema_version INTEGER NOT NULL CHECK(schema_version = 1),
                     project_id TEXT NOT NULL, context_id TEXT NOT NULL,
                     local_revision INTEGER NOT NULL CHECK(local_revision >= 0))"""
@@ -881,6 +995,8 @@ class Store:
             )
             connection.execute("DROP TABLE goals")
             connection.execute("ALTER TABLE goals_upgrade RENAME TO goals")
+            connection.execute("DROP INDEX IF EXISTS one_active_run")
+            add_run_binding_columns(connection)
             violations = connection.execute("PRAGMA foreign_key_check").fetchall()
             if violations:
                 raise StateError(
@@ -1406,7 +1522,9 @@ class Store:
 
     def _snapshot(self, connection, limit: int) -> dict:
         metadata = self._metadata(connection)
-        active = connection.execute("SELECT * FROM runs WHERE status = 'active'").fetchone()
+        active_runs = [dict(row) for row in connection.execute(
+            "SELECT * FROM runs WHERE status = 'active' ORDER BY created_sequence, id"
+        )]
         latest = connection.execute(
             "SELECT * FROM runs ORDER BY updated_sequence DESC, id DESC LIMIT 1"
         ).fetchone()
@@ -1422,8 +1540,13 @@ class Store:
             "store_schema": metadata["store_schema"], "context_id": metadata["context_id"],
             "revision": metadata["local_revision"], "local_revision": metadata["local_revision"],
             "workspace_generation": generation,
-            "current_run": dict(active) if active else None,
-            "current_task": self._task(connection, active["task_id"]) if active else None,
+            # Keep scalar compatibility only when it is unambiguous. Callers that need
+            # an active Run must consume active_runs rather than silently selecting one.
+            "active_runs": active_runs,
+            "active_tasks": [self._task(connection, run["task_id"]) for run in active_runs],
+            "current_run": active_runs[0] if len(active_runs) == 1 else None,
+            "current_task": self._task(connection, active_runs[0]["task_id"])
+            if len(active_runs) == 1 else None,
             "latest_run": dict(latest) if latest else None,
             "latest_task": self._task(connection, latest["task_id"]) if latest else None,
             "tasks": [self._task(connection, row["id"]) for row in task_ids],
@@ -1454,9 +1577,19 @@ class Store:
                 raise StateError("state_conflict", "Linked goal must exist and be active")
 
     @staticmethod
-    def _active_slot(connection) -> None:
-        if connection.execute("SELECT id FROM runs WHERE status = 'active'").fetchone():
-            raise StateError("state_conflict", "Another run is active; wait, hand off, finish or cancel it first")
+    def _active_scope_conflict(connection, task_id: str, write_scope: str) -> None:
+        """Reject a second active claim that intersects an existing product scope."""
+        requested = _write_scope(_decode_json(write_scope, "run write_scope"))
+        rows = connection.execute(
+            "SELECT id, task_id, write_scope FROM runs WHERE status = 'active' ORDER BY created_sequence, id"
+        ).fetchall()
+        for row in rows:
+            existing = _write_scope(_decode_json(row["write_scope"], "run write_scope"))
+            if _scope_overlaps(requested, existing):
+                raise StateError(
+                    "scope_conflict",
+                    f"Active run {row['id']} for task {row['task_id']} has overlapping write_scope",
+                )
 
     @staticmethod
     def _evidence_covers_task(connection, task_id: str) -> list[dict]:
@@ -2238,16 +2371,24 @@ class Store:
         cancel_reason = task["cancel_reason"]
         if action in {"task.begin", "task.resume"}:
             self._active_goal(connection, task["goal_id"])
-            self._active_slot(connection)
+            if action == "task.begin":
+                owner, session_id, write_scope = _run_binding(payload)
+            else:
+                if task["run"] is None:
+                    raise StateError("state_conflict", "Resumable task has no run")
+                owner, session_id, write_scope = (
+                    task["run"]["owner"], task["run"]["session_id"], task["run"]["write_scope"],
+                )
+            self._active_scope_conflict(connection, task["id"], write_scope)
             task_status, run_status = "in-progress", "active"
             next_action = payload["next_action"]
             if action == "task.begin":
                 run_id = payload["run_id"]
-                connection.execute("INSERT INTO runs VALUES (?, ?, 'active', ?, ?)",
-                                   (run_id, task["id"], sequence, sequence))
+                connection.execute(
+                    "INSERT INTO runs VALUES (?, ?, 'active', ?, ?, ?, ?, ?)",
+                    (run_id, task["id"], owner, session_id, write_scope, sequence, sequence),
+                )
             else:
-                if task["run"] is None:
-                    raise StateError("state_conflict", "Resumable task has no run")
                 connection.execute(
                     "UPDATE blockers SET resolved_sequence = ? WHERE task_id = ? AND resolved_sequence IS NULL",
                     (sequence, task["id"]),
@@ -2806,7 +2947,7 @@ class Store:
                     tuple(detached[column] for column in _BUNDLE_COLUMNS["tasks"]))
             for row in translated["runs"]:
                 connection.execute(
-                    "INSERT INTO runs VALUES (?, ?, ?, ?, ?)",
+                    "INSERT INTO runs VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                     tuple(row[column] for column in _BUNDLE_COLUMNS["runs"]))
             for row in translated["tasks"]:
                 if row["run_id"] is not None:
@@ -2889,7 +3030,7 @@ class Store:
                 tuple(detached[column] for column in _BUNDLE_COLUMNS["tasks"]))
         for row in state["runs"]:
             connection.execute(
-                "INSERT INTO runs VALUES (?, ?, ?, ?, ?)",
+                "INSERT INTO runs VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 tuple(row[column] for column in _BUNDLE_COLUMNS["runs"]))
         for row in state["tasks"]:
             if row["run_id"] is not None:
@@ -3171,8 +3312,24 @@ class Store:
             orphan = connection.execute(
                 "SELECT runs.id FROM runs JOIN tasks ON tasks.id = runs.task_id WHERE tasks.run_id IS NOT runs.id LIMIT 1"
             ).fetchone()
-            active_count = connection.execute("SELECT count(*) FROM runs WHERE status = 'active'").fetchone()[0]
-            if invalid or orphan or active_count > 1:
+            active = [dict(row) for row in connection.execute(
+                "SELECT id, task_id, write_scope FROM runs WHERE status = 'active' ORDER BY id"
+            )]
+            overlapping = False
+            try:
+                for index, row in enumerate(active):
+                    scope = _write_scope(_decode_json(row["write_scope"], "run write_scope"))
+                    for other in active[index + 1:]:
+                        if _scope_overlaps(scope, _write_scope(
+                            _decode_json(other["write_scope"], "run write_scope")
+                        )):
+                            overlapping = True
+                            break
+                    if overlapping:
+                        break
+            except StateError:
+                overlapping = True
+            if invalid or orphan or overlapping:
                 raise StateError("state_conflict", "Task/run/blocker lifecycle invariant failed")
             for table in ("goals", "tasks", "runs"):
                 if connection.execute(

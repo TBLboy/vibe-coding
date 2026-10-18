@@ -103,7 +103,8 @@ class AlignSkillTests(unittest.TestCase):
         return [
             ("goal.create", {"id": "GOAL-001", "title": "Goal"}),
             ("task.create", {"id": "TASK-001", "title": "Task", "goal_id": "GOAL-001"}),
-            ("task.begin", {"task_id": "TASK-001", "run_id": "RUN-001", "next_action": "work"}),
+            ("task.begin", {"task_id": "TASK-001", "run_id": "RUN-001", "next_action": "work",
+            "owner": "test-agent", "session_id": "test-session", "write_scope": ["."]}),
             ("evidence.record", {
                 "id": "EVID-001", "kind": "test", "subject": "task", "status": "valid",
                 "task_id": "TASK-001", "covers": {"tasks": ["TASK-001"]},

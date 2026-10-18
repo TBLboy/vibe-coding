@@ -69,6 +69,7 @@ class GoldenReplayTests(unittest.TestCase):
         self.apply("task.update", {"task_id": "TASK-001", "implementer": "agent"})
         self.apply("task.begin", {
             "task_id": "TASK-001", "run_id": "RUN-001", "next_action": "write reducer",
+            "owner": "test-agent", "session_id": "test-session", "write_scope": ["."]
         })
         self.apply("task.wait", {
             "task_id": "TASK-001", "kind": "user", "reason": "await approval",
@@ -94,12 +95,14 @@ class GoldenReplayTests(unittest.TestCase):
         self.apply("task.create", {"id": "TASK-002", "title": "Second", "goal_id": "GOAL-001"})
         self.apply("task.begin", {
             "task_id": "TASK-002", "run_id": "RUN-002", "next_action": "handoff",
+            "owner": "test-agent", "session_id": "test-session", "write_scope": ["."]
         })
         self.apply("task.handoff", {"task_id": "TASK-002", "next_action": "resume later"})
         self.apply("task.cancel", {"task_id": "TASK-002", "reason": "superseded"})
         self.apply("task.create", {"id": "TASK-003", "title": "Third", "goal_id": "GOAL-001"})
         self.apply("task.begin", {
             "task_id": "TASK-003", "run_id": "RUN-003", "next_action": "wait",
+            "owner": "test-agent", "session_id": "test-session", "write_scope": ["."]
         })
         self.apply("task.wait", {
             "task_id": "TASK-003", "kind": "dependency", "reason": "blocked upstream",

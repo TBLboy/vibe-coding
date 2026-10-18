@@ -26,6 +26,9 @@ from state_store import (
     _evidence_refs,
     _json,
     _record_payload,
+    _run_binding,
+    _scope_overlaps,
+    _write_scope,
     _version_binding,
     merge_goal_update_extensions,
 )
@@ -278,9 +281,20 @@ def reduce_ledger(entries, with_results: bool = False):
             task = _require(tasks, payload["task_id"], "task")
             run = runs.get(task["run_id"]) if task["run_id"] is not None else None
             if action == "task.begin":
+                owner, session_id, write_scope = _run_binding(payload, legacy=True)
+                requested = _write_scope(json.loads(write_scope))
+                for existing in runs.values():
+                    if existing["status"] != "active":
+                        continue
+                    if _scope_overlaps(requested, _write_scope(json.loads(existing["write_scope"]))):
+                        raise StateError(
+                            "invalid_ledger",
+                            f"task.begin overlaps active run {existing['id']} write_scope",
+                        )
                 task["run_id"] = payload["run_id"]
                 runs[payload["run_id"]] = {
                     "id": payload["run_id"], "task_id": task["id"], "status": "active",
+                    "owner": owner, "session_id": session_id, "write_scope": write_scope,
                     "created_sequence": sequence, "updated_sequence": sequence,
                 }
                 task["status"] = "in-progress"
@@ -288,6 +302,15 @@ def reduce_ledger(entries, with_results: bool = False):
             elif action == "task.resume":
                 if run is None:
                     raise StateError("invalid_ledger", f"Task {task['id']} resumed without a run")
+                requested = _write_scope(json.loads(run["write_scope"]))
+                for existing in runs.values():
+                    if existing["id"] == run["id"] or existing["status"] != "active":
+                        continue
+                    if _scope_overlaps(requested, _write_scope(json.loads(existing["write_scope"]))):
+                        raise StateError(
+                            "invalid_ledger",
+                            f"task.resume overlaps active run {existing['id']} write_scope",
+                        )
                 run["status"] = "active"
                 run["updated_sequence"] = sequence
                 task["status"] = "in-progress"

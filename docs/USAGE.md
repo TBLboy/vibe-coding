@@ -898,6 +898,30 @@ format 2 是框架**唯一支持**的格式：新建项目直接生成新格式�
 
 每次有效清空都会让工作区进入新一代（空工作区上的重复清空是幂等的，不制造新代次）。恢复会话时先看 `status` 的 `workspace_generation`：被取消的工作无法被旧执行器复活——`task.begin` 只接受 `ready`，`task.resume` 只接受暂停态，`task.finish` 只接受 `in-progress`。恢复文本 `context` 会打印当前代次。执行器可以把恢复到的代次作为**围栏令牌**随写入传回（`state-apply` 包络的可选字段 `expected_generation`）：代次与磁盘不符的写入以 `state_conflict` 被拒绝，因此清空前的旧执行器既不能复活旧任务，也不能在新代次里创建新工作；不传该字段时行为与之前一致。
 
+### 并发 Run 与写入范围
+
+Project Log format 2 不再用“全项目只能有一个 active Run”代替并发控制。每次
+`task begin` 必须带不可变的审计绑定：`--owner`、`--session-id` 和至少一个
+`--write-scope <项目内相对路径>`；后者可重复。范围是字面 POSIX 路径根，不接受
+绝对路径、`..`、反斜杠或 glob，`.` 表示整个工作区。两个 active Run 只有在不同
+Task 且所有范围均不相交时才能并存；相同路径、父子路径或 `.` 会以 `scope_conflict`
+拒绝。Project Log 自己的 SQLite/ledger 写入由事务和 revision CAS 串行化，不属于
+产品产物 scope。
+
+```bash
+vibe task begin --task-id T-A --run-id R-A --next-action '实现 A' \
+  --owner agent-a --session-id ses-a --write-scope module_a
+vibe task begin --task-id T-B --run-id R-B --next-action '实现 B' \
+  --owner agent-b --session-id ses-b --write-scope module_b
+```
+
+`owner` 和 `session-id` 当前是不可变**审计归属**，不是认证或授权：命令包没有可信
+调用方身份，不能把这两个字符串误称为访问控制。`status` 返回 `active_runs` 与
+`active_tasks`；多 Run 时旧的标量 `current_run/current_task` 为 null，调用方必须显式
+选择 Task/Run。旧 schema 4 的历史 Run 迁移为 `owner=legacy`、`session_id=legacy`、
+`write_scope=["."]`，不改写 ledger；如它仍 active，会保守地占住全工作区直到正常
+handoff、finish 或 cancel，避免升级后静默与新工作冲突。
+
 重开已终结的工作用 `task reopen --task-id OLD --new-task-id NEW --reason ...`：它新建一个 `ready` 任务并记录 `reopens` 关系，继承旧任务的 goal，而旧任务与其 Run 完全不变。这样不会覆盖执行史，也不需要让同一个任务 ID 跨多次执行。
 
 `status` 里的每个任务同时给出三个派生维度：`execution_state`（not-started/active/paused/finished/cancelled）、`verification_state`（pending/passed/failed/stale/not-applicable）和 `review_verdict`（go/conditional/no-go/missing）。它们是只读投影，`tasks.status` 与证据/复核行才是门禁读取的事实，因此“已完成但未验证”不再被一个字段掩盖。任务没有单独的 stored `complete` 终态：实现事实停在 `implemented-unverified` 且不被改写，是否完成由这三个维度实时表达——这正是“历史完成事实保留、当前适用性可变”的落地方式，`validate` 会重新评估所有 `implemented-unverified` 任务，因此被复核过的任务不会因为状态“冻结”而失去监督。

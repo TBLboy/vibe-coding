@@ -51,6 +51,7 @@ class LedgerExportTests(unittest.TestCase):
         })
         self.apply("task.begin", {
             "task_id": "TASK-001", "run_id": "RUN-001", "next_action": "work",
+            "owner": "test-agent", "session_id": "test-session", "write_scope": ["."]
         })
         self.apply("evidence.record", {
             "id": "EVID-001", "kind": "test", "subject": "task",
