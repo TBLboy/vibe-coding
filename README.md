@@ -43,7 +43,7 @@ Release status and verified boundaries: [`RELEASE_NOTES.md`](RELEASE_NOTES.md).
 2. Read [`docs/00-START-HERE.md`](docs/00-START-HERE.md).
 3. Treat [`docs/01-PRODUCT-CONTRACT.md`](docs/01-PRODUCT-CONTRACT.md) and [`docs/11-DECISIONS.md`](docs/11-DECISIONS.md) as the approved product baseline.
 4. Use the state/data/memory/prompt/test documents as implementation contracts.
-5. Do not add an installer or claim production readiness until the live OpenCode integration checklist passes.
+5. Use the conservative V2 installer only after reviewing the live integration limits below; do not claim production readiness until the full checklist passes.
 
 ## Layout
 
@@ -67,6 +67,30 @@ npm run test:core
 ```
 
 This validates the pure policy/state-machine/review-authorization reference logic. It does **not** prove that the plugin loads in your exact OpenCode build. Optional `npm run typecheck:core` requires TypeScript to be available in your environment. Follow [`docs/08-OPENCODE-INTEGRATION.md`](docs/08-OPENCODE-INTEGRATION.md) and the smoke-test matrix before installing globally.
+
+## Install V2
+
+The bundled installer owns only V2 runtime files, the two V2 Agents, the V2
+plugin entry, and its own state file. It preserves existing model, provider,
+MCP, credential, and unrelated plugin configuration. It creates a timestamped
+backup beneath the target OpenCode config directory before every write.
+
+```powershell
+python scripts/vibe_v2_installer.py install --root .
+python scripts/vibe_v2_installer.py verify --root .
+python scripts/vibe_v2_installer.py uninstall
+```
+
+Use `--opencode-home <path>` to test against an isolated profile. `uninstall`
+removes only unchanged files whose hashes still match V2 ownership; modified
+files are preserved. It restores the plugin/default-agent configuration only
+when V2 originally added or replaced it.
+
+The installer has been exercised against OpenCode 2.0.29 for plugin loading and
+mode-command registration. Provider-dependent model continuation, strict
+reviewer permission enforcement, compaction/reopen persistence, and a complete
+fresh-install/recovery matrix remain acceptance work; see
+[`VERIFICATION.md`](VERIFICATION.md).
 
 ## What this package intentionally does not include
 

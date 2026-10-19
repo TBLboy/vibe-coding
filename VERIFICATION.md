@@ -6,6 +6,8 @@ Version: 0.1.0
 ## Local executable checks
 
 - `npm run test:core` — PASS, 36/36 tests.
+- `python -m unittest scripts/test_vibe_v2_installer.py -q` — PASS, 3/3 tests: user-config preservation, post-install modified-file preservation, and repeated-install ownership/uninstall restoration.
+- One-shot `npm exec --yes --package typescript@5.9.3 -- tsc --noEmit -p tsconfig.core.json` — PASS without adding a project dependency.
 - `npm run typecheck:core` — ENVIRONMENT-BLOCKED: no local or global `tsc` is available in the current refinement environment.
 - `npm run verify` — NOT RUN: it includes the environment-blocked typecheck step.
 
@@ -38,5 +40,6 @@ The adapter was compared with the current OpenCode V2 documentation for:
 - Isolated profile loads `vibe-coding-v2` from the local plugin directory as an active plugin.
 - `/fast`, `/balanced`, and `/strict` register successfully.
 - A real isolated Session accepted and queued bare `/fast` and `/strict` commands.
-- Provider-dependent model continuation after `vibe_set_session_mode`, strict reviewer invocation/permission enforcement, persistence across compaction/reopen, and installation remain unverified.
+- Provider-dependent model continuation after `vibe_set_session_mode`, strict reviewer invocation/permission enforcement, and persistence across compaction/reopen remain unverified.
+- The current user's live control layer was installed and verified with `scripts/vibe_v2_installer.py`; V2 is active and the legacy Vibe state/runtime was removed. The full fresh-install/recovery acceptance matrix remains unverified.
 - Do not treat the package as production-ready until the remaining live matrix passes.

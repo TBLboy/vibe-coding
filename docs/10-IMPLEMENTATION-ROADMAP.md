@@ -43,7 +43,7 @@ Only after the runtime behavior is stable:
 - snapshot and preserve existing user configuration;
 - validate destination paths and symlink boundaries;
 - provide backup and rollback;
-- test install, verify, update, and uninstall on a clean profile;
+- test install, verify, repeated install/update ownership, and uninstall on a clean profile;
 - pin dependencies and document the supported OpenCode version.
 
 Exit condition: clean install and rollback acceptance passes on supported platforms.
