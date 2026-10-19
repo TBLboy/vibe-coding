@@ -1,0 +1,15 @@
+{
+  "name": "vibe-coding-v2-engineering-pack",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "A minimal, policy-driven Vibe Coding framework baseline for OpenCode V2.",
+  "engines": {
+    "node": ">=22.6.0"
+  },
+  "scripts": {
+    "test:core": "node --experimental-strip-types --test tests/*.test.ts",
+    "typecheck:core": "tsc --noEmit -p tsconfig.core.json",
+    "verify": "npm run test:core && npm run typecheck:core"
+  }
+}
