@@ -104,3 +104,8 @@ Do not call the package release-ready until:
 - The main Agent routes every managed capability Skill by an explicit trigger.
 - The installer copies Skill files, verifies their digests, and removes only unchanged managed Skill files on uninstall.
 - No migrated Skill may instruct writes to `.project-log` or create legacy Goal, Run, ledger, SQLite, standalone Evidence, or reviewer transcript objects.
+
+## V2 project archive
+
+- Archive snapshots contain only project-root `AGENTS.md` when present and `.vibe/` memory.
+- Archive publication validates SHA-256 manifest entries, never modifies source files, and rejects unsafe paths.

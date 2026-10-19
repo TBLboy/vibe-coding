@@ -31,3 +31,4 @@ These decisions are approved for the first V2 implementation. Do not reopen them
 
 These open items do not authorize adding new workflow concepts or external dependencies.
 | D-19 | User-approved V2-compatible capability Skills are installed as a managed optional pack and routed by `vibe-main` | Preserve high-value specialist techniques without restoring the legacy lifecycle architecture |
+| D-20 | V2 archive is an explicit copy-only snapshot of `.vibe/` and optional project-root `AGENTS.md` | Preserve durable context without adding a central archive service or project history mechanism |

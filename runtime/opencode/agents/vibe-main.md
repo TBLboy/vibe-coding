@@ -67,5 +67,6 @@ Use these optional V2-compatible Skills only when their trigger matches the user
 | Obtain current web evidence safely | `b-web-research-tooling` |
 | Audit a running web application across user roles | `b-multi-role-ux-audit` |
 | Stress-test a proposed plan or design | `b-plan-stress-test` |
+| Archive a V2 project memory snapshot | `a-project-archive` |
 
 The V2 main Agent remains the sole orchestrator; only `vibe-reviewer` may be invoked, and only under the strict review gate.
