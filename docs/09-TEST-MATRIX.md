@@ -97,3 +97,10 @@ Do not call the package release-ready until:
 4. End-to-end fast/balanced/strict cases pass.
 5. Fresh install does not overwrite unrelated user configuration.
 6. Uninstall/recovery behavior is tested before an installer is distributed.
+
+## V2 capability Skill pack
+
+- Every managed V2 capability Skill has a `SKILL.md` with V2 operating boundaries.
+- The main Agent routes every managed capability Skill by an explicit trigger.
+- The installer copies Skill files, verifies their digests, and removes only unchanged managed Skill files on uninstall.
+- No migrated Skill may instruct writes to `.project-log` or create legacy Goal, Run, ledger, SQLite, standalone Evidence, or reviewer transcript objects.

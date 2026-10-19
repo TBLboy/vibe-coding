@@ -36,11 +36,14 @@ class InstallerTests(unittest.TestCase):
             self.assertIn("user-plugin", installed["plugin"])
             self.assertIn(installer.PLUGIN_SPEC, installed["plugin"])
             self.assertEqual(installed["default_agent"], "vibe-main")
+            self.assertTrue((home / "skills" / "a-verification" / "SKILL.md").is_file())
+            self.assertTrue((home / "skills" / "b-opencode-model-config" / "SKILL.md").is_file())
             installer.verify(ROOT, home)
             installer.uninstall(home)
             restored = json.loads((home / "opencode.json").read_text(encoding="utf-8"))
             self.assertEqual(restored, original)
             self.assertFalse((home / installer.STATE_FILE).exists())
+            self.assertFalse((home / "skills" / "a-verification" / "SKILL.md").exists())
 
     def test_uninstall_preserves_modified_managed_file(self):
         with tempfile.TemporaryDirectory() as temporary:

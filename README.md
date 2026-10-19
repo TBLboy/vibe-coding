@@ -95,3 +95,7 @@ permission cases remain acceptance work; see [`VERIFICATION.md`](VERIFICATION.md
 ## What this package intentionally does not include
 
 No legacy upgrade/uninstall scripts, compatibility shims, old-state migration, third-party MCP definitions, provider/model configuration, Goal plugin, SQLite, operation ledger, empty evidence/review records, or large library of lifecycle slash commands. These are not missing features; they are excluded from the new baseline.
+
+## Optional V2 capability Skills
+
+The V2 installer includes a user-approved, managed capability pack under `skills/`. These Skills restore focused abilities such as codebase onboarding, clarification, architecture/specification, implementation, verification, research, code tutoring, model configuration, UX audit, and plan stress testing. `vibe-main` contains the trigger routing table. They are V2-compatible: they use `AGENTS.md`, `.vibe` memory, and optional Task JSON only; they do not recreate the old Project Log, Goal, Run, ledger, SQLite, standalone Evidence, or dynamic subagent architecture.

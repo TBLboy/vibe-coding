@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync, existsSync } from "node:fs";
+import { readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import test from "node:test";
 
@@ -51,4 +52,28 @@ test("the new pack has no legacy upgrade or migration entrypoints", () => {
   assert.equal(existsSync(resolve(root, "AI_INSTALL.md")), false);
   assert.equal(existsSync(resolve(root, "AI_UPGRADE.md")), false);
   assert.equal(existsSync(resolve(root, "runtime/core/legacy-migration.ts")), false);
+});
+
+const V2_SKILLS = [
+  "a-architecture-decision", "a-business-clarify", "a-business-code-align",
+  "a-codebase-onboarding", "a-deep-research", "a-engineering-landing",
+  "a-engineering-spec", "a-paper-reading", "a-project-context-briefing",
+  "a-requirement-baseline", "a-retrospective", "a-task-decompose", "a-verification",
+  "b-concise-communication", "b-jetson-robot-policy-deployment",
+  "b-multi-role-ux-audit", "b-opencode-model-config", "b-plan-stress-test",
+  "b-scenario-product-walkthrough", "b-skill-authoring", "b-source-code-tutoring",
+  "b-web-research-tooling",
+];
+
+test("managed capability Skills are V2-compatible and routed by the main Agent", () => {
+  const skillRoot = resolve(root, "skills");
+  assert.deepEqual(readdirSync(skillRoot).sort(), [...V2_SKILLS].sort());
+  const main = readFileSync(resolve(root, "runtime/opencode/agents/vibe-main.md"), "utf8");
+  for (const id of V2_SKILLS) {
+    const content = readFileSync(resolve(skillRoot, id, "SKILL.md"), "utf8");
+    assert.match(content, /^---\nname: /, id);
+    assert.match(content, /metadata:\n  v2: true/, id);
+    assert.match(content, /Do not create or write `\.project-log`/, id);
+    assert.match(main, new RegExp("`" + id + "`"), id);
+  }
 });

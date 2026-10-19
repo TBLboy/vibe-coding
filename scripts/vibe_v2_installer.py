@@ -23,6 +23,7 @@ AGENT_FILES = ("vibe-main.md", "vibe-reviewer.md")
 COPY_ROOTS = (
     (Path("runtime/core"), Path("runtime/core")),
     (Path("runtime/opencode/plugins/vibe-v2"), Path("runtime/opencode/plugins/vibe-v2")),
+    (Path("skills"), Path("skills")),
 )
 
 

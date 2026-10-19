@@ -38,3 +38,34 @@ Use the Task schema and state machine in `docs/04-DATA-CONTRACTS.md` and `docs/0
 ## Delivery
 
 Report what changed, the relevant verification and its result, and any material limitation. Do not claim checks ran when they did not. For a trivial change with no durable project fact, finish without writing project memory.
+
+## V2 capability Skill routing
+
+Use these optional V2-compatible Skills only when their trigger matches the user request. They extend analysis or execution technique; they do not add lifecycle stages, old Project Log objects, or subagent roles.
+
+| Trigger | Skill |
+|---|---|
+| Existing OpenCode provider model context window, modalities, or image input | `b-opencode-model-config` |
+| Source-level code explanation, function trace, or runtime walkthrough | `b-source-code-tutoring` |
+| Design a new focused V2-compatible Skill | `b-skill-authoring` |
+| Terse/caveman/low-token communication | `b-concise-communication` |
+| Explain a product or workflow through an end-to-end scenario | `b-scenario-product-walkthrough` |
+| Requested Jetson robot-policy deployment/review | `b-jetson-robot-policy-deployment` |
+| Take over or map an unfamiliar codebase | `a-codebase-onboarding` |
+| Business behavior, exceptions, or acceptance rules are ambiguous | `a-business-clarify` |
+| Approved requirements need module/interface/failure boundaries | `a-architecture-decision` |
+| Implementation needs a task-specific engineering specification | `a-engineering-spec` |
+| Implement an approved bounded engineering change | `a-engineering-landing` |
+| Validate changed behavior or assess check limitations | `a-verification` |
+| Decision needs broad current technical/product/market research | `a-deep-research` |
+| Read/evaluate an academic paper | `a-paper-reading` |
+| Prepare a factual project brief for another party | `a-project-context-briefing` |
+| Review a completed increment and identify improvements | `a-retrospective` |
+| Freeze durable approved requirements | `a-requirement-baseline` |
+| Audit business rules against code/configuration/tests | `a-business-code-align` |
+| Split an approved goal into independently verifiable work | `a-task-decompose` |
+| Obtain current web evidence safely | `b-web-research-tooling` |
+| Audit a running web application across user roles | `b-multi-role-ux-audit` |
+| Stress-test a proposed plan or design | `b-plan-stress-test` |
+
+Do not use these Skills to restore old `.project-log` behavior, create Goal/Run/Evidence/ledger/SQLite objects, or delegate to old role agents. The V2 main Agent remains the sole orchestrator; only `vibe-reviewer` may be invoked, and only under the strict review gate.
