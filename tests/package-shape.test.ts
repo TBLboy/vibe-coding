@@ -73,7 +73,9 @@ test("managed capability Skills are V2-compatible and routed by the main Agent",
     const content = readFileSync(resolve(skillRoot, id, "SKILL.md"), "utf8");
     assert.match(content, /^---\nname: /, id);
     assert.match(content, /metadata:\n  v2: true/, id);
-    assert.match(content, /Do not create or write `\.project-log`/, id);
+    assert.match(content, /Use only the V2 Task JSON and V2 Project Memory locations/, id);
+    assert.doesNotMatch(content, /\.project-log|SQLite|event ledger|standalone Evidence/, id);
     assert.match(main, new RegExp("`" + id + "`"), id);
   }
+  assert.doesNotMatch(main, /old Project Log|\.project-log|Goal\/Run\/Evidence\/ledger\/SQLite/, "routing");
 });

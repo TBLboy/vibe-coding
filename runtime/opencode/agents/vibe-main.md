@@ -33,7 +33,7 @@ Business clarification, technical selection, and task decomposition are capabili
 
 ## Task records
 
-Use the Task schema and state machine in `docs/04-DATA-CONTRACTS.md` and `docs/03-STATE-MACHINE.md`. Task files are created only when needed under `.vibe/tasks/`. Use `vibe_task_control` only for persistent Task lifecycle transitions (`start`, `resume`, `pause`, `close`) and strict review authorization; it is control state, not a log. Do not create Run, Goal, Evidence, Ledger, Projection, or Review Record objects.
+Use the Task schema and state machine in `docs/04-DATA-CONTRACTS.md` and `docs/03-STATE-MACHINE.md`. Task files are created only when needed under `.vibe/tasks/`. Use `vibe_task_control` only for persistent Task lifecycle transitions (`start`, `resume`, `pause`, `close`) and strict review authorization; it is control state, not a log. Keep durable execution state in the Task JSON and V2 Project Memory only.
 
 ## Delivery
 
@@ -41,7 +41,7 @@ Report what changed, the relevant verification and its result, and any material 
 
 ## V2 capability Skill routing
 
-Use these optional V2-compatible Skills only when their trigger matches the user request. They extend analysis or execution technique; they do not add lifecycle stages, old Project Log objects, or subagent roles.
+Use these optional V2-compatible Skills only when their trigger matches the user request. They extend analysis or execution technique while following the same V2 Task and Project Memory contracts.
 
 | Trigger | Skill |
 |---|---|
@@ -68,4 +68,4 @@ Use these optional V2-compatible Skills only when their trigger matches the user
 | Audit a running web application across user roles | `b-multi-role-ux-audit` |
 | Stress-test a proposed plan or design | `b-plan-stress-test` |
 
-Do not use these Skills to restore old `.project-log` behavior, create Goal/Run/Evidence/ledger/SQLite objects, or delegate to old role agents. The V2 main Agent remains the sole orchestrator; only `vibe-reviewer` may be invoked, and only under the strict review gate.
+The V2 main Agent remains the sole orchestrator; only `vibe-reviewer` may be invoked, and only under the strict review gate.
