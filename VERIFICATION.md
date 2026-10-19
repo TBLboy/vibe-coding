@@ -1,6 +1,6 @@
 # Verification Snapshot
 
-Date: 2026-10-18
+Date: 2026-10-19
 Version: 0.1.0
 
 ## Local executable checks
@@ -36,10 +36,9 @@ The adapter was compared with the current OpenCode V2 documentation for:
 
 ## Live acceptance boundary
 
-- Target smoke build: OpenCode 2.0.29.
-- Isolated profile loads `vibe-coding-v2` from the local plugin directory as an active plugin.
-- `/fast`, `/balanced`, and `/strict` register successfully.
-- A real isolated Session accepted and queued bare `/fast` and `/strict` commands.
-- Provider-dependent model continuation after `vibe_set_session_mode`, strict reviewer invocation/permission enforcement, and persistence across compaction/reopen remain unverified.
-- The current user's live control layer was installed and verified with `scripts/vibe_v2_installer.py`; V2 is active and the legacy Vibe state/runtime was removed. The full fresh-install/recovery acceptance matrix remains unverified.
+- OpenCode 2.0.29 isolated-profile smoke: `vibe-coding-v2` loads from the local plugin directory, and `/fast`, `/balanced`, and `/strict` register successfully.
+- Current live control layer smoke: OpenCode 2.0.32 reports `vibe-coding-v2` active; all three mode commands are registered; V2 verification passes; legacy Vibe state/runtime is absent; the pre-existing model, three providers, and eight MCP entries remain present.
+- A provider-backed `/fast` command consumed its one-time token and the main Agent confirmed the new mode without starting work.
+- A provider-backed `/strict <task>` smoke created a strict Task, passed task-record verification, obtained a one-time review permit, invoked `vibe-reviewer`, received `go`, and closed the Task. The persisted Task ends as `completed` / `complete` with `verification=passed` and `review.verdict=go`.
+- The full fresh-install/recovery matrix remains unverified. So do model-driven `/balanced`, mode persistence across compaction/reopen, cross-Session isolation, frozen-policy-after-mode-switch, and explicit negative reviewer permission cases (no permit, non-strict Task, edit/shell attempt).
 - Do not treat the package as production-ready until the remaining live matrix passes.

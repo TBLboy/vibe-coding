@@ -87,10 +87,10 @@ files are preserved. It restores the plugin/default-agent configuration only
 when V2 originally added or replaced it.
 
 The installer has been exercised against OpenCode 2.0.29 for plugin loading and
-mode-command registration. Provider-dependent model continuation, strict
-reviewer permission enforcement, compaction/reopen persistence, and a complete
-fresh-install/recovery matrix remain acceptance work; see
-[`VERIFICATION.md`](VERIFICATION.md).
+mode-command registration, and the local OpenCode 2.0.32 control layer passed
+provider-backed `/fast` and strict-review positive-path smoke tests.
+Compaction/reopen persistence, cross-Session behavior, and negative reviewer
+permission cases remain acceptance work; see [`VERIFICATION.md`](VERIFICATION.md).
 
 ## What this package intentionally does not include
 

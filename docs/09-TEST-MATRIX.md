@@ -51,7 +51,7 @@ Run `npm run test:core`.
 
 These are required before declaring the framework installable; pure core tests do not cover them.
 
-Current smoke evidence (2026-10-18, OpenCode 2.0.29, isolated profile): the local plugin directory loads as `vibe-coding-v2`, and `/fast`, `/balanced`, and `/strict` register successfully. A real Session accepted a bare `/fast` command and persisted its queued prompt. The isolated profile had no provider/model, so model-driven continuation after `vibe_set_session_mode` and strict reviewer enforcement were not claimed as passed.
+Current smoke evidence (2026-10-19): in an OpenCode 2.0.29 isolated profile, the local plugin directory loads as `vibe-coding-v2` and `/fast`, `/balanced`, and `/strict` register. In the current provider-backed OpenCode 2.0.32 control layer, a bare `/fast` consumed its one-time token and produced the required confirmation only. A `/strict <task>` smoke completed a persisted strict Task through verification, one-time review authorization, read-only `vibe-reviewer` invocation, reviewer `go`, and Task close. These are targeted compatibility observations, not a general claim for every OpenCode V2 build.
 
 | Case | Expected result |
 |---|---|
@@ -84,6 +84,8 @@ Current smoke evidence (2026-10-18, OpenCode 2.0.29, isolated profile): the loca
 | Trivial one-turn task | No Task file and no memory write |
 | Important milestone | Progress updated once with durable fact, not action log |
 | Interrupted non-trivial work | Current session + Task are enough to resume |
+
+The completed `/fast` and strict-review smoke cover their corresponding positive-path rows. All other rows, including `/balanced`, compaction/reopen, policy freezing, cross-Session isolation, and negative reviewer-permission tests, remain required acceptance work.
 
 ## C. Release gates
 

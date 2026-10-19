@@ -2,7 +2,7 @@
 
 ## Target
 
-Target OpenCode V2 using its documented plugin/agent APIs. This package does not claim compatibility with every V2 build. The current smoke-tested target is OpenCode **2.0.29**; the package is not yet a general compatibility claim for every V2 build.
+Target OpenCode V2 using its documented plugin/agent APIs. This package does not claim compatibility with every V2 build. Initial isolated-plugin smoke ran on OpenCode **2.0.29**; provider-backed `/fast` and strict-review positive-path smoke later ran on the current local OpenCode **2.0.32** service. This is not a general compatibility claim for every V2 build.
 
 Official API references checked while preparing this pack:
 

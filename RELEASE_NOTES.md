@@ -42,13 +42,12 @@ The package does **not** preserve or migrate any previous framework architecture
 - Baseline typecheck was reported as passed when the pack was prepared; the current refinement environment has no local/global `tsc`, so `npm run typecheck:core` is currently **environment-blocked** rather than claimed passed.
 - Static consistency scan performed across README, AGENTS, docs, runtime, schema, and tests.
 - OpenCode V2 API usage was compared against the current official V2 documentation for plugin definitions, command/tool transforms, storage, Session hooks, permission hooks, Agent modes, and ordered permissions.
-- Isolated live smoke target: OpenCode **2.0.29** loads `vibe-coding-v2` from the local plugin directory and registers `/fast`, `/balanced`, and `/strict`; bare `/fast` was admitted to a real Session queue. Full model-driven task continuation and reviewer enforcement remain unverified without a configured provider in the isolated profile.
+- OpenCode **2.0.29** isolated smoke loads `vibe-coding-v2` from the local plugin directory and registers `/fast`, `/balanced`, and `/strict`. A provider-backed OpenCode **2.0.32** live smoke consumed a `/fast` one-time token and completed a persisted strict Task through review authorization, `vibe-reviewer` `go`, and Task close. This is targeted smoke evidence, not a general V2 compatibility claim.
 
 ## Not yet acceptance-tested
 
-- Full model-driven command continuation after the queued mode prompt in a real target OpenCode V2 build.
-- End-to-end reviewer permission enforcement with a configured primary model and strict Task.
-- Real primary-Agent -> strict reviewer subagent invocation and one-time permit enforcement.
+- Provider-backed `/balanced` command continuation.
+- Negative reviewer-permission enforcement: no permit, wrong Task state/policy, and attempted edit or arbitrary shell action.
 - Real Session location behavior after moving/forking Sessions/worktrees.
 - Full fresh-install/recovery acceptance matrix beyond the isolated installer tests and the current live control-layer deployment.
 
@@ -58,5 +57,5 @@ Do not call this production-ready until the live smoke-test checklist in `docs/0
 
 1. Pin a concrete OpenCode V2 build and run the live smoke matrix.
 2. Fix adapter mismatches discovered by the live test without changing the product contracts unless necessary.
-3. Complete the provider-dependent strict reviewer, recovery, and compaction smoke tests.
+3. Complete the remaining negative reviewer-permission, recovery, compaction, and cross-Session smoke tests.
 4. Keep default dependencies/MCPs at zero unless a concrete requirement justifies one.
