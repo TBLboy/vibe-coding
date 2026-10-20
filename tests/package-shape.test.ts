@@ -5,6 +5,10 @@ import { resolve } from "node:path";
 import test from "node:test";
 
 const root = resolve(import.meta.dirname, "..");
+// Source files are checked out with the platform line ending (Git autocrlf on
+// Windows produces CRLF), so compare normalized text instead of assuming LF.
+const readNormalized = (relative: string) =>
+  readFileSync(resolve(root, relative), "utf8").replace(/\r\n/g, "\n");
 
 test("Task schema is valid JSON and declares only the minimal Task contract", () => {
   const schema = JSON.parse(readFileSync(resolve(root, "schemas/task.schema.json"), "utf8"));
@@ -68,9 +72,9 @@ const V2_SKILLS = [
 test("managed capability Skills are V2-compatible and routed by the main Agent", () => {
   const skillRoot = resolve(root, "skills");
   assert.deepEqual(readdirSync(skillRoot).sort(), [...V2_SKILLS].sort());
-  const main = readFileSync(resolve(root, "runtime/opencode/agents/vibe-main.md"), "utf8");
+  const main = readNormalized("runtime/opencode/agents/vibe-main.md");
   for (const id of V2_SKILLS) {
-    const content = readFileSync(resolve(skillRoot, id, "SKILL.md"), "utf8");
+    const content = readNormalized(`skills/${id}/SKILL.md`);
     assert.match(content, /^---\nname: /, id);
     assert.match(content, /metadata:\n  v2: true/, id);
     assert.match(content, /Use only the V2 Task JSON and V2 Project Memory locations/, id);

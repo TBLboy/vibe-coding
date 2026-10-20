@@ -36,8 +36,8 @@ The package does **not** preserve or migrate any previous framework architecture
 
 ## Verification performed for this release
 
-- `npm run test:core`: 36/36 tests passed.
-- `python -m unittest scripts/test_vibe_v2_installer.py -q`: 3/3 tests passed for user-config preservation, post-install modified-file preservation, and repeated-install ownership/uninstall restoration.
+- `npm run test:core`: 37/37 tests passed (line endings normalized for CRLF checkouts).
+- `python -m unittest scripts/test_vibe_v2_installer.py -q`: 4/4 tests passed for user-config preservation, post-install modified-file preservation, repeated-install ownership/uninstall restoration, and Python bytecode-cache exclusion.
 - One-shot `npm exec --yes --package typescript@5.9.3 -- tsc --noEmit -p tsconfig.core.json`: passed without adding a project dependency.
 - Baseline typecheck was reported as passed when the pack was prepared; the current refinement environment has no local/global `tsc`, so `npm run typecheck:core` is currently **environment-blocked** rather than claimed passed.
 - Static consistency scan performed across README, AGENTS, docs, runtime, schema, and tests.
