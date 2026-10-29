@@ -19,7 +19,7 @@ class InitTests(unittest.TestCase):
     def test_fresh_project_gets_full_general_rules_project_rules_and_progress(self):
         with tempfile.TemporaryDirectory() as temporary:
             project = Path(temporary)
-            result = init.initialize(project, "- 使用 `make test` 运行测试。", "team")
+            result = init.initialize(project, "- 使用 `make test` 运行测试。", "team", session_id="ses_ab/c")
             self.assertEqual(result["agents_md"]["status"], "created")
             self.assertEqual(result["progress_md"]["status"], "created")
             agents = (project / "AGENTS.md").read_text(encoding="utf-8")
@@ -29,15 +29,21 @@ class InitTests(unittest.TestCase):
             self.assertTrue((project / ".vibe/progress.md").is_file())
             self.assertTrue((project / ".vibe/docs/.gitkeep").is_file())
             self.assertEqual(result["docs_dir"]["status"], "created")
-            self.assertFalse((project / ".vibe/sessions").exists())
+            session = project / ".vibe/sessions/ses_ab%2Fc/current-session.md"
+            self.assertTrue(session.is_file())
+            self.assertEqual(result["session"]["status"], "created")
+            self.assertIn("## Next action", session.read_text(encoding="utf-8"))
+            self.assertEqual(init.initialize(project, session_id="ses_ab/c")["session"]["status"], "unchanged")
             self.assertFalse((project / ".vibe/tasks").exists())
 
     def test_empty_project_rules_leave_a_hint_not_invented_facts(self):
         with tempfile.TemporaryDirectory() as temporary:
             project = Path(temporary)
-            init.initialize(project)
+            result = init.initialize(project)
             agents = (project / "AGENTS.md").read_text(encoding="utf-8")
             self.assertIn(init.PROJECT_RULES_EMPTY_HINT, agents)
+            self.assertEqual(result["session"]["status"], "skipped")
+            self.assertFalse((project / ".vibe/sessions").exists())
 
     def test_existing_file_is_preserved_and_rerun_is_idempotent(self):
         with tempfile.TemporaryDirectory() as temporary:

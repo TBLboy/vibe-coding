@@ -13,12 +13,12 @@ Use when the user asks to initialize, set up, or bootstrap a project ("初始化
 
 ## Output
 
-Root `AGENTS.md` with two parts, plus `.vibe/progress.md` and the `.vibe/docs/` directory:
+Root `AGENTS.md` with two parts, plus `.vibe/progress.md`, the `.vibe/docs/` directory, and the current Session's recovery file:
 
 - **通用开发规则**: injected verbatim from `templates/general-rules.md` inside the managed markers `<!-- VIBE-PROJECT-GENERAL:BEGIN -->` … `<!-- VIBE-PROJECT-GENERAL:END -->`. The template is the single source of these rules; never retype or summarize them.
 - **项目级规则**: distilled by you from the project's real facts. Never invented.
 
-Do not create `.vibe/sessions/`, `.vibe/tasks/`, or `.vibe/requirements/` during initialization; V2 creates those only when real work warrants them.
+Create the current Session's `.vibe/sessions/<url-encoded-session-id>/current-session.md` (initialization is the start of work; the file records that and the next action). Do not create `.vibe/tasks/` or `.vibe/requirements/`; V2 creates those only when real work warrants them.
 
 ## Workflow
 
@@ -30,11 +30,13 @@ Do not create `.vibe/sessions/`, `.vibe/tasks/`, or `.vibe/requirements/` during
    ```bash
    python3 "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/skills/a-project-init/scripts/init_project_v2.py" \
      --target <project-root> \
+     --session-id <current-session-id> \
      [--project-rules "<distilled project rules>"] \
      [--repo-type personal|team]
    ```
 
-5. Read the resulting `AGENTS.md` and report: the `AGENTS.md` status (`created` / `injected` / `updated` / `unchanged` / `markers-unbalanced` / `markers-ambiguous`), the `progress.md` and `docs/` status, the repository type, and whether project rules were provided or left empty.
+   `--session-id` is the raw OpenCode Session ID of this Session: take it from the `Session recovery file:` path the plugin injects into your context (the segment under `.vibe/sessions/`, URL-decoded; IDs look like `ses_…`). Never invent one or reuse another Session's.
+5. Read the resulting `AGENTS.md` and report: the `AGENTS.md` status (`created` / `injected` / `updated` / `unchanged` / `markers-unbalanced` / `markers-ambiguous`), the `progress.md`, `docs/` and session-file status, the repository type, and whether project rules were provided or left empty.
 
 ## AGENTS.md update semantics
 
@@ -43,6 +45,7 @@ Do not create `.vibe/sessions/`, `.vibe/tasks/`, or `.vibe/requirements/` during
 - Existing markers: only the span between the markers is replaced; `unchanged` when already identical. Re-running after editing `templates/general-rules.md` is how general rules propagate to projects.
 - `markers-unbalanced` / `markers-ambiguous`: the file is left untouched; ask the user to fix the marker layout.
 - `.vibe/progress.md` is created from `templates/progress.md` only when missing.
+- The Session recovery file is created from `templates/current-session.md` only when missing; it follows the normal rule afterwards (delete once nothing resumable remains).
 - `.vibe/docs/` is created (with a `.gitkeep`) only when missing. It is the home for the project's miscellaneous documents — specs, research notes, briefs, meeting notes — that are not rules, progress, baselines, or Task state.
 
 ## Maintenance

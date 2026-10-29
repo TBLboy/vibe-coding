@@ -6,6 +6,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from urllib.parse import quote
 
 GENERAL_BEGIN = "<!-- VIBE-PROJECT-GENERAL:BEGIN -->"
 GENERAL_END = "<!-- VIBE-PROJECT-GENERAL:END -->"
@@ -106,6 +107,20 @@ def ensure_docs(target: Path, dry_run: bool) -> str:
     return "created"
 
 
+def ensure_session(target: Path, session_id: str | None, dry_run: bool) -> dict:
+    """Create the current Session's recovery file (URL-encoded Session ID, as the plugin injects it)."""
+    if not session_id or not session_id.strip():
+        return {"status": "skipped", "path": None}
+    encoded = quote(session_id.strip(), safe="")
+    path = target / ".vibe" / "sessions" / encoded / "current-session.md"
+    if path.exists():
+        return {"status": "unchanged", "path": str(path)}
+    if not dry_run:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(load_template("current-session.md"), encoding="utf-8")
+    return {"status": "created", "path": str(path)}
+
+
 def find_memory_root_above(target: Path) -> Path | None:
     """Return the nearest strict ancestor that already owns a `.vibe/`, if any."""
     for ancestor in target.parents:
@@ -114,7 +129,7 @@ def find_memory_root_above(target: Path) -> Path | None:
     return None
 
 
-def initialize(target: Path, project_rules: str = "", repo_type: str | None = None, dry_run: bool = False, allow_nested: bool = False) -> dict:
+def initialize(target: Path, project_rules: str = "", repo_type: str | None = None, dry_run: bool = False, allow_nested: bool = False, session_id: str | None = None) -> dict:
     target = target.expanduser().resolve()
     if not target.is_dir():
         raise FileNotFoundError(f"Project root does not exist: {target}")
@@ -128,11 +143,13 @@ def initialize(target: Path, project_rules: str = "", repo_type: str | None = No
     agents_status = ensure_agents_md(target, template, project_rules, repo_type, dry_run)
     progress_status = ensure_progress(target, dry_run)
     docs_status = ensure_docs(target, dry_run)
+    session = ensure_session(target, session_id, dry_run)
     return {
         "target": str(target),
         "agents_md": {"status": agents_status, "path": str(target / "AGENTS.md")},
         "progress_md": {"status": progress_status, "path": str(target / ".vibe" / "progress.md")},
         "docs_dir": {"status": docs_status, "path": str(target / ".vibe" / "docs")},
+        "session": session,
         "project_rules_status": "provided" if (project_rules or "").strip() else "empty",
         "repo_type": repo_type,
         "dry_run": dry_run,
@@ -150,10 +167,11 @@ def main() -> int:
     parser.add_argument("--repo-type", choices=sorted(REPO_TYPE_LABEL), default=None)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--allow-nested", action="store_true", help="permit a .vibe/ below a directory that already owns one (separate project)")
+    parser.add_argument("--session-id", default=None, help="current OpenCode Session ID; creates .vibe/sessions/<url-encoded-id>/current-session.md")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
     try:
-        result = initialize(args.target, args.project_rules, args.repo_type, args.dry_run, args.allow_nested)
+        result = initialize(args.target, args.project_rules, args.repo_type, args.dry_run, args.allow_nested, args.session_id)
     except (OSError, ValueError) as error:
         print(f"[!] {error}", file=sys.stderr)
         return 1
@@ -164,6 +182,7 @@ def main() -> int:
         print(f"AGENTS.md    : {result['agents_md']['status']} -> {result['agents_md']['path']}")
         print(f"progress.md  : {result['progress_md']['status']} -> {result['progress_md']['path']}")
         print(f"docs/        : {result['docs_dir']['status']} -> {result['docs_dir']['path']}")
+        print(f"session      : {result['session']['status']} -> {result['session']['path'] or '(no --session-id given)'}")
         print(f"Project rules: {result['project_rules_status']}")
         print(f"Repo type    : {result['repo_type'] or 'not recorded'}")
         print(f"Dry-run      : {result['dry_run']}")

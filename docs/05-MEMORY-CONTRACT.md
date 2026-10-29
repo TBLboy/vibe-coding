@@ -22,7 +22,7 @@ AGENTS.md                     Stable project rules and constraints
 .vibe/requirements/README.md   Index of baselines; exists only while at least one baseline exists
 ```
 
-Do not create an empty optional file just because the template mentions it. Initialization creates only `AGENTS.md`, `.vibe/progress.md`, and `.vibe/docs/`.
+Do not create an empty optional file just because the template mentions it. Initialization creates `AGENTS.md`, `.vibe/progress.md`, `.vibe/docs/`, and the initializing Session's own `current-session.md` (initialization is the start of work); it never pre-creates `tasks/` or `requirements/`.
 
 ## docs/
 
