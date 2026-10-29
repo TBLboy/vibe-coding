@@ -66,6 +66,36 @@ class InstallerTests(unittest.TestCase):
             restored = json.loads((home / "opencode.json").read_text(encoding="utf-8"))
             self.assertEqual(restored, original)
 
+    def test_install_skips_python_bytecode_caches(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            source = base / "source"
+            (source / "runtime" / "core").mkdir(parents=True)
+            (source / "runtime" / "core" / "mode.ts").write_text("export {};\n", encoding="utf-8")
+            plugin = source / "runtime" / "opencode" / "plugins" / "vibe-v2"
+            plugin.mkdir(parents=True)
+            (plugin / "index.ts").write_text("export {};\n", encoding="utf-8")
+            agents = source / "runtime" / "opencode" / "agents"
+            agents.mkdir(parents=True)
+            for name in installer.AGENT_FILES:
+                (agents / name).write_text("# agent\n", encoding="utf-8")
+            skill = source / "skills" / "demo"
+            cache = skill / "scripts" / "__pycache__"
+            cache.mkdir(parents=True)
+            (skill / "SKILL.md").write_text("---\nname: demo\n---\n", encoding="utf-8")
+            (skill / "scripts" / "run.py").write_text("print('ok')\n", encoding="utf-8")
+            (cache / "run.cpython-311.pyc").write_bytes(b"\x00")
+            (skill / "stray.pyc").write_bytes(b"\x00")
+
+            home = base / "opencode"
+            installer.install(source, home)
+            managed = json.loads((home / installer.STATE_FILE).read_text(encoding="utf-8"))["managed_files"]
+            self.assertIn("skills/demo/scripts/run.py", managed)
+            self.assertEqual([key for key in managed if key.endswith(".pyc")], [])
+            self.assertFalse([key for key in managed if "__pycache__" in key])
+            self.assertFalse((home / "skills" / "demo" / "scripts" / "__pycache__").exists())
+            self.assertFalse((home / "skills" / "demo" / "stray.pyc").exists())
+
 
 if __name__ == "__main__":
     unittest.main()

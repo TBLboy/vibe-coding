@@ -5,8 +5,8 @@ Version: 0.1.0
 
 ## Local executable checks
 
-- `npm run test:core` — PASS, 36/36 tests.
-- `python -m unittest scripts/test_vibe_v2_installer.py -q` — PASS, 3/3 tests: user-config preservation, post-install modified-file preservation, and repeated-install ownership/uninstall restoration.
+- `npm run test:core` — PASS, 37/37 tests (line-ending normalized, so it also passes on CRLF checkouts).
+- `python -m unittest scripts/test_vibe_v2_installer.py -q` — PASS, 4/4 tests: user-config preservation, post-install modified-file preservation, repeated-install ownership/uninstall restoration, and Python bytecode-cache exclusion.
 - One-shot `npm exec --yes --package typescript@5.9.3 -- tsc --noEmit -p tsconfig.core.json` — PASS without adding a project dependency.
 - `npm run typecheck:core` — ENVIRONMENT-BLOCKED: no local or global `tsc` is available in the current refinement environment.
 - `npm run verify` — NOT RUN: it includes the environment-blocked typecheck step.

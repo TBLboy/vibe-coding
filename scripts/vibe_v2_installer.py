@@ -25,6 +25,11 @@ COPY_ROOTS = (
     (Path("runtime/opencode/plugins/vibe-v2"), Path("runtime/opencode/plugins/vibe-v2")),
     (Path("skills"), Path("skills")),
 )
+# Running the Python tests creates bytecode caches next to the Skill scripts.
+# They are build artifacts, not framework assets, so they must never be copied
+# into a user's OpenCode configuration.
+EXCLUDED_DIRECTORY_NAMES = frozenset({"__pycache__"})
+EXCLUDED_SUFFIXES = frozenset({".pyc", ".pyo"})
 
 
 def sha256(path: Path) -> str:
@@ -75,7 +80,12 @@ def source_files(root: Path):
             if source.is_symlink():
                 raise RuntimeError(f"Symlink source is not allowed: {source}")
             if source.is_file():
-                yield source, destination_relative / source.relative_to(source_root)
+                relative = source.relative_to(source_root)
+                if EXCLUDED_DIRECTORY_NAMES.intersection(relative.parts):
+                    continue
+                if source.suffix.lower() in EXCLUDED_SUFFIXES:
+                    continue
+                yield source, destination_relative / relative
     agent_root = root / "runtime/opencode/agents"
     for name in AGENT_FILES:
         source = agent_root / name
