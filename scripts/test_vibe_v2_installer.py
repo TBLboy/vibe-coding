@@ -86,6 +86,7 @@ class InstallerTests(unittest.TestCase):
             (skill / "scripts" / "run.py").write_text("print('ok')\n", encoding="utf-8")
             (cache / "run.cpython-311.pyc").write_bytes(b"\x00")
             (skill / "stray.pyc").write_bytes(b"\x00")
+            (skill / "archive_root.conf").write_text("/tmp/kb\n", encoding="utf-8")
 
             home = base / "opencode"
             installer.install(source, home)
@@ -95,6 +96,8 @@ class InstallerTests(unittest.TestCase):
             self.assertFalse([key for key in managed if "__pycache__" in key])
             self.assertFalse((home / "skills" / "demo" / "scripts" / "__pycache__").exists())
             self.assertFalse((home / "skills" / "demo" / "stray.pyc").exists())
+            self.assertFalse((home / "skills" / "demo" / "archive_root.conf").exists())
+            self.assertNotIn("skills/demo/archive_root.conf", managed)
 
     def test_install_preserves_config_mode_and_hardens_backup(self):
         with tempfile.TemporaryDirectory() as temporary:

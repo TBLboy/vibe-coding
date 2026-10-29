@@ -20,15 +20,26 @@ Archive only these project-root inputs:
 
 The archive is a copy-only timestamped snapshot. It does not modify the source project, infer a knowledge-base location, commit to Git, push, or archive unrelated project files.
 
-## Execution
+## Archive root (remembered per machine)
 
-Ask for an explicit absolute archive root when the user has not provided one. Then run:
+The destination root is stored in the installed Skill at `~/.config/opencode/skills/a-project-archive/archive_root.conf`. The installer never writes or deletes this file, so it survives framework upgrades.
 
-```bash
-python3 ~/.config/opencode/skills/a-project-archive/scripts/archive_v2.py \
-  --project-root <project-root> \
-  --archive-root <archive-root>
-```
+1. Run the archive directly; it uses the remembered root:
+
+   ```bash
+   python3 ~/.config/opencode/skills/a-project-archive/scripts/archive_v2.py --project-root <project-root>
+   ```
+
+2. If it exits with code 3 (`No archive root is configured`), ask the user **once** for the absolute archive directory, then save it and archive in the same command:
+
+   ```bash
+   python3 ~/.config/opencode/skills/a-project-archive/scripts/archive_v2.py \
+     --set-archive-root <absolute-dir> --project-root <project-root>
+   ```
+
+   Never guess a knowledge-base location; the directory must exist and be outside the project.
+
+3. The user can later change it with `--set-archive-root`, inspect it with `--show-archive-root`, or override it for one run with `--archive-root <dir>` (not saved).
 
 The command creates `<archive-root>/<project-name>/<UTC-timestamp>/`, stages the copy first, writes `manifest.json` with SHA-256 hashes, validates the published snapshot, and prints its path.
 

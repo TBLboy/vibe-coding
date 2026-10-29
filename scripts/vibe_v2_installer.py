@@ -30,6 +30,9 @@ COPY_ROOTS = (
 # into a user's OpenCode configuration.
 EXCLUDED_DIRECTORY_NAMES = frozenset({"__pycache__"})
 EXCLUDED_SUFFIXES = frozenset({".pyc", ".pyo"})
+# Per-machine user data that a Skill stores inside its own directory (e.g. the archive root).
+# It must never be shipped from source nor treated as a managed file.
+EXCLUDED_FILE_NAMES = frozenset({"archive_root.conf"})
 
 
 def sha256(path: Path) -> str:
@@ -91,7 +94,7 @@ def source_files(root: Path):
                 relative = source.relative_to(source_root)
                 if EXCLUDED_DIRECTORY_NAMES.intersection(relative.parts):
                     continue
-                if source.suffix.lower() in EXCLUDED_SUFFIXES:
+                if source.suffix.lower() in EXCLUDED_SUFFIXES or source.name in EXCLUDED_FILE_NAMES:
                     continue
                 yield source, destination_relative / relative
     agent_root = root / "runtime/opencode/agents"

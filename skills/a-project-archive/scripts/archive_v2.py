@@ -97,17 +97,67 @@ def archive(project_root: Path, archive_root: Path, now: datetime | None = None)
         raise
 
 
+# The remembered archive root lives next to this Skill in the *installed* copy
+# (~/.config/opencode/skills/a-project-archive/archive_root.conf). It is user data:
+# the installer never ships it, so reinstall/uninstall leave it alone.
+CONFIG_FILE = Path(__file__).resolve().parent.parent / "archive_root.conf"
+EXIT_UNCONFIGURED = 3
+
+
+def load_archive_root(config_file: Path | None = None) -> Path | None:
+    config_file = config_file or CONFIG_FILE
+    try:
+        value = config_file.read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    return Path(value) if value else None
+
+
+def save_archive_root(root: Path, config_file: Path | None = None) -> Path:
+    config_file = config_file or CONFIG_FILE
+    resolved = root.expanduser()
+    if not resolved.is_absolute():
+        raise ValueError(f"archive root must be an absolute path: {root}")
+    resolved = resolved.resolve()
+    if not resolved.is_dir():
+        raise ValueError(f"archive root does not exist or is not a directory: {resolved}")
+    config_file.parent.mkdir(parents=True, exist_ok=True)
+    config_file.write_text(str(resolved) + "\n", encoding="utf-8")
+    return resolved
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--project-root", required=True, type=Path)
-    parser.add_argument("--archive-root", required=True, type=Path)
+    parser.add_argument("--project-root", type=Path, help="project to archive (required unless only setting the root)")
+    parser.add_argument("--archive-root", type=Path, help="one-off destination; overrides the remembered root without saving it")
+    parser.add_argument("--set-archive-root", type=Path, metavar="PATH", help="remember PATH as the default archive root for this machine")
+    parser.add_argument("--show-archive-root", action="store_true", help="print the remembered archive root and exit")
     args = parser.parse_args()
     try:
-        target = archive(args.project_root, args.archive_root)
+        if args.show_archive_root:
+            root = load_archive_root()
+            print(json.dumps({"archive_root": str(root) if root else None, "config": str(CONFIG_FILE)}, ensure_ascii=False))
+            return 0 if root else EXIT_UNCONFIGURED
+        if args.set_archive_root is not None:
+            saved = save_archive_root(args.set_archive_root)
+            print(json.dumps({"archive_root": str(saved), "config": str(CONFIG_FILE)}, ensure_ascii=False))
+            if args.project_root is None:
+                return 0
+        if args.project_root is None:
+            parser.error("--project-root is required to archive")
+        root = args.archive_root or load_archive_root()
+        if root is None:
+            print(
+                "[!] No archive root is configured and none was given. Ask the user for the absolute archive "
+                f"directory, then run again with --set-archive-root <path> (saved to {CONFIG_FILE}).",
+                file=sys.stderr,
+            )
+            return EXIT_UNCONFIGURED
+        target = archive(args.project_root, root)
     except (OSError, ValueError) as error:
         print(f"[!] {error}", file=sys.stderr)
         return 1
-    print(json.dumps({"archive": str(target)}, ensure_ascii=False))
+    print(json.dumps({"archive": str(target), "archive_root": str(root)}, ensure_ascii=False))
     return 0
 
 

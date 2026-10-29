@@ -58,4 +58,35 @@ class ArchiveTests(unittest.TestCase):
             self.assertNotEqual(first, second)
             self.assertTrue(first.is_dir()); self.assertTrue(second.is_dir())
 
+    def test_remembered_archive_root_is_saved_once_and_reused(self):
+        import subprocess, sys as _sys
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary); project = self.make_project(root)
+            dest = root / "kb"; dest.mkdir()
+            conf = root / "archive_root.conf"
+            env = {"PYTHONPATH": ""}
+            # monkeypatch CONFIG_FILE via a tiny wrapper so the real installed conf is never touched
+            wrapper = root / "run.py"
+            wrapper.write_text(
+                "import importlib.util, sys\n"
+                f"spec = importlib.util.spec_from_file_location('a', {str(SCRIPT)!r}); m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)\n"
+                f"m.CONFIG_FILE = __import__('pathlib').Path({str(conf)!r})\n"
+                "sys.exit(m.main())\n", encoding="utf-8")
+            run = lambda *a: subprocess.run([_sys.executable, str(wrapper), *a], capture_output=True, text=True)
+            first = run("--project-root", str(project))
+            self.assertEqual(first.returncode, archive_v2.EXIT_UNCONFIGURED)
+            self.assertIn("No archive root is configured", first.stderr)
+            self.assertFalse(conf.exists())
+            second = run("--set-archive-root", str(dest), "--project-root", str(project))
+            self.assertEqual(second.returncode, 0, second.stderr)
+            self.assertEqual(conf.read_text(encoding="utf-8").strip(), str(dest.resolve()))
+            third = run("--project-root", str(project))
+            self.assertEqual(third.returncode, 0, third.stderr)
+            self.assertTrue(json.loads(third.stdout)["archive"].startswith(str(dest.resolve())))
+            self.assertEqual(len(list((dest / "demo").iterdir())), 2)
+            bad = run("--set-archive-root", "relative/dir")
+            self.assertEqual(bad.returncode, 1)
+            missing = run("--set-archive-root", str(root / "nope"))
+            self.assertEqual(missing.returncode, 1)
+
 if __name__ == "__main__": unittest.main()

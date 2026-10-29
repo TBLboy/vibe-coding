@@ -109,6 +109,7 @@ Do not call the package release-ready until:
 
 - Archive snapshots contain only project-root `AGENTS.md` when present and `.vibe/` memory.
 - Archive publication validates SHA-256 manifest entries, never modifies source files, and rejects unsafe paths.
+- The archive root is remembered in the installed Skill (`archive_root.conf`, user data, never shipped or deleted by the installer): unconfigured → exit 3 and ask once; `--set-archive-root` validates an existing absolute directory and persists it; later runs reuse it.
 
 ## V2 project initialization (`scripts/test_v2_project_init.py`)
 
