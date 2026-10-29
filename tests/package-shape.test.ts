@@ -80,6 +80,12 @@ test("managed capability Skills are V2-compatible and routed by the main Agent",
     assert.match(content, /Use only the V2 Task JSON and V2 Project Memory locations/, id);
     assert.doesNotMatch(content, /\.project-log|SQLite|event ledger|standalone Evidence/, id);
     assert.match(main, new RegExp("`" + id + "`"), id);
+    const sections = content.split("\n").filter((line) => /^## /.test(line) && !/^## V2 operating rules/.test(line));
+    assert.ok(sections.length >= 2, `${id} must carry its full methodology, not a stub (found ${sections.length} sections)`);
+    assert.ok(content.split("\n").length >= 30, `${id} is too short to be a complete Skill`);
   }
+  assert.ok(existsSync(resolve(root, "skills/b-opencode-model-config/scripts/configure_models.py")));
+  assert.ok(existsSync(resolve(root, "skills/b-source-code-tutoring/references/teaching-template.md")));
+  assert.ok(existsSync(resolve(root, "skills/a-project-init/templates/general-rules.md")));
   assert.doesNotMatch(main, /old Project Log|\.project-log|Goal\/Run\/Evidence\/ledger\/SQLite/, "routing");
 });

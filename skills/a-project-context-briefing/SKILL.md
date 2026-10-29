@@ -1,15 +1,41 @@
 ---
 name: a-project-context-briefing
-description: "Project context briefing."
+description: "Package a self-contained, evidence-based project or problem brief for another AI, teammate, vendor, forum, or issue tracker without inventing missing context."
 license: MIT
 compatibility: opencode
 metadata:
   v2: true
 ---
 
-# Project context briefing
+# Project Context Briefing
 
-Prepare a self-contained, evidence-based brief for another agent, teammate, vendor, forum, or issue. Include confirmed facts, unknowns, constraints, reproduction, and the requested decision; never fill gaps with guesses.
+## Purpose
+
+Prepare another solver to help effectively when context is scattered across the project, logs, configuration, tests, and prior attempts. This packages a problem; it does not substitute for solving it.
+
+## Gather
+
+Read only evidence relevant to the target question: the current Session's `current-session.md`, the active Task JSON, `AGENTS.md`, `.vibe/progress.md`, business rules, architecture, exact errors, reproduction steps, affected code/configuration, environment, constraints, and attempts already made. Include full error excerpts where needed and point to larger artifacts by path.
+
+Classify every material statement as **confirmed**, **assumption**, **unknown**, or **need help**. Never fill gaps with plausible details.
+
+## Audience Adaptation
+
+Choose the appropriate form for an AI prompt, teammate handoff, GitHub issue, forum post, vendor request, or expert consultation. State the desired answer and exact decision or diagnosis needed.
+
+## Output
+
+Use this order:
+
+1. Goal and exact question.
+2. Relevant system and project background.
+3. Expected versus actual behavior.
+4. Reproduction and exact evidence.
+5. Environment, dependencies, interfaces, and constraints.
+6. Attempts and observed results.
+7. Unknowns and requested help.
+
+Return the brief as a standalone document (or save it where the user asks). If the brief supports an active Task, reference its location from the Task `nextAction` or the Session's `current-session.md`; do not paste it into project memory. Remove secrets and unnecessary personal data before sharing externally.
 
 ## V2 operating rules
 

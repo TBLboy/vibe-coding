@@ -115,3 +115,8 @@ Do not call the package release-ready until:
 - A fresh project receives the full managed general-rules block from `templates/general-rules.md`, a `## 项目级规则` section (distilled rules or an explicit empty hint), and `.vibe/progress.md`; no `.vibe/sessions/` or `.vibe/tasks/` are pre-created.
 - An existing `AGENTS.md` keeps every byte (including CRLF); the managed block is injected at the top, and a rerun is `unchanged`.
 - A template change updates only the span between the markers; malformed markers are reported and the file is left untouched.
+
+## V2 capability Skill completeness
+
+- `tests/package-shape.test.ts` requires every managed Skill to carry at least two methodology sections beyond the shared V2 operating rules and a minimum length, so a Skill cannot regress to a summary stub.
+- Restored helper assets are pinned: `b-opencode-model-config/scripts/configure_models.py` (`scripts/test_v2_configure_models.py`: defaults applied, legacy `attachment` removed, unrelated keys and file mode preserved, dry-run writes nothing, idempotent, unknown provider/model rejected) and `b-source-code-tutoring/references/teaching-template.md`.

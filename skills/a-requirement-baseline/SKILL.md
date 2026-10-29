@@ -1,15 +1,92 @@
 ---
 name: a-requirement-baseline
-description: "Requirement baseline."
+description: "Freeze a versioned business requirement baseline from clarified atomic logic, scope boundaries, constraints, assumptions, and unresolved questions before technical implementation begins."
 license: MIT
 compatibility: opencode
 metadata:
   v2: true
 ---
 
-# Requirement baseline
+# Requirement Baseline
 
-Freeze an approved requirement baseline: scope, acceptance criteria, constraints, assumptions, and open questions. Use `.vibe/requirements.md` only when the baseline needs a durable dedicated file; otherwise retain it in the Task JSON and project rules.
+## Purpose
+
+Create a temporary but explicit contract for the current increment. A baseline is not a promise that requirements will never change; it defines what is currently approved, what is excluded, and how later changes are handled.
+
+In V2 the baseline lives in `.vibe/requirements.md` — an optional file created only when durable business rules need a dedicated home. For a single bounded increment, the Task `goal` + `doneWhen` may be baseline enough; do not create the file by ritual.
+
+## Inputs
+
+- clarified business atoms and open questions (`a-business-clarify` output);
+- the previous baseline, if any (`.vibe/requirements.md`);
+- decisions that constrain the scope (`.vibe/progress.md`, Task `decisions`);
+- the active Task and current user confirmations.
+
+## Baseline Rules
+
+1. Include only business atoms relevant to the current goal.
+2. An atom may be activated when it is user-confirmed, evidence-derived without material conflict, or explicitly experimental.
+3. Inferred behavior that changes product semantics cannot become active without appropriate confirmation.
+4. Every active atom needs at least one acceptance criterion.
+5. Record in-scope and out-of-scope items separately.
+6. Record assumptions with an owner and invalidation trigger.
+7. Unresolved questions must state whether they block implementation.
+8. Baseline changes after implementation starts require impact analysis.
+
+## Workflow
+
+1. Identify the baseline goal and increment boundary.
+2. Select covered business atoms.
+3. Verify atom status, authority, acceptance criteria, and conflicts.
+4. Consolidate shared actors, constraints, quality attributes, and external dependencies.
+5. List exclusions and deferred behavior.
+6. List blocking and non-blocking unresolved questions.
+7. Create or increment a baseline version.
+8. Write the baseline only after all exit conditions are met.
+
+Do not activate a baseline while the clarification gate is open or blocked. Functional rules, current technical facts, and their conflicts must be distinguishable.
+
+## Decision authority
+
+- **A**: reversible, local, low-impact — resolve directly.
+- **B**: material but recoverable — resolve, then record it in the active Task JSON `decisions` (or `.vibe/progress.md` when it is a durable project fact).
+- **C**: product semantics, safety, data, public interfaces, cost, or irreversible architecture — ask the user; one question, with a recommendation and its consequence.
+
+## Change Control
+
+When a new statement conflicts with an active baseline:
+
+- do not overwrite the old rule in place;
+- create a change candidate;
+- identify affected atoms, tasks, code, tests, interfaces, migration, and delivery risk;
+- use the authority matrix;
+- supersede the old baseline only after the change is accepted, and keep the superseded version visible in the file.
+
+## Outputs
+
+`.vibe/requirements.md` (when warranted) must include:
+
+- ID and version;
+- status;
+- goal;
+- actors;
+- in-scope and out-of-scope items;
+- business rules with acceptance criteria;
+- constraints and quality attributes;
+- assumptions;
+- unresolved questions;
+- evidence/approval;
+- dates and supersession metadata.
+
+Point the active Task `doneWhen` at the covered acceptance criteria. When the baseline changes what the user should know about the project stage, summarize it in `.vibe/progress.md`.
+
+## Completion Gate
+
+- all in-scope atoms are active or explicitly experimental;
+- every atom has acceptance criteria;
+- no blocking conflict remains hidden;
+- scope exclusions are explicit;
+- change-control behavior is established.
 
 ## V2 operating rules
 
