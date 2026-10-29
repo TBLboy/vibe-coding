@@ -55,7 +55,7 @@ test("the new pack has no legacy upgrade or migration entrypoints", () => {
 });
 
 const V2_SKILLS = [
-  "a-architecture-decision", "a-business-clarify", "a-business-code-align", "a-project-archive",
+  "a-architecture-decision", "a-business-clarify", "a-business-code-align", "a-project-archive", "a-project-init",
   "a-codebase-onboarding", "a-deep-research", "a-engineering-landing",
   "a-engineering-spec", "a-paper-reading", "a-project-context-briefing",
   "a-requirement-baseline", "a-retrospective", "a-task-decompose", "a-verification",

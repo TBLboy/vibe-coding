@@ -45,6 +45,7 @@ Use these optional V2-compatible Skills only when their trigger matches the user
 
 | Trigger | Skill |
 |---|---|
+| Initialize, set up, or bootstrap a new project | `a-project-init` |
 | Existing OpenCode provider model context window, modalities, or image input | `b-opencode-model-config` |
 | Source-level code explanation, function trace, or runtime walkthrough | `b-source-code-tutoring` |
 | Design a new focused V2-compatible Skill | `b-skill-authoring` |

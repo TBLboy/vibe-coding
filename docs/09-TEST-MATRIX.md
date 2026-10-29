@@ -109,3 +109,9 @@ Do not call the package release-ready until:
 
 - Archive snapshots contain only project-root `AGENTS.md` when present and `.vibe/` memory.
 - Archive publication validates SHA-256 manifest entries, never modifies source files, and rejects unsafe paths.
+
+## V2 project initialization
+
+- A new project initialization Skill creates only missing V2 rules/memory files.
+- Existing project rules and memory are preserved; repeated initialization is idempotent.
+- Session recovery uses the current encoded Session ID and does not create a shared placeholder.
