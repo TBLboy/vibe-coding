@@ -95,6 +95,17 @@ def ensure_progress(target: Path, dry_run: bool) -> str:
     return "created"
 
 
+def ensure_docs(target: Path, dry_run: bool) -> str:
+    """`.vibe/docs/` holds the project's miscellaneous working documents; created at initialization."""
+    path = target / ".vibe" / "docs"
+    if path.is_dir():
+        return "unchanged"
+    if not dry_run:
+        path.mkdir(parents=True, exist_ok=True)
+        (path / ".gitkeep").touch()
+    return "created"
+
+
 def find_memory_root_above(target: Path) -> Path | None:
     """Return the nearest strict ancestor that already owns a `.vibe/`, if any."""
     for ancestor in target.parents:
@@ -116,10 +127,12 @@ def initialize(target: Path, project_rules: str = "", repo_type: str | None = No
     template = load_template("general-rules.md")
     agents_status = ensure_agents_md(target, template, project_rules, repo_type, dry_run)
     progress_status = ensure_progress(target, dry_run)
+    docs_status = ensure_docs(target, dry_run)
     return {
         "target": str(target),
         "agents_md": {"status": agents_status, "path": str(target / "AGENTS.md")},
         "progress_md": {"status": progress_status, "path": str(target / ".vibe" / "progress.md")},
+        "docs_dir": {"status": docs_status, "path": str(target / ".vibe" / "docs")},
         "project_rules_status": "provided" if (project_rules or "").strip() else "empty",
         "repo_type": repo_type,
         "dry_run": dry_run,
@@ -150,6 +163,7 @@ def main() -> int:
         print(f"Project root : {result['target']}")
         print(f"AGENTS.md    : {result['agents_md']['status']} -> {result['agents_md']['path']}")
         print(f"progress.md  : {result['progress_md']['status']} -> {result['progress_md']['path']}")
+        print(f"docs/        : {result['docs_dir']['status']} -> {result['docs_dir']['path']}")
         print(f"Project rules: {result['project_rules_status']}")
         print(f"Repo type    : {result['repo_type'] or 'not recorded'}")
         print(f"Dry-run      : {result['dry_run']}")

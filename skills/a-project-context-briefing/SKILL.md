@@ -35,7 +35,7 @@ Use this order:
 6. Attempts and observed results.
 7. Unknowns and requested help.
 
-Return the brief as a standalone document (or save it where the user asks). If the brief supports an active Task, reference its location from the Task `nextAction` or the Session's `current-session.md`; do not paste it into project memory. Remove secrets and unnecessary personal data before sharing externally.
+Return the brief as a standalone document; save it as `.vibe/docs/briefs/<topic>.md` when it should persist, or where the user asks. If the brief supports an active Task, reference its location from the Task `nextAction` or the Session's `current-session.md`; do not paste it into project memory. Remove secrets and unnecessary personal data before sharing externally.
 
 ## V2 operating rules
 

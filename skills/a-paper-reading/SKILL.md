@@ -100,7 +100,7 @@ Analyze:
 
 ## Output Location
 
-Notes are ordinary project documents; the layout below is a readability convention, not a framework-managed store. Place them where the user or the project `AGENTS.md` says (for example `docs/research/papers/<paper-slug>/`):
+Notes are ordinary project documents; the layout below is a readability convention, not a framework-managed store. Default to `.vibe/docs/papers/<paper-slug>/` unless the user or the project `AGENTS.md` names another location:
 
 ```text
 <papers-root>/<paper-slug>/

@@ -112,7 +112,7 @@ Do not call the package release-ready until:
 
 ## V2 project initialization (`scripts/test_v2_project_init.py`)
 
-- A fresh project receives the full managed general-rules block from `templates/general-rules.md`, a `## 项目级规则` section (distilled rules or an explicit empty hint), and `.vibe/progress.md`; no `.vibe/sessions/` or `.vibe/tasks/` are pre-created.
+- A fresh project receives the full managed general-rules block from `templates/general-rules.md`, a `## 项目级规则` section (distilled rules or an explicit empty hint), , `.vibe/progress.md` and `.vibe/docs/`; no `.vibe/sessions/` or `.vibe/tasks/` are pre-created.
 - An existing `AGENTS.md` keeps every byte (including CRLF); the managed block is injected at the top, and a rerun is `unchanged`.
 - A template change updates only the span between the markers; malformed markers are reported and the file is left untouched.
 

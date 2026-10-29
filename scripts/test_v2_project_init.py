@@ -27,6 +27,8 @@ class InitTests(unittest.TestCase):
             self.assertIn("八荣八耻", agents)
             self.assertIn("## 项目级规则\n\n仓库类型：团队协作仓库\n\n- 使用 `make test` 运行测试。", agents)
             self.assertTrue((project / ".vibe/progress.md").is_file())
+            self.assertTrue((project / ".vibe/docs/.gitkeep").is_file())
+            self.assertEqual(result["docs_dir"]["status"], "created")
             self.assertFalse((project / ".vibe/sessions").exists())
             self.assertFalse((project / ".vibe/tasks").exists())
 
@@ -46,6 +48,8 @@ class InitTests(unittest.TestCase):
             first = init.initialize(project, "- 项目规则 A", "personal")
             self.assertEqual(first["agents_md"]["status"], "injected")
             self.assertEqual(first["progress_md"]["status"], "unchanged")
+            self.assertEqual(first["docs_dir"]["status"], "created")
+            self.assertEqual(init.initialize(project, "- 项目规则 A", "personal")["docs_dir"]["status"], "unchanged")
             content = (project / "AGENTS.md").read_bytes().decode("utf-8")
             self.assertIn(original, content)
             self.assertTrue(content.startswith(init.GENERAL_BEGIN))

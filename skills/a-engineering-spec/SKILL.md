@@ -15,7 +15,7 @@ Remove implementation ambiguity without rewriting the entire project design. A s
 
 ## Required Sections
 
-Write the spec for the Task (as the reply, or as a project document the user chooses — V2 does not mandate a spec directory) and include:
+Write the spec for the Task — as the reply for small work, or as `.vibe/docs/specs/<task-id>.md` when it must outlive the conversation — and include:
 
 1. Task objective and non-goals.
 2. Related business rules and acceptance criteria (the Task `doneWhen`).

@@ -95,7 +95,7 @@ After each path, provide:
 Input → state setup → guard → decision → message/output → downstream execution → result/state release
 ```
 
-When the user wants a persistent note, write it as a project document where the user chooses, recording source anchors, the concrete trace, state lifecycle, confirmed interpretation, source gaps, and the next reading target. Record in `.vibe/progress.md` only a durable architectural fact that future work depends on.
+When the user wants a persistent note, write it to `.vibe/docs/code-notes/<topic>.md` (or where the user chooses), recording source anchors, the concrete trace, state lifecycle, confirmed interpretation, source gaps, and the next reading target. Record in `.vibe/progress.md` only a durable architectural fact that future work depends on.
 
 ## Exclusions
 

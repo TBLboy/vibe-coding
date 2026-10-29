@@ -16,12 +16,17 @@ A project owns exactly one `.vibe/` at its top level. Sub-directories, sub-repos
 AGENTS.md                     Stable project rules and constraints
 .vibe/sessions/<session-id>/current-session.md      Recovery snapshot only when unfinished work needs it
 .vibe/progress.md              Durable project-level facts
+.vibe/docs/                    Miscellaneous project documents (specs, research notes, briefs); created at initialization
 .vibe/tasks/<task-id>.json     Only when a persistent Task is warranted
 .vibe/requirements/<work>.md   Optional; one requirement baseline per piece of work, created only when durable business rules need one
 .vibe/requirements/README.md   Index of baselines; exists only while at least one baseline exists
 ```
 
-Do not create an empty optional file just because the template mentions it.
+Do not create an empty optional file just because the template mentions it. Initialization creates only `AGENTS.md`, `.vibe/progress.md`, and `.vibe/docs/`.
+
+## docs/
+
+Purpose: one predictable place for project documents that are not memory contracts — engineering specs, paper/research notes, context briefs, design sketches, meeting notes. Skills that produce such documents default here (`.vibe/docs/<topic>.md` or `.vibe/docs/<area>/…`) unless the user or `AGENTS.md` names another location. Nothing in `docs/` is read automatically; it carries no lifecycle rules and is never a substitute for `progress.md`, a requirement baseline, or a Task record.
 
 ## requirements/
 
