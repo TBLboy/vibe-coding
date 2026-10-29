@@ -25,7 +25,7 @@ test("OpenCode config has a primary Agent and no third-party integration bundle"
   const config = JSON.parse(readFileSync(resolve(root, "runtime/opencode/opencode.json"), "utf8"));
   assert.equal(config.default_agent, "vibe-main");
   assert.equal(config.subagent_depth, undefined);
-  assert.deepEqual(config.plugins, ["./runtime/opencode/plugins/vibe-v2"]);
+  assert.deepEqual(config.plugin, ["./runtime/opencode/plugins/vibe-v2"]);
   assert.equal(config.mcp, undefined);
   assert.equal(config.model, undefined);
   assert.equal(config.provider, undefined);
@@ -39,6 +39,10 @@ test("plugin queues mode changes and enforces a strict-only reviewer permit", ()
   assert.match(plugin, /ctx\.permission\.hook\("evaluate"/);
   assert.match(plugin, /canAuthorizeReview\(task, activeValue\.taskID\)/);
   assert.match(plugin, /event\.effect = "deny"/);
+  assert.match(plugin, /resolveMemoryRoot\(/, "plugin resolves one memory root per project");
+  assert.match(plugin, /validateTaskRecord\(task, taskID\)/, "plugin validates Task records");
+  assert.match(plugin, /reviewCompletionStorageKey\(event\.sessionID\)/, "permit consumption records reviewer invocation");
+  assert.match(plugin, /canCloseTask\(task, taskID, reviewerInvoked\)/, "strict close checks reviewer invocation");
 });
 
 test("reviewer configuration is read-only and has no shell permission", () => {

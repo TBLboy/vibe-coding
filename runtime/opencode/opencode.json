@@ -1,5 +1,5 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "default_agent": "vibe-main",
-  "plugins": ["./runtime/opencode/plugins/vibe-v2"]
+  "plugin": ["./runtime/opencode/plugins/vibe-v2"]
 }

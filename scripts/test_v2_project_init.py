@@ -76,6 +76,18 @@ class InitTests(unittest.TestCase):
             self.assertEqual(result["agents_md"]["status"], "markers-unbalanced")
             self.assertEqual((project / "AGENTS.md").read_text(encoding="utf-8"), broken)
 
+    def test_refuses_a_nested_memory_root_unless_explicitly_allowed(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            init.initialize(root)
+            child = root / "subrepo"; child.mkdir()
+            with self.assertRaisesRegex(ValueError, "nested .vibe"):
+                init.initialize(child)
+            self.assertFalse((child / ".vibe").exists())
+            self.assertFalse((child / "AGENTS.md").exists())
+            init.initialize(child, allow_nested=True)
+            self.assertTrue((child / ".vibe/progress.md").is_file())
+
 
 if __name__ == "__main__":
     unittest.main()

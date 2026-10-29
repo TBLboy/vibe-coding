@@ -17,18 +17,31 @@ import {
   canAuthorizeReview,
   canCloseTask,
   isActiveTaskPointer,
+  isReviewCompletion,
   isTaskPointer,
   isReviewPermit,
+  reviewCompletionStorageKey,
   reviewPermitStorageKey,
 } from "../../../core/review-authorization.ts";
+import { resolveMemoryRoot } from "../../../core/memory-root.ts";
+import { validateTaskRecord } from "../../../core/task-record.ts";
+import { statSync } from "node:fs";
 
 const TASK_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 
 export default Plugin.define({
   id: "vibe-coding-v2",
   async setup(ctx) {
-    const loadTask = async (sessionID: string, taskID: string): Promise<unknown | null> => {
-      if (!TASK_ID_PATTERN.test(taskID)) return null;
+    const hasMemoryDirectory = (candidate: string): boolean => {
+      try {
+        return statSync(resolve(candidate, ".vibe")).isDirectory();
+      } catch {
+        return false;
+      }
+    };
+
+    /** The single project memory root for a Session: nearest ancestor owning `.vibe/`, else the Session directory. */
+    const memoryRootFor = async (sessionID: string): Promise<string | null> => {
       try {
         const sessionInfo: unknown = await ctx.session.get({ sessionID });
         if (!sessionInfo || typeof sessionInfo !== "object") return null;
@@ -39,7 +52,17 @@ export default Plugin.define({
             ? sessionRecord.location.directory
             : "";
         if (!directory) return null;
-        const projectRoot = await realpath(directory);
+        return resolveMemoryRoot(await realpath(directory), hasMemoryDirectory);
+      } catch {
+        return null;
+      }
+    };
+
+    const loadTask = async (sessionID: string, taskID: string): Promise<unknown | null> => {
+      if (!TASK_ID_PATTERN.test(taskID)) return null;
+      try {
+        const projectRoot = await memoryRootFor(sessionID);
+        if (!projectRoot) return null;
         const taskDirectory = await realpath(resolve(projectRoot, ".vibe", "tasks"));
         const taskPath = await realpath(resolve(taskDirectory, `${taskID}.json`));
         if (!taskPath.startsWith(`${taskDirectory}${sep}`)) return null;
@@ -120,8 +143,11 @@ export default Plugin.define({
           if (!task || typeof task !== "object") {
             return { content: "Rejected: the persisted Task file could not be read. No control state changed." };
           }
-          const record = task as { id?: unknown; policy?: unknown; status?: unknown; phase?: unknown; verification?: { status?: unknown }; review?: { verdict?: unknown } };
-          if (record.id !== taskID) return { content: "Rejected: Task ID does not match the persisted Task file." };
+          const problems = validateTaskRecord(task, taskID);
+          if (problems.length > 0) {
+            return { content: `Rejected: the persisted Task record is invalid — ${problems.join("; ")}. Fix the JSON, then retry.` };
+          }
+          const record = task as { id: string; policy: unknown; status: unknown; phase: unknown };
 
           const activeKey = activeTaskStorageKey(context.sessionID);
           const activeValue: unknown = await ctx.storage.get(activeKey);
@@ -131,6 +157,9 @@ export default Plugin.define({
 
           if (action === "start") {
             const currentMode = normalizeMode(await ctx.storage.get(modeStorageKey(context.sessionID)));
+            if (record.status === "completed" || record.status === "cancelled") {
+              return { content: `Rejected: Task ${taskID} is ${record.status} and cannot be started again; create a new Task.` };
+            }
             if (record.status !== "active" || !isMode(record.policy) || record.policy !== currentMode) {
               return { content: "Rejected: a new Task must be active and its frozen policy must match the current Session mode." };
             }
@@ -178,8 +207,11 @@ export default Plugin.define({
           }
 
           if (action === "close") {
-            if (!canCloseTask(task, taskID)) {
-              return { content: "Rejected: only a valid completed or cancelled Task can be closed. Completed Tasks require verification; strict Tasks also require review go." };
+            const completionKey = reviewCompletionStorageKey(context.sessionID);
+            const completion: unknown = await ctx.storage.get(completionKey);
+            const reviewerInvoked = record.policy !== "strict" || record.status === "cancelled" || isReviewCompletion(completion, taskID);
+            if (!canCloseTask(task, taskID, reviewerInvoked)) {
+              return { content: "Rejected: only a valid completed or cancelled Task can be closed. Completed Tasks require verification; strict Tasks also require a review go produced by an actual vibe-reviewer invocation in this Session." };
             }
             if (active && active.taskID !== taskID) {
               return { content: `Rejected: Task ${active.taskID} is active in this Session.` };
@@ -190,6 +222,7 @@ export default Plugin.define({
             await ctx.storage.set(activeKey, { taskID, policy: record.policy as "fast" | "balanced" | "strict", active: false });
             const permit: unknown = await ctx.storage.get(permitKey);
             if (isReviewPermit(permit, taskID)) await ctx.storage.remove(permitKey);
+            if (isReviewCompletion(completion, taskID)) await ctx.storage.remove(completionKey);
             return { content: `Task ${taskID} is closed.` };
           }
 
@@ -234,6 +267,8 @@ export default Plugin.define({
       }
 
       await ctx.storage.remove(permitKey);
+      // Record that the reviewer was really invoked; strict close checks this marker.
+      await ctx.storage.set(reviewCompletionStorageKey(event.sessionID), { taskID: activeValue.taskID });
       event.effect = "allow";
       event.message = `One-time strict review permit consumed for Task ${activeValue.taskID}.`;
     });
@@ -241,9 +276,14 @@ export default Plugin.define({
     await ctx.session.hook("context", async (event) => {
       const storedMode: unknown = await ctx.storage.get(modeStorageKey(event.sessionID));
       const mode = isMode(storedMode) ? storedMode : normalizeMode(storedMode);
+      const pointer: unknown = await ctx.storage.get(activeTaskStorageKey(event.sessionID));
+      const memoryRoot = await memoryRootFor(event.sessionID);
       event.system.push({
         type: "text",
-        text: renderModeInstructions(mode, event.sessionID),
+        text: renderModeInstructions(mode, event.sessionID, {
+          memoryRoot: memoryRoot ?? undefined,
+          activeTask: isTaskPointer(pointer) ? pointer : undefined,
+        }),
       });
     });
   },

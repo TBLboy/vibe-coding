@@ -6,6 +6,10 @@
 
 Project Memory is not a transcript, diary, command log, event stream, or model-thought archive.
 
+## Memory root
+
+A project owns exactly one `.vibe/` at its top level. Sub-directories, sub-repositories and worktrees share it; never create a second `.vibe/` below it. The runtime resolves the memory root as the nearest ancestor of the Session directory that already contains `.vibe/` (falling back to the Session directory for a fresh project) and injects its absolute path into the Session context. Changing the working directory does not move the memory root. `a-project-init` refuses to create a nested `.vibe/` unless explicitly told the directory is a separate project.
+
 ## Files
 
 ```text
@@ -47,7 +51,7 @@ Keep only:
 - blocker, if any;
 - exact next action.
 
-When no resumable work or blocker remains, set that Session file to a minimal “No resumable work” state or remove the generated working section. Do not keep a history of completed trivial sessions.
+When no resumable work or blocker remains, delete that Session file and its now-empty directory. Do not leave "no resumable work" stubs and do not keep a history of completed trivial Sessions; the absence of the file is the signal.
 
 ## progress.md
 

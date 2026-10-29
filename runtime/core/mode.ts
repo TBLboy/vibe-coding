@@ -62,8 +62,22 @@ export function sessionMemoryRelativePath(sessionID: string): string {
   return `.vibe/sessions/${segment}/current-session.md`;
 }
 
-export function renderModeInstructions(mode: Mode, sessionID?: string): string {
-  const recoveryPath = sessionID ? sessionMemoryRelativePath(sessionID) : ".vibe/sessions/<session-id>/current-session.md";
+export interface SessionContextFacts {
+  /** Absolute path of the directory that owns the project's single `.vibe/`. */
+  memoryRoot?: string;
+  /** The Task currently registered for this Session, if any. */
+  activeTask?: { taskID: string; policy: Mode; active: boolean };
+}
+
+export function renderModeInstructions(mode: Mode, sessionID?: string, facts: SessionContextFacts = {}): string {
+  const relativeRecovery = sessionID ? sessionMemoryRelativePath(sessionID) : ".vibe/sessions/<session-id>/current-session.md";
+  const recoveryPath = facts.memoryRoot ? `${facts.memoryRoot}/${relativeRecovery}` : relativeRecovery;
+  const memoryRootLine = facts.memoryRoot
+    ? `Project memory root: ${facts.memoryRoot} — the only .vibe/ for this project. All Task, progress, requirements and Session recovery files live under it even when the working directory is a sub-directory, sub-repository or worktree. Never create another .vibe/ below it.`
+    : "Project memory root: the directory that owns this project's single .vibe/ (the nearest ancestor containing .vibe/, otherwise the project root). Never create a second .vibe/ in a sub-directory, sub-repository or worktree.";
+  const activeTaskLine = facts.activeTask
+    ? `Registered Task for this Session: ${facts.activeTask.taskID} (frozen policy ${facts.activeTask.policy}, ${facts.activeTask.active ? "active" : "paused/closed"}). Read its JSON under .vibe/tasks/ before continuing related work.`
+    : "No Task is registered for this Session.";
   const shared = [
     "## Vibe Coding V2 — Session Policy",
     `Authoritative Session mode: ${mode}`,
@@ -72,8 +86,10 @@ export function renderModeInstructions(mode: Mode, sessionID?: string): string {
     "A Task's policy is frozen when that Task starts. Existing Task policy takes precedence for that Task; Session mode applies to new work.",
     "All code changes require risk-appropriate verification before delivery. Verification does not always mean running an automated test suite; if a check is not applicable, state why.",
     "Do not log file reads, searches, shell commands, routine retries, or intermediate actions. Persist only facts that will matter to future work.",
+    memoryRootLine,
+    activeTaskLine,
     `Session recovery file: ${recoveryPath}`,
-    "Write the Session-specific current-session.md only when unfinished work must be resumed or a blocker must be preserved. Update project-level .vibe/progress.md only when a durable project fact changes.",
+    "Write the Session-specific current-session.md only when unfinished work must be resumed or a blocker must be preserved; delete it (and its empty directory) once nothing resumable remains. Update project-level .vibe/progress.md only when a durable project fact changes.",
   ];
 
   const byMode: Record<Mode, string[]> = {

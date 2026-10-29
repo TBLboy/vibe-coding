@@ -66,7 +66,7 @@ Requires Node.js 22.6 or newer (for built-in TypeScript type stripping):
 npm run test:core
 ```
 
-This validates the pure policy/state-machine/review-authorization reference logic. It does **not** prove that the plugin loads in your exact OpenCode build. Optional `npm run typecheck:core` requires TypeScript to be available in your environment. Follow [`docs/08-OPENCODE-INTEGRATION.md`](docs/08-OPENCODE-INTEGRATION.md) and the smoke-test matrix before installing globally.
+This validates the pure policy/state-machine/review-authorization reference logic. It does **not** prove that the plugin loads in your exact OpenCode build. `npm run verify` runs the core tests plus the Python installer/Skill tests; `npm run typecheck:core` fetches TypeScript on demand via `npm exec` (no project dependency). Follow [`docs/08-OPENCODE-INTEGRATION.md`](docs/08-OPENCODE-INTEGRATION.md) and the smoke-test matrix before installing globally.
 
 ## Install V2
 

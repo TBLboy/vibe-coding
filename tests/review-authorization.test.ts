@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { activeTaskStorageKey, canAuthorizeReview, canCloseTask, isActiveTaskPointer, isReviewPermit, isTaskPointer, reviewPermitStorageKey } from "../runtime/core/review-authorization.ts";
+import { activeTaskStorageKey, canAuthorizeReview, canCloseTask, isActiveTaskPointer, isReviewPermit, isTaskPointer, reviewPermitStorageKey, isReviewCompletion, reviewCompletionStorageKey } from "../runtime/core/review-authorization.ts";
 import { createTask, transitionTask } from "../runtime/core/task-machine.ts";
 import { sessionMemoryRelativePath } from "../runtime/core/mode.ts";
 
@@ -55,4 +55,19 @@ test("a Task can close only when terminal verification and strict review require
   assert.equal(canCloseTask(readyStrict, readyStrict.id), false);
   const completedStrict = transitionTask(readyStrict, { type: "review_go" });
   assert.equal(canCloseTask(completedStrict, readyStrict.id), true);
+});
+
+test("a strict Task cannot close unless the reviewer was actually invoked", () => {
+  const strictDone = {
+    id: "s", title: "t", goal: "g", doneWhen: ["x"], policy: "strict", status: "completed", phase: "complete", decisions: [],
+    verification: { status: "passed", summary: "ok", checks: ["npm test"], limitations: [] },
+    review: { verdict: "go", findings: [], repairRounds: 0 },
+  };
+  assert.equal(canCloseTask(strictDone, "s", true), true);
+  assert.equal(canCloseTask(strictDone, "s", false), false);
+  const balancedDone = { ...strictDone, policy: "balanced", review: undefined };
+  assert.equal(canCloseTask(balancedDone, "s", false), true);
+  assert.equal(isReviewCompletion({ taskID: "s" }, "s"), true);
+  assert.equal(isReviewCompletion({ taskID: "other" }, "s"), false);
+  assert.match(reviewCompletionStorageKey("ses_1"), /review-completed:ses_1$/);
 });

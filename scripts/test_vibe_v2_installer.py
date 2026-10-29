@@ -96,6 +96,51 @@ class InstallerTests(unittest.TestCase):
             self.assertFalse((home / "skills" / "demo" / "scripts" / "__pycache__").exists())
             self.assertFalse((home / "skills" / "demo" / "stray.pyc").exists())
 
+    def test_install_preserves_config_mode_and_hardens_backup(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary) / "opencode"
+            home.mkdir()
+            config = home / "opencode.json"
+            config.write_text(json.dumps({"provider": {"p": {"options": {"apiKey": "k"}}}}), encoding="utf-8")
+            config.chmod(0o600)
+            installer.install(ROOT, home)
+            self.assertEqual(config.stat().st_mode & 0o777, 0o600)
+            backups = list((home / "backups").iterdir())
+            self.assertEqual(len(backups), 1)
+            self.assertEqual(backups[0].stat().st_mode & 0o777, 0o700)
+            self.assertEqual((backups[0] / "opencode.json").stat().st_mode & 0o777, 0o600)
+
+    def test_reinstall_removes_unmodified_stale_managed_files_and_keeps_edited_ones(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            source = base / "source"
+            (source / "runtime" / "core").mkdir(parents=True)
+            (source / "runtime" / "core" / "mode.ts").write_text("export {};\n", encoding="utf-8")
+            plugin = source / "runtime" / "opencode" / "plugins" / "vibe-v2"
+            plugin.mkdir(parents=True)
+            (plugin / "index.ts").write_text("export {};\n", encoding="utf-8")
+            agents = source / "runtime" / "opencode" / "agents"
+            agents.mkdir(parents=True)
+            for name in installer.AGENT_FILES:
+                (agents / name).write_text("# agent\n", encoding="utf-8")
+            for skill in ("old", "edited", "kept"):
+                (source / "skills" / skill).mkdir(parents=True)
+                (source / "skills" / skill / "SKILL.md").write_text(f"---\nname: {skill}\n---\n", encoding="utf-8")
+            home = base / "opencode"
+            installer.install(source, home)
+            (home / "skills" / "edited" / "SKILL.md").write_text("user edit", encoding="utf-8")
+            import shutil as _shutil
+            _shutil.rmtree(source / "skills" / "old")
+            _shutil.rmtree(source / "skills" / "edited")
+            installer.install(source, home)
+            self.assertFalse((home / "skills" / "old" / "SKILL.md").exists())
+            self.assertEqual((home / "skills" / "edited" / "SKILL.md").read_text(encoding="utf-8"), "user edit")
+            self.assertTrue((home / "skills" / "kept" / "SKILL.md").is_file())
+            managed = json.loads((home / installer.STATE_FILE).read_text(encoding="utf-8"))["managed_files"]
+            self.assertNotIn("skills/old/SKILL.md", managed)
+            self.assertNotIn("skills/edited/SKILL.md", managed)
+            installer.verify(source, home)
+
 
 if __name__ == "__main__":
     unittest.main()

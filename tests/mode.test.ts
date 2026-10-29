@@ -57,3 +57,12 @@ test("mode policy does not expose reviewer in fast or balanced", () => {
   assert.match(renderModeInstructions("balanced"), /Do not invoke the reviewer/);
   assert.match(renderModeInstructions("strict"), /reviewer returns go/);
 });
+
+test("Session context carries the absolute memory root and the registered Task", () => {
+  const text = renderModeInstructions("balanced", "ses_a", { memoryRoot: "/proj", activeTask: { taskID: "t1", policy: "strict", active: false } });
+  assert.match(text, /Project memory root: \/proj/);
+  assert.match(text, /Never create another \.vibe\//);
+  assert.match(text, /Registered Task for this Session: t1 \(frozen policy strict, paused\/closed\)/);
+  assert.match(text, /Session recovery file: \/proj\/\.vibe\/sessions\/ses_a\/current-session\.md/);
+  assert.match(renderModeInstructions("fast"), /No Task is registered/);
+});

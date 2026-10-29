@@ -55,9 +55,17 @@ def read_json(path: Path, fallback):
 
 
 def write_json_atomic(path: Path, value) -> None:
+    """Replace `path` atomically while keeping its existing permission bits.
+
+    opencode.json holds provider API keys; a temp-file replace would otherwise reset a
+    user's 0600 to the umask default and silently widen read access.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
+    mode = path.stat().st_mode & 0o777 if path.exists() else None
     temporary = path.with_name(path.name + ".tmp")
     temporary.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    if mode is not None:
+        os.chmod(temporary, mode)
     os.replace(temporary, path)
 
 
@@ -102,12 +110,15 @@ def backup(home: Path, paths: list[Path]) -> Path:
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f")
     directory = home / "backups" / f"vibe-v2-{stamp}"
     directory.mkdir(parents=True, exist_ok=False)
+    # The backup contains opencode.json and therefore plaintext credentials: owner-only.
+    os.chmod(directory, 0o700)
     for relative in paths:
         source = home / relative
         if source.is_file():
             destination = directory / relative
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, destination)
+            os.chmod(destination, 0o600)
     return directory
 
 
@@ -149,6 +160,26 @@ def merge_config(home: Path, previous_state: dict | None) -> dict:
     }
 
 
+def remove_stale_managed_files(home: Path, prior_state, current: set[str]) -> None:
+    """Delete files the previous install managed that the current source no longer ships.
+
+    Only an unmodified copy (hash still equals the recorded hash) is removed; a file the
+    user edited is preserved and reported, exactly like uninstall.
+    """
+    expected = prior_state.get("managed_files") if isinstance(prior_state, dict) else None
+    if not isinstance(expected, dict):
+        return
+    for relative, digest in expected.items():
+        if relative in current:
+            continue
+        target = assert_within(home, home / relative)
+        if target.is_file() and sha256(target) == digest:
+            target.unlink()
+            print(f"[-] Removed stale managed file {relative}")
+        elif target.exists():
+            print(f"PRESERVE {relative}: no longer managed but changed after installation")
+
+
 def install(root: Path, home: Path) -> None:
     home.mkdir(parents=True, exist_ok=True)
     prior = read_json(state_path(home), None)
@@ -161,6 +192,7 @@ def install(root: Path, home: Path) -> None:
     copied = {}
     created_dirs = set()
     try:
+        remove_stale_managed_files(home, prior, {str(relative).replace("\\", "/") for _, relative in files})
         for source, relative in files:
             target = assert_within(home, home / relative)
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -182,6 +214,7 @@ def install(root: Path, home: Path) -> None:
         raise RuntimeError(f"Install failed after backup {backup_dir}; restore from that backup before retrying")
     print(f"[+] Installed Vibe Coding V2 to {home}")
     print(f"[+] Backup: {backup_dir}")
+    print("[!] The backup contains opencode.json with plaintext credentials (owner-only permissions). Delete it once the install is verified.")
 
 
 def verify(root: Path, home: Path) -> None:

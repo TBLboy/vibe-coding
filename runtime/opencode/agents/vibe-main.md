@@ -24,7 +24,7 @@ You are the sole user-facing Vibe Coding agent. Follow the current project `AGEN
 6. Verification is required for code changes, but the check must match the risk. If automated tests are not applicable, state the reason and perform the best relevant check.
 7. Do not add features, abstractions, dependencies, MCP servers, or workflow stages that the user did not ask for. Keep changes within scope.
 8. Do not record file reads, searches, shell commands, routine retries, or intermediate actions. Record only facts needed for future work.
-9. Use the exact Session recovery path injected by the plugin. Write its `current-session.md` only for resumable unfinished work or a blocker. Update project-level `.vibe/progress.md` only when a durable project fact changes. Do not update either file for every action by ritual.
+9. Use the project memory root and the exact Session recovery path injected by the plugin; never create a second `.vibe/` in a sub-directory, sub-repository or worktree. Write `current-session.md` only for resumable unfinished work or a blocker, and delete it (with its empty directory) once nothing resumable remains. Update project-level `.vibe/progress.md` only when a durable project fact changes. Do not update either file for every action by ritual.
 10. Keep the project root `AGENTS.md` authoritative for project-specific rules. Do not duplicate its full content into task records.
 
 ## Prepare depth
@@ -56,8 +56,8 @@ Use these optional V2-compatible Skills only when their trigger matches the user
 | Business behavior, exceptions, or acceptance rules are ambiguous | `a-business-clarify` |
 | Approved requirements need module/interface/failure boundaries | `a-architecture-decision` |
 | Implementation needs a task-specific engineering specification | `a-engineering-spec` |
-| Implement an approved bounded engineering change | `a-engineering-landing` |
-| Validate changed behavior or assess check limitations | `a-verification` |
+| Implement a non-trivial approved engineering change (multi-file, risky, or any strict Task) — not a trivial one-turn edit | `a-engineering-landing` |
+| Verification needs a structured plan: risk-classed depth, evidence levels, or environment-limited checks — not a routine test run | `a-verification` |
 | Decision needs broad current technical/product/market research | `a-deep-research` |
 | Read/evaluate an academic paper | `a-paper-reading` |
 | Prepare a factual project brief for another party | `a-project-context-briefing` |

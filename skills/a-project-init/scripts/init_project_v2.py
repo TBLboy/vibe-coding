@@ -95,10 +95,24 @@ def ensure_progress(target: Path, dry_run: bool) -> str:
     return "created"
 
 
-def initialize(target: Path, project_rules: str = "", repo_type: str | None = None, dry_run: bool = False) -> dict:
+def find_memory_root_above(target: Path) -> Path | None:
+    """Return the nearest strict ancestor that already owns a `.vibe/`, if any."""
+    for ancestor in target.parents:
+        if (ancestor / ".vibe").is_dir():
+            return ancestor
+    return None
+
+
+def initialize(target: Path, project_rules: str = "", repo_type: str | None = None, dry_run: bool = False, allow_nested: bool = False) -> dict:
     target = target.expanduser().resolve()
     if not target.is_dir():
         raise FileNotFoundError(f"Project root does not exist: {target}")
+    owner = find_memory_root_above(target)
+    if owner is not None and not allow_nested:
+        raise ValueError(
+            f"Refusing to create a nested .vibe/: {owner} already owns this project's memory root. "
+            "Initialize or work from that directory, or pass --allow-nested if this is intentionally a separate project."
+        )
     template = load_template("general-rules.md")
     agents_status = ensure_agents_md(target, template, project_rules, repo_type, dry_run)
     progress_status = ensure_progress(target, dry_run)
@@ -122,10 +136,11 @@ def main() -> int:
     parser.add_argument("--project-rules", default="", help="Project-specific rules distilled from README/docs/code")
     parser.add_argument("--repo-type", choices=sorted(REPO_TYPE_LABEL), default=None)
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--allow-nested", action="store_true", help="permit a .vibe/ below a directory that already owns one (separate project)")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
     try:
-        result = initialize(args.target, args.project_rules, args.repo_type, args.dry_run)
+        result = initialize(args.target, args.project_rules, args.repo_type, args.dry_run, args.allow_nested)
     except (OSError, ValueError) as error:
         print(f"[!] {error}", file=sys.stderr)
         return 1

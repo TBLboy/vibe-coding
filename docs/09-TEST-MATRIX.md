@@ -124,3 +124,13 @@ Do not call the package release-ready until:
 ## Per-work requirement baselines (D-21)
 
 - `tests/package-shape.test.ts` asserts the memory contract defines `.vibe/requirements/<work>.md` plus `README.md` index, that `a-requirement-baseline` maintains the index and the `draft/active/superseded` status, and that no Skill refers to a single shared requirements file.
+
+## Memory root, Task-record validation, reviewer-invocation gate (D-22, D-23)
+
+- `tests/memory-root.test.ts`: nearest-ancestor `.vibe/` wins; fresh project falls back to the start directory; POSIX and Windows roots terminate the walk.
+- `tests/task-record.test.ts`: structural schema checks and state-machine invariants (strict needs `doneWhen`, blocked needs `blocker`, cancelled needs `cancelReason`, completed ⇒ `complete`, review phase ⇒ strict + review object, `repairRounds` 0–2).
+- `tests/review-authorization.test.ts`: `canCloseTask` rejects a strict Task without an observed reviewer invocation; balanced is unaffected.
+- `tests/mode.test.ts`: Session context carries the absolute memory root, recovery path and registered Task.
+- `tests/package-shape.test.ts`: plugin wires `resolveMemoryRoot`, `validateTaskRecord`, the review-completion marker and the gated close; sample config uses the real `plugin` key.
+- `scripts/test_vibe_v2_installer.py`: config permission bits preserved; backup dir `0700` / files `0600`; stale managed files removed only when unmodified.
+- `scripts/test_v2_project_init.py`: nested `.vibe/` refused unless `--allow-nested`.
