@@ -15,7 +15,7 @@ Define only the architecture necessary for the current increment. Avoid both acc
 
 ## Inputs
 
-- the approved requirement baseline (`.vibe/requirements.md` when it exists, otherwise the confirmed rules in the active Task `goal`/`doneWhen`);
+- the approved requirement baseline for this work (`.vibe/requirements/<work>.md` when it exists, otherwise the confirmed rules in the active Task `goal`/`doneWhen`);
 - the clarified atomic business rules;
 - technical research results (`a-deep-research`);
 - the current codebase and its constraints;

@@ -20,7 +20,7 @@ metadata:
 3. 提取当前可观察行为、状态、错误、配置、隐含契约和关键路径。
 4. 标注证据等级：正式资料、测试、代码、配置、注释或推断。
 5. 形成候选业务原子，默认标记为 `draft` / `inferred` / `evidence-derived`；不得直接视为已确认规则。
-6. 双向检查当前行为与已有业务记录（`AGENTS.md`、`.vibe/requirements.md`、`.vibe/progress.md`），分类差异（finding 类型见 `a-business-code-align`）。
+6. 双向检查当前行为与已有业务记录（`AGENTS.md`、`.vibe/requirements/` 下的 active 基线、`.vibe/progress.md`），分类差异（finding 类型见 `a-business-code-align`）。
 7. 列出后续澄清、测试补齐、规格化、修复或研究工作；仅在需要持久跟踪时创建 Task JSON。
 
 ## Outputs

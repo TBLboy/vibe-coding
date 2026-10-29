@@ -17,7 +17,7 @@ Determine whether the system specification, implementation, and executable evide
 
 Inspect:
 
-- confirmed and experimental business rules (`.vibe/requirements.md`, Task `doneWhen`, `AGENTS.md`);
+- confirmed and experimental business rules (`AGENTS.md` project-level rules plus every `active` baseline listed in `.vibe/requirements/README.md`, and the Task `doneWhen`);
 - architecture constraints and recorded decisions (`.vibe/progress.md`, Task `decisions`);
 - code and configuration;
 - automated tests and fixtures;
@@ -69,7 +69,7 @@ Identify externally observable behavior, persistent state changes, permissions, 
 
 ## Output
 
-Report each finding with: type, severity, confidence, affected rules, code/tests, evidence, recommended action, authority, status, and resolution. Persist only the durable part: fixes applied go through normal verification in the Task; unresolved findings that block work go to Task `blocker`; findings that change what the project knows about itself (for example a confirmed stale rule) go to `.vibe/progress.md` or `.vibe/requirements.md`. Create a follow-up Task only for repairs that are not applied immediately and need persistent tracking.
+Report each finding with: type, severity, confidence, affected rules, code/tests, evidence, recommended action, authority, status, and resolution. Persist only the durable part: fixes applied go through normal verification in the Task; unresolved findings that block work go to Task `blocker`; findings that change what the project knows about itself (for example a confirmed stale rule) go to `.vibe/progress.md` or the affected baseline under `.vibe/requirements/` (via its change control, never by editing an `active` rule in place). Create a follow-up Task only for repairs that are not applied immediately and need persistent tracking.
 
 ## Completion Gate
 

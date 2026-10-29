@@ -13,12 +13,26 @@ metadata:
 
 Create a temporary but explicit contract for the current increment. A baseline is not a promise that requirements will never change; it defines what is currently approved, what is excluded, and how later changes are handled.
 
-In V2 the baseline lives in `.vibe/requirements.md` — an optional file created only when durable business rules need a dedicated home. For a single bounded increment, the Task `goal` + `doneWhen` may be baseline enough; do not create the file by ritual.
+## Location
+
+Each piece of work owns its own baseline:
+
+```text
+.vibe/requirements/
+├── README.md        # index: | id | title | status | version | tasks |
+└── <work>.md        # one baseline per work item; slug = Task ID by default
+```
+
+- Create `<work>.md` only when durable business rules need a dedicated home. For a single bounded increment, the Task `goal` + `doneWhen` may be baseline enough; do not create the file by ritual.
+- Never put a second work item's rules into an existing baseline; create a new file. Never edit an `active` rule in place; use change control below.
+- Rules that turn out to hold across all work are distilled into the project `AGENTS.md` project-level rules and referenced from the baseline, not duplicated.
+- Maintain `README.md` on every create / activate / supersede. Create it together with the first baseline; it is the entry point other Skills read to learn which baselines are `active`.
+- Reference the baseline path from the Task `goal`; point `doneWhen` at its acceptance criteria.
 
 ## Inputs
 
 - clarified business atoms and open questions (`a-business-clarify` output);
-- the previous baseline, if any (`.vibe/requirements.md`);
+- the previous version of this work's baseline, if any (`.vibe/requirements/<work>.md`), and the index `README.md` to spot overlap with other active baselines;
 - decisions that constrain the scope (`.vibe/progress.md`, Task `decisions`);
 - the active Task and current user confirmations.
 
@@ -64,10 +78,10 @@ When a new statement conflicts with an active baseline:
 
 ## Outputs
 
-`.vibe/requirements.md` (when warranted) must include:
+`.vibe/requirements/<work>.md` (when warranted) must include:
 
-- ID and version;
-- status;
+- ID (the work slug) and version;
+- status (`draft` / `active` / `superseded`);
 - goal;
 - actors;
 - in-scope and out-of-scope items;
@@ -76,7 +90,10 @@ When a new statement conflicts with an active baseline:
 - assumptions;
 - unresolved questions;
 - evidence/approval;
-- dates and supersession metadata.
+- dates and supersession metadata;
+- a change log of accepted changes to this baseline.
+
+Update `.vibe/requirements/README.md` in the same step.
 
 Point the active Task `doneWhen` at the covered acceptance criteria. When the baseline changes what the user should know about the project stage, summarize it in `.vibe/progress.md`.
 
@@ -86,7 +103,8 @@ Point the active Task `doneWhen` at the covered acceptance criteria. When the ba
 - every atom has acceptance criteria;
 - no blocking conflict remains hidden;
 - scope exclusions are explicit;
-- change-control behavior is established.
+- change-control behavior is established;
+- the baseline is listed in `README.md` with its current status and version.
 
 ## V2 operating rules
 

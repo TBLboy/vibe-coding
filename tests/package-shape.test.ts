@@ -79,6 +79,7 @@ test("managed capability Skills are V2-compatible and routed by the main Agent",
     assert.match(content, /metadata:\n  v2: true/, id);
     assert.match(content, /Use only the V2 Task JSON and V2 Project Memory locations/, id);
     assert.doesNotMatch(content, /\.project-log|SQLite|event ledger|standalone Evidence/, id);
+    assert.doesNotMatch(content, /\.vibe\/requirements\.md/, `${id}: requirement baselines are per work under .vibe/requirements/`);
     assert.match(main, new RegExp("`" + id + "`"), id);
     const sections = content.split("\n").filter((line) => /^## /.test(line) && !/^## V2 operating rules/.test(line));
     assert.ok(sections.length >= 2, `${id} must carry its full methodology, not a stub (found ${sections.length} sections)`);
@@ -88,4 +89,14 @@ test("managed capability Skills are V2-compatible and routed by the main Agent",
   assert.ok(existsSync(resolve(root, "skills/b-source-code-tutoring/references/teaching-template.md")));
   assert.ok(existsSync(resolve(root, "skills/a-project-init/templates/general-rules.md")));
   assert.doesNotMatch(main, /old Project Log|\.project-log|Goal\/Run\/Evidence\/ledger\/SQLite/, "routing");
+});
+
+test("memory contract defines per-work requirement baselines with an index", () => {
+  const contract = readNormalized("docs/05-MEMORY-CONTRACT.md");
+  assert.match(contract, /\.vibe\/requirements\/<work>\.md/);
+  assert.match(contract, /\.vibe\/requirements\/README\.md/);
+  assert.doesNotMatch(contract, /\.vibe\/requirements\.md/);
+  const baseline = readNormalized("skills/a-requirement-baseline/SKILL.md");
+  assert.match(baseline, /README\.md/);
+  assert.match(baseline, /draft.*active.*superseded/);
 });

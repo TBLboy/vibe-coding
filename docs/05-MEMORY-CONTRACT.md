@@ -13,10 +13,21 @@ AGENTS.md                     Stable project rules and constraints
 .vibe/sessions/<session-id>/current-session.md      Recovery snapshot only when unfinished work needs it
 .vibe/progress.md              Durable project-level facts
 .vibe/tasks/<task-id>.json     Only when a persistent Task is warranted
-.vibe/requirements.md          Optional; create only when durable business rules need a dedicated baseline
+.vibe/requirements/<work>.md   Optional; one requirement baseline per piece of work, created only when durable business rules need one
+.vibe/requirements/README.md   Index of baselines; exists only while at least one baseline exists
 ```
 
 Do not create an empty optional file just because the template mentions it.
+
+## requirements/
+
+Purpose: keep each piece of work's clarified business rules separate, versioned, and change-controlled, without mixing unrelated work in one file.
+
+- One file per work item, named by its slug (normally the Task ID): `.vibe/requirements/<work>.md`. It owns its own `version`, `status` (`draft` / `active` / `superseded`), change log, and supersession metadata. Later work never edits another work's baseline in place.
+- `README.md` is the index: one line per baseline with id, title, status, current version, and related Task IDs. Maintain it whenever a baseline is created, activated, or superseded.
+- Business rules that hold across all work are not left inside a baseline; once stable, distill them into the project `AGENTS.md` project-level rules. Audits treat `AGENTS.md` plus every `active` baseline as the current business truth.
+- A Task references its baseline by path in `goal`; `doneWhen` points at that baseline's acceptance criteria. The Task schema is unchanged.
+- A small bounded increment whose `goal` + `doneWhen` already state the rules needs no baseline file.
 
 ## current-session.md
 

@@ -35,7 +35,7 @@ Every Skill must:
 
 - carry `metadata.v2: true` in frontmatter;
 - end with the standard "V2 operating rules" section (copy it from any existing Skill);
-- persist durable state only in the V2 locations: Task JSON under `.vibe/tasks/`, `.vibe/progress.md`, the Session's `current-session.md`, optional `.vibe/requirements.md`, and the project `AGENTS.md`;
+- persist durable state only in the V2 locations: Task JSON under `.vibe/tasks/`, `.vibe/progress.md`, the Session's `current-session.md`, optional per-work baselines under `.vibe/requirements/`, and the project `AGENTS.md`;
 - never invoke `vibe-reviewer` itself; review belongs to the strict gate owned by the main Agent;
 - describe only positive V2 guidance — do not include sentences about retired frameworks or forbidden legacy terms.
 

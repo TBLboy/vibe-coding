@@ -20,7 +20,7 @@ Ask one high-value question at a time and provide a recommended answer. This is 
 Read, when available:
 
 1. User statements in the current Session.
-2. The project's durable memory: `AGENTS.md`, `.vibe/progress.md`, `.vibe/requirements.md` (if present), the active Task JSON, and the current Session's `current-session.md`.
+2. The project's durable memory: `AGENTS.md`, `.vibe/progress.md`, the baselines under `.vibe/requirements/` (start from its `README.md` index, if present), the active Task JSON, and the current Session's `current-session.md`.
 3. Existing code, tests, config, product documents, tickets, screenshots, and historical decisions.
 
 Never ask the user for information that can be reliably obtained from the project.
@@ -152,7 +152,7 @@ Do not research ordinary framework preferences during business clarification.
 
 ## Outputs
 
-- Confirmed atoms with acceptance criteria: into the active Task `doneWhen` for this increment; into `.vibe/requirements.md` only when they are durable business rules worth a baseline (`a-requirement-baseline`).
+- Confirmed atoms with acceptance criteria: into the active Task `doneWhen` for this increment; into this work's own baseline `.vibe/requirements/<work>.md` only when they are durable business rules worth a baseline (`a-requirement-baseline`).
 - Material B-level decisions: Task JSON `decisions`.
 - Open C-level questions that block work: Task `blocker` and the current Session's `current-session.md`.
 - Follow-up work: new Task JSON files only when persistent tracking is warranted.

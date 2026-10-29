@@ -18,7 +18,7 @@ Root `AGENTS.md` with two parts, plus `.vibe/progress.md`:
 - **通用开发规则**: injected verbatim from `templates/general-rules.md` inside the managed markers `<!-- VIBE-PROJECT-GENERAL:BEGIN -->` … `<!-- VIBE-PROJECT-GENERAL:END -->`. The template is the single source of these rules; never retype or summarize them.
 - **项目级规则**: distilled by you from the project's real facts. Never invented.
 
-Do not create `.vibe/sessions/`, `.vibe/tasks/`, or `.vibe/requirements.md` during initialization; V2 creates those only when real work warrants them.
+Do not create `.vibe/sessions/`, `.vibe/tasks/`, or `.vibe/requirements/` during initialization; V2 creates those only when real work warrants them.
 
 ## Workflow
 
