@@ -110,8 +110,8 @@ Do not call the package release-ready until:
 - Archive snapshots contain only project-root `AGENTS.md` when present and `.vibe/` memory.
 - Archive publication validates SHA-256 manifest entries, never modifies source files, and rejects unsafe paths.
 
-## V2 project initialization
+## V2 project initialization (`scripts/test_v2_project_init.py`)
 
-- A new project initialization Skill creates only missing V2 rules/memory files.
-- Existing project rules and memory are preserved; repeated initialization is idempotent.
-- Session recovery uses the current encoded Session ID and does not create a shared placeholder.
+- A fresh project receives the full managed general-rules block from `templates/general-rules.md`, a `## 项目级规则` section (distilled rules or an explicit empty hint), and `.vibe/progress.md`; no `.vibe/sessions/` or `.vibe/tasks/` are pre-created.
+- An existing `AGENTS.md` keeps every byte (including CRLF); the managed block is injected at the top, and a rerun is `unchanged`.
+- A template change updates only the span between the markers; malformed markers are reported and the file is left untouched.

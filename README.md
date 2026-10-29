@@ -54,7 +54,7 @@ docs/                             Canonical product and engineering contracts
 schemas/task.schema.json          Minimal persisted Task shape
 runtime/core/                     Small pure TypeScript reference logic
 runtime/opencode/                 OpenCode config, plugin adapter, Agent prompts
-runtime/project-template/         Project-level AGENTS.md and memory templates
+skills/                           Managed V2 capability Skills (a-project-init carries the AGENTS.md/memory templates)
 tests/                            Core behavior tests
 ```
 

@@ -50,7 +50,7 @@ The policy injection must be bounded and must not include project operation hist
 
 `runtime/opencode/opencode.json` sets `default_agent` to `vibe-main` and registers only the local V2 plugin directory at `./runtime/opencode/plugins/vibe-v2`. OpenCode 2.0.29 ignores the legacy `subagent_depth` field, so the baseline does not set it. The config intentionally does not configure model/provider, MCP, third-party plugins, or user permissions globally.
 
-To preserve the plugin’s relative imports, stage `runtime/core/` and `runtime/opencode/` under `$OPENCODE_CONFIG_DIR/runtime/`, merge the config snippet into `$OPENCODE_CONFIG_DIR/opencode.json`, and stage the two Markdown Agents into `$OPENCODE_CONFIG_DIR/agents/`. Do not copy only the plugin file. The files under `runtime/project-template/.vibe/` are examples, not mandatory empty files to create in every project. The final installer is a later phase and must be conservative, reversible, and separately tested.
+To preserve the plugin’s relative imports, stage `runtime/core/` and `runtime/opencode/` under `$OPENCODE_CONFIG_DIR/runtime/`, merge the config snippet into `$OPENCODE_CONFIG_DIR/opencode.json`, and stage the two Markdown Agents into `$OPENCODE_CONFIG_DIR/agents/`. Do not copy only the plugin file. The project templates under `skills/a-project-init/templates/` are consumed by the initialization Skill; `.vibe/sessions/` and `.vibe/tasks/` are never pre-created in a project. The final installer is a later phase and must be conservative, reversible, and separately tested.
 
 ## Known integration checks
 
