@@ -9,6 +9,7 @@
 8. 在项目过程中发现 Vibe Coding 框架自身的缺陷、bug 或文档漂移时，及时向用户报告，并记录到本项目 `.vibe/progress.md` 的「已知限制」（现象、复现步骤、期望与实际、涉及文件），供后续集中修复框架；不要因为"不属于本项目范围"而略过。
 9. 一个项目只能存在一个 `.vibe/` 工程日志与项目记忆文件夹，统一位于项目根目录；即使项目包含多个子仓库或 worktree，所有子目录也必须共用根目录的 `.vibe/`，不得在子目录、子仓库或 worktree 中另建 `.vibe/`。切换工作目录不改变项目记忆根目录；所有 Task、进度与 Session 恢复文件均写入该唯一目录。
 10. 安装依赖包的时候优先使用国内镜像源安装，速度快，国内镜像源不行再使用官方源。
+11. 自觉地阶段性更新 `.vibe/progress.md` 与本 Session 的 `current-session.md`：每完成一个有意义的阶段（完成里程碑、作出关键决策、发现重要限制、准备收尾交付或长工作告一段落）就更新，不要等用户提醒；`progress.md` 只写仍对未来工作有用的持久事实（项目阶段、已完成里程碑、持久决策、已知限制、剩余工作），`current-session.md` 只写当前 Task、已完成事项、继续工作所需约束、阻塞与下一步，不写工具流水账。没有可恢复工作或阻塞时删除本 Session 的恢复文件及其空目录。**找到自己 Session 的恢复文件**：直接看插件注入到当前上下文的 `Session recovery file: <绝对路径>` 这一行，该路径就是本 Session 的文件，目录名是本 Session ID 的 URL 编码形式（例如 `ses_abc123` → `.vibe/sessions/ses_abc123/current-session.md`）；不要在 `.vibe/sessions/` 里按时间或名称猜，也不要读写别的 Session 的目录。若上下文里没有这行，可用本项目记忆根加 `.vibe/sessions/<URL编码的当前SessionID>/current-session.md` 拼出；不确定 Session ID 就先向用户或运行环境确认，不要创建 `current`、`default` 之类的占位目录。
 
 ### 八荣八耻
 
