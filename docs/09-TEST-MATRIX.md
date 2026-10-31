@@ -116,6 +116,7 @@ Do not call the package release-ready until:
 - A fresh project receives the full managed general-rules block from `templates/general-rules.md`, a `## 项目级规则` section (distilled rules or an explicit empty hint), , `.vibe/progress.md`, `.vibe/docs/` and — given `--session-id` — the URL-encoded current Session recovery file; `.vibe/tasks/` is never pre-created.
 - An existing `AGENTS.md` keeps every byte (including CRLF); the managed block is injected at the top, and a rerun is `unchanged`.
 - A template change updates only the span between the markers; malformed markers are reported and the file is left untouched.
+- The general rules lead with the end-of-reply 点拨 (mentoring) rule as rule 1 — name the engineering term / pattern / mental model behind the user's informal question or action in 1–3 sentences, or stay silent when nothing is worth naming — and the remaining rules are numbered contiguously after it.
 
 ## V2 capability Skill completeness
 

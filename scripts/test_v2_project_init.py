@@ -98,6 +98,18 @@ class InitTests(unittest.TestCase):
             init.initialize(child, allow_nested=True)
             self.assertTrue((child / ".vibe/progress.md").is_file())
 
+    def test_general_rules_lead_with_the_mentoring_rule_and_stay_contiguously_numbered(self):
+        """Rule 1 is the end-of-reply 点拨 (mentoring) rule; the rest follow as 2..N without gaps."""
+        rules_section = GENERAL.split("### 八荣八耻", 1)[0]
+        numbered = [line for line in rules_section.splitlines() if line[:1].isdigit() and ". " in line[:4]]
+        numbers = [int(line.split(".", 1)[0]) for line in numbered]
+        self.assertTrue(numbered[0].startswith("1. "))
+        self.assertIn("点拨", numbered[0])
+        self.assertIn("📌 点拨", numbered[0])
+        self.assertIn("不展开讲课", numbered[0])
+        self.assertGreaterEqual(len(numbers), 12)
+        self.assertEqual(numbers, list(range(1, len(numbers) + 1)))
+
 
 if __name__ == "__main__":
     unittest.main()
