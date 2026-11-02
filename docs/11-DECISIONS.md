@@ -31,7 +31,7 @@ These decisions are approved for the first V2 implementation. Do not reopen them
 
 These open items do not authorize adding new workflow concepts or external dependencies.
 | D-19 | User-approved V2-compatible capability Skills are installed as a managed optional pack and routed by `vibe-main` | Preserve high-value specialist techniques without restoring the legacy lifecycle architecture |
-| D-20 | V2 archive is an explicit copy-only snapshot of `.vibe/` and optional project-root `AGENTS.md` | Preserve durable context without adding a central archive service or project history mechanism |
+| D-20 | V2 archive is an explicit snapshot of `.vibe/` and optional project-root `AGENTS.md`; it copies without modifying the source, then commits and pushes the snapshot in the archive repository | Preserve durable context without adding a central archive service or project history mechanism; a snapshot that exists only on one machine is not archived |
 | D-22 | The runtime resolves one memory root per project (nearest ancestor owning `.vibe/`) and injects its absolute path plus the registered Task into every Session context | Sub-repositories and worktrees must share the project memory; recovery after compaction must not depend on the Agent remembering the active Task |
 | D-23 | A strict Task can close only after the plugin observed a consumed reviewer permit for that Task in the Session | A hand-written `review.verdict: go` must not satisfy the strict gate |
 | D-24 | The reviewer stays read-only with no shell; it judges the diff against the supplied verification result and cannot execute checks | Safety over verification depth; the main Agent must therefore record exact commands and results in `verification.checks` |

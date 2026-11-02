@@ -6,7 +6,7 @@ Version: 0.1.0
 ## Local executable checks
 
 - `npm run test:core` — PASS, 47/47 tests.
-- `npm run test:py` — PASS: installer 6/6 (user-config preservation, modified-file preservation, repeated-install ownership, bytecode exclusion, config-mode preservation + owner-only backup, stale managed-file removal), project init 7/7 (incl. rule 1 = 点拨 mentoring rule, contiguous numbering), project archive 3/3, configure_models 3/3.
+- `npm run test:py` — PASS: installer 6/6 (user-config preservation, modified-file preservation, repeated-install ownership, bytecode exclusion, config-mode preservation + owner-only backup, stale managed-file removal), project init 7/7 (incl. rule 1 = 点拨 mentoring rule, contiguous numbering), project archive 9/9 (snapshot contents + manifest, unsafe paths, never overwriting, remembered root, commit-and-push with remote-ref confirmation, unrelated files untouched, unpublishable layouts, ignored snapshot paths, exit 4 / `--no-push`), configure_models 3/3.
 - `npm run typecheck:core` — PASS via one-shot `npm exec --package typescript@5.9.3` (no project dependency added).
 - `npm run verify` — PASS (`test:core` + `test:py`).
 

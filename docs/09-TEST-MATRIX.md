@@ -110,6 +110,9 @@ Do not call the package release-ready until:
 - Archive snapshots contain only project-root `AGENTS.md` when present and `.vibe/` memory.
 - Archive publication validates SHA-256 manifest entries, never modifies source files, and rejects unsafe paths.
 - The archive root is remembered in the installed Skill (`archive_root.conf`, user data, never shipped or deleted by the installer): unconfigured → exit 3 and ask once; `--set-archive-root` validates an existing absolute directory and persists it; later runs reuse it.
+- Archiving publishes: the snapshot directory is committed and pushed to the archive repository's branch, and the remote ref is confirmed equal to the local commit; an unrelated file in that repository is never committed.
+- A snapshot directory matched by the archive repository's `.gitignore` raises instead of producing an empty, unpublished commit.
+- A snapshot that cannot be published is reported, not silently accepted: a plain directory and a remote-less repository both return `publish.status` `not-a-repository` / `no-remote`, and the command exits 4 with "NOT pushed"; `--no-push` returns `skipped` and exit 0.
 
 ## V2 project initialization (`scripts/test_v2_project_init.py`)
 
