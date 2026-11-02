@@ -1,6 +1,6 @@
 ---
 name: a-architecture-decision
-description: "Convert an approved requirement baseline and technical recommendation into explicit module boundaries, interfaces, data flows, failure handling, operational constraints, and recorded architecture decisions."
+description: "架构决策/模块划分/接口与失败边界 | Convert an approved requirement baseline and technical recommendation into explicit module boundaries, interfaces, data flows, failure handling, operational constraints, and recorded architecture decisions."
 license: MIT
 compatibility: opencode
 metadata:

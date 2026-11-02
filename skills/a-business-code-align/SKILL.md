@@ -1,6 +1,6 @@
 ---
 name: a-business-code-align
-description: "Audit and reconcile business logic, code implementation, configuration, and tests by building traceability, classifying mismatches, fixing safe defects, and escalating semantic conflicts without letting code silently redefine requirements."
+description: "业务与代码对齐/一致性审计 | Audit and reconcile business logic, code implementation, configuration, and tests by building traceability, classifying mismatches, fixing safe defects, and escalating semantic conflicts without letting code silently redefine requirements."
 license: MIT
 compatibility: opencode
 metadata:

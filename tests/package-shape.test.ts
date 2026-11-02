@@ -95,6 +95,28 @@ test("managed capability Skills are V2-compatible and routed by the main Agent",
   assert.doesNotMatch(main, /old Project Log|\.project-log|Goal\/Run\/Evidence\/ledger\/SQLite/, "routing");
 });
 
+test("every routed Skill is triggerable in the user's language, not only in English", () => {
+  // Defect VIBE-FW-ROUTE-001: an English-only trigger row plus an English-only
+  // description let a Chinese request ("归档一下") bypass the registered Skill and
+  // be answered by an improvised parallel flow.
+  const main = readNormalized("runtime/opencode/agents/vibe-main.md");
+  const cjk = /[\u4e00-\u9fff]/;
+  const routing = main.split("## V2 capability Skill routing")[1];
+  assert.ok(routing, "the main Agent must carry the routing table");
+  assert.match(routing, /中文别名/, "the routing table must declare Chinese aliases as first-class triggers");
+  assert.match(routing, /Hand-rolling an improvised version/, "routing must forbid an improvised substitute");
+
+  for (const id of V2_SKILLS) {
+    const row = routing.split("\n").find((line) => line.includes("`" + id + "`"));
+    assert.ok(row, `${id} must be routed`);
+    const trigger = row.split("|")[1] ?? "";
+    assert.match(trigger, cjk, `${id}: the routing trigger needs a Chinese alias`);
+    const description = readNormalized(`skills/${id}/SKILL.md`).match(/^description: "(.*)"$/m);
+    assert.ok(description, `${id} needs a description`);
+    assert.match(description[1], cjk, `${id}: the description must start with Chinese aliases`);
+  }
+});
+
 test("memory contract defines per-work requirement baselines with an index", () => {
   const contract = readNormalized("docs/05-MEMORY-CONTRACT.md");
   assert.match(contract, /\.vibe\/requirements\/<work>\.md/);

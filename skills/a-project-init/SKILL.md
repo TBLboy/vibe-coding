@@ -1,6 +1,6 @@
 ---
 name: a-project-init
-description: "Initialize a new project with the minimal V2 rules and memory layout."
+description: "初始化项目/新建项目接入框架 | Initialize a new project with the minimal V2 rules and memory layout."
 license: MIT
 compatibility: opencode
 metadata:

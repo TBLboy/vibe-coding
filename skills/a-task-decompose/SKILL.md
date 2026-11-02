@@ -1,6 +1,6 @@
 ---
 name: a-task-decompose
-description: "Decompose an approved goal into dependency-aware, vertically sliced, independently verifiable tasks mapped to business logic, decisions, outputs, and completion evidence."
+description: "拆分任务/任务分解 | Decompose an approved goal into dependency-aware, vertically sliced, independently verifiable tasks mapped to business logic, decisions, outputs, and completion evidence."
 license: MIT
 compatibility: opencode
 metadata:

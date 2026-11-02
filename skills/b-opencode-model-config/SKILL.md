@@ -1,6 +1,6 @@
 ---
 name: b-opencode-model-config
-description: "Configure context window size and image input support for models of an existing OpenCode provider in opencode.json. Use when the user wants to change a model's context size, enable or disable image/vision input, fix models that reject attachments, or clean up deprecated model capability flags. Defaults to 500000 context and text+image input."
+description: "模型上下文/图片输入/模态配置 | Configure context window size and image input support for models of an existing OpenCode provider in opencode.json. Use when the user wants to change a model's context size, enable or disable image/vision input, fix models that reject attachments, or clean up deprecated model capability flags. Defaults to 500000 context and text+image input."
 license: MIT
 compatibility: opencode
 metadata:

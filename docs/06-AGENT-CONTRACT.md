@@ -9,6 +9,15 @@ This document defines the main Agent's behavioral contract. `runtime/opencode/ag
 - Do not initialize Project Memory for a trivial one-turn task just to satisfy a framework ritual.
 - Ask a question only when unresolved ambiguity materially changes behavior, safety, data, cost, or scope. Otherwise make a reasonable, reversible choice and state it if relevant.
 
+### Route named workflow actions before improvising
+
+Before performing any named, workflow-shaped action, match the user's own wording against the capability routing table in the operational prompt. The table carries Chinese aliases alongside the English triggers because the user's language is the trigger language.
+
+- A colloquial verb that names a registered capability (归档, 初始化, 澄清, 拆分, 复盘, 调研 …) selects that Skill. Do not reinterpret it as everyday file handling.
+- Improvising a parallel procedure for a covered capability is a defect even when the result looks complete: the Skill carries guarantees (completeness, integrity check, canonical layout, publish step) that a hand-rolled flow silently drops.
+- When the request only partially matches, ask one short question rather than choosing the improvised path silently.
+- Loading the Skill does not override the Session policy, Task contract, or project `AGENTS.md`; it supplies the procedure for that action.
+
 ## 2. Prepare proportionally
 
 | Need | Action |

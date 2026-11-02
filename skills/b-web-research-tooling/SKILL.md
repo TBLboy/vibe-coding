@@ -1,6 +1,6 @@
 ---
 name: b-web-research-tooling
-description: "Retrieve current web evidence safely for research, troubleshooting, and fact verification using available search and fetch tools with source-quality and secret-handling discipline."
+description: "上网查证/网络取证/查最新资料 | Retrieve current web evidence safely for research, troubleshooting, and fact verification using available search and fetch tools with source-quality and secret-handling discipline."
 license: MIT
 compatibility: opencode
 metadata:

@@ -1,6 +1,6 @@
 ---
 name: a-paper-reading
-description: "Read academic papers at selectable depth from relevance screening through structured understanding, methodological reconstruction, critical evaluation, and project transfer, producing traceable notes rather than generic summaries."
+description: "读论文/论文精读 | Read academic papers at selectable depth from relevance screening through structured understanding, methodological reconstruction, critical evaluation, and project transfer, producing traceable notes rather than generic summaries."
 license: MIT
 compatibility: opencode
 metadata:

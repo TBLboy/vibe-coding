@@ -1,6 +1,6 @@
 ---
 name: a-retrospective
-description: "Review a completed increment's decisions, actions, results, failures, rework, validation quality, and workflow friction, then create concrete improvement actions and evidence-backed knowledge candidates."
+description: "复盘/总结这次 | Review a completed increment's decisions, actions, results, failures, rework, validation quality, and workflow friction, then create concrete improvement actions and evidence-backed knowledge candidates."
 license: MIT
 compatibility: opencode
 metadata:

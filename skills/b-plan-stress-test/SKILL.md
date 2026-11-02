@@ -1,6 +1,6 @@
 ---
 name: b-plan-stress-test
-description: "Stress-test a proposed plan or design through one focused question at a time, resolving decision dependencies with evidence and a recommended answer."
+description: "方案拷问/计划压力测试 | Stress-test a proposed plan or design through one focused question at a time, resolving decision dependencies with evidence and a recommended answer."
 license: MIT
 compatibility: opencode
 metadata:

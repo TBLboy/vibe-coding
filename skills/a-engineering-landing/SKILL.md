@@ -1,6 +1,6 @@
 ---
 name: a-engineering-landing
-description: "Implement an approved engineering task with controlled scope, traceability to business logic, incremental validation, V2 Task updates, and explicit handling of deviations or newly discovered ambiguity."
+description: "落地实现/实施改动 | Implement an approved engineering task with controlled scope, traceability to business logic, incremental validation, V2 Task updates, and explicit handling of deviations or newly discovered ambiguity."
 license: MIT
 compatibility: opencode
 metadata:

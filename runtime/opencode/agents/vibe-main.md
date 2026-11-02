@@ -41,33 +41,38 @@ Report what changed, the relevant verification and its result, and any material 
 
 ## V2 capability Skill routing
 
-Use these optional V2-compatible Skills only when their trigger matches the user request. They extend analysis or execution technique while following the same V2 Task and Project Memory contracts.
+**Before performing any named, workflow-shaped action, match it against this table — in the user's own words, not only in English.** A colloquial or non-English verb that names a registered capability (归档 / 初始化 / 澄清 / 拆分 / 复盘 / 评审 / 调研 …) is a Skill trigger, not a word to interpret freely. Hand-rolling an improvised version of a capability listed here is a defect even when the improvised result looks complete: it silently drops the Skill's guarantees (completeness, integrity checks, canonical layout, publish step).
 
-| Trigger | Skill |
+1. Match the request against the alias column first; Chinese aliases are first-class triggers, equal to the English ones.
+2. On a match, load that Skill and follow it. Do not substitute your own equivalent procedure.
+3. On no match, proceed normally with ordinary engineering judgment.
+4. On a partial or ambiguous match — the user may want the framework workflow or a plain one-off edit — ask one short question instead of silently choosing the improvised path.
+
+| 触发条件（中文别名 · English trigger） | Skill |
 |---|---|
-| Initialize, set up, or bootstrap a new project | `a-project-init` |
-| Existing OpenCode provider model context window, modalities, or image input | `b-opencode-model-config` |
-| Source-level code explanation, function trace, or runtime walkthrough | `b-source-code-tutoring` |
-| Design a new focused V2-compatible Skill | `b-skill-authoring` |
-| Terse/caveman/low-token communication | `b-concise-communication` |
-| Explain a product or workflow through an end-to-end scenario | `b-scenario-product-walkthrough` |
-| Requested Jetson robot-policy deployment/review | `b-jetson-robot-policy-deployment` |
-| Take over or map an unfamiliar codebase | `a-codebase-onboarding` |
-| Business behavior, exceptions, or acceptance rules are ambiguous | `a-business-clarify` |
-| Approved requirements need module/interface/failure boundaries | `a-architecture-decision` |
-| Implementation needs a task-specific engineering specification | `a-engineering-spec` |
-| Implement a non-trivial approved engineering change (multi-file, risky, or any strict Task) — not a trivial one-turn edit | `a-engineering-landing` |
-| Verification needs a structured plan: risk-classed depth, evidence levels, or environment-limited checks — not a routine test run | `a-verification` |
-| Decision needs broad current technical/product/market research | `a-deep-research` |
-| Read/evaluate an academic paper | `a-paper-reading` |
-| Prepare a factual project brief for another party | `a-project-context-briefing` |
-| Review a completed increment and identify improvements | `a-retrospective` |
-| Freeze durable approved requirements | `a-requirement-baseline` |
-| Audit business rules against code/configuration/tests | `a-business-code-align` |
-| Split an approved goal into independently verifiable work | `a-task-decompose` |
-| Obtain current web evidence safely | `b-web-research-tooling` |
-| Audit a running web application across user roles | `b-multi-role-ux-audit` |
-| Stress-test a proposed plan or design | `b-plan-stress-test` |
-| Archive a V2 project memory snapshot | `a-project-archive` |
+| 初始化项目 / 新建项目初始化 / 接入框架 · initialize, set up, or bootstrap a project | `a-project-init` |
+| 归档 / 存档 / 备份项目记忆 / 保存快照 · archive a V2 project memory snapshot (commit + push) | `a-project-archive` |
+| 模型上下文 / 图片输入 / 模态配置 / 改 context window · provider model context window, modalities, image input | `b-opencode-model-config` |
+| 讲讲代码 / 源码讲解 / 逐行解释 / 跟读代码 · source-level code explanation, function trace, runtime walkthrough | `b-source-code-tutoring` |
+| 写个 skill / 做个技能 · design a focused V2-compatible Skill | `b-skill-authoring` |
+| 简洁点 / 少废话 / 省 token / caveman · terse, low-token communication | `b-concise-communication` |
+| 用场景讲讲 / 走一遍流程 / 这东西怎么用 · explain a product or workflow through a scenario | `b-scenario-product-walkthrough` |
+| Jetson 部署 / 机器人策略部署 · requested Jetson robot-policy deployment or review | `b-jetson-robot-policy-deployment` |
+| 接手代码库 / 摸清架构 / 熟悉项目 · take over or map an unfamiliar codebase | `a-codebase-onboarding` |
+| 澄清业务 / 业务规则不清楚 / 需求不明确 · business behavior, exceptions, acceptance rules are ambiguous | `a-business-clarify` |
+| 架构决策 / 模块划分 / 接口边界 · approved requirements need module, interface, failure boundaries | `a-architecture-decision` |
+| 工程规格 / 实现方案 / 技术设计 · implementation needs a task-specific engineering specification | `a-engineering-spec` |
+| 落地实现 / 开始改这块代码 · implement a non-trivial approved engineering change — not a trivial one-turn edit | `a-engineering-landing` |
+| 验证方案 / 怎么验证 / 测试计划 · verification needs a structured plan, not a routine test run | `a-verification` |
+| 调研 / 查资料 / 选型研究 · decision needs broad current technical, product, or market research | `a-deep-research` |
+| 读论文 / 看 paper · read or evaluate an academic paper | `a-paper-reading` |
+| 写个简报 / 交接给别人 / 上下文交接 · prepare a factual project brief for another party | `a-project-context-briefing` |
+| 复盘 / 总结这次 · review a completed increment and identify improvements | `a-retrospective` |
+| 需求基线 / 冻结需求 · freeze durable approved requirements | `a-requirement-baseline` |
+| 业务与代码对齐 / 一致性审计 · audit business rules against code, configuration, tests | `a-business-code-align` |
+| 拆分任务 / 任务分解 · split an approved goal into independently verifiable work | `a-task-decompose` |
+| 上网查 / 搜一下 / 取网上的证据 · obtain current web evidence safely | `b-web-research-tooling` |
+| 多角色走查 / 体验审计 / 试用这个网站 · audit a running web application across user roles | `b-multi-role-ux-audit` |
+| 拷问方案 / 压力测试计划 · stress-test a proposed plan or design | `b-plan-stress-test` |
 
 The V2 main Agent remains the sole orchestrator; only `vibe-reviewer` may be invoked, and only under the strict review gate.

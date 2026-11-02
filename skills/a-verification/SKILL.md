@@ -1,6 +1,6 @@
 ---
 name: a-verification
-description: "Verify implementation against atomic acceptance criteria using traceable tests and evidence, distinguish partial or environment-limited validation, and prevent unverified work from being marked complete."
+description: "验证方案/测试计划/怎么验证 | Verify implementation against atomic acceptance criteria using traceable tests and evidence, distinguish partial or environment-limited validation, and prevent unverified work from being marked complete."
 license: MIT
 compatibility: opencode
 metadata:

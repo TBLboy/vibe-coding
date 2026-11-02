@@ -1,6 +1,6 @@
 ---
 name: a-business-clarify
-description: "Clarify vague business intent into atomic, testable business logic through active evidence gathering, one-question-at-a-time interviewing, controlled inference, and durable V2 memory updates."
+description: "业务澄清/需求澄清/规则不清楚 | Clarify vague business intent into atomic, testable business logic through active evidence gathering, one-question-at-a-time interviewing, controlled inference, and durable V2 memory updates."
 license: MIT
 compatibility: opencode
 metadata:

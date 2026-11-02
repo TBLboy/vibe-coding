@@ -121,6 +121,11 @@ Do not call the package release-ready until:
 - A template change updates only the span between the markers; malformed markers are reported and the file is left untouched.
 - The general rules lead with the end-of-reply 点拨 (mentoring) rule as rule 1 — name the engineering term / pattern / mental model behind the user's informal question or action in 1–3 sentences, or stay silent when nothing is worth naming — and the remaining rules are numbered contiguously after it.
 
+## V2 capability Skill routing (`tests/package-shape.test.ts`)
+
+- The routing table declares Chinese aliases as first-class triggers and forbids substituting an improvised parallel flow for a covered capability.
+- Every routed Skill carries a Chinese alias in its routing row **and** at the start of its frontmatter `description`, so a request phrased in the user's language reaches the Skill instead of being reinterpreted (regression guard for VIBE-FW-ROUTE-001).
+
 ## V2 capability Skill completeness
 
 - `tests/package-shape.test.ts` requires every managed Skill to carry at least two methodology sections beyond the shared V2 operating rules and a minimum length, so a Skill cannot regress to a summary stub.

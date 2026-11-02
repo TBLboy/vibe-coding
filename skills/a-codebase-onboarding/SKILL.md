@@ -1,6 +1,6 @@
 ---
 name: a-codebase-onboarding
-description: "Onboard an existing codebase by mapping architecture, current observable behavior, tests, data, integrations, and risks without treating code behavior as automatically authoritative business logic."
+description: "接手代码库/摸清架构/代码入门 | Onboard an existing codebase by mapping architecture, current observable behavior, tests, data, integrations, and risks without treating code behavior as automatically authoritative business logic."
 license: MIT
 compatibility: opencode
 metadata:

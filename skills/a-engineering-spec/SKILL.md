@@ -1,6 +1,6 @@
 ---
 name: a-engineering-spec
-description: "Produce a task-specific engineering specification that maps business logic and architecture to concrete modules, interfaces, data changes, failure behavior, tests, migration, rollout, and rollback."
+description: "工程规格/技术设计/实现方案 | Produce a task-specific engineering specification that maps business logic and architecture to concrete modules, interfaces, data changes, failure behavior, tests, migration, rollout, and rollback."
 license: MIT
 compatibility: opencode
 metadata:

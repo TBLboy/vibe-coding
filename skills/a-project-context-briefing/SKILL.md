@@ -1,6 +1,6 @@
 ---
 name: a-project-context-briefing
-description: "Package a self-contained, evidence-based project or problem brief for another AI, teammate, vendor, forum, or issue tracker without inventing missing context."
+description: "项目简报/上下文交接/给他人说明 | Package a self-contained, evidence-based project or problem brief for another AI, teammate, vendor, forum, or issue tracker without inventing missing context."
 license: MIT
 compatibility: opencode
 metadata:

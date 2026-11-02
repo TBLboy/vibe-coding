@@ -1,6 +1,6 @@
 ---
 name: b-multi-role-ux-audit
-description: "Audit a running web application through real browser workflows for multiple user roles, separately reporting correctness defects and user-experience friction."
+description: "多角色走查/体验审计/网站试用 | Audit a running web application through real browser workflows for multiple user roles, separately reporting correctness defects and user-experience friction."
 license: MIT
 compatibility: opencode
 metadata:

@@ -1,6 +1,6 @@
 ---
 name: a-requirement-baseline
-description: "Freeze a versioned business requirement baseline from clarified atomic logic, scope boundaries, constraints, assumptions, and unresolved questions before technical implementation begins."
+description: "需求基线/冻结需求 | Freeze a versioned business requirement baseline from clarified atomic logic, scope boundaries, constraints, assumptions, and unresolved questions before technical implementation begins."
 license: MIT
 compatibility: opencode
 metadata:

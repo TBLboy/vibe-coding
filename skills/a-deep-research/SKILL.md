@@ -1,6 +1,6 @@
 ---
 name: a-deep-research
-description: "Conduct decision-oriented technical, product, market, or strategy research with scoped questions, traceable evidence, contrary evidence, trade-offs, and an actionable recommendation."
+description: "深度调研/查资料/选型研究 | Conduct decision-oriented technical, product, market, or strategy research with scoped questions, traceable evidence, contrary evidence, trade-offs, and an actionable recommendation."
 license: MIT
 compatibility: opencode
 metadata:

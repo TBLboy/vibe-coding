@@ -1,6 +1,6 @@
 ---
 name: b-skill-authoring
-description: "Design and write a focused V2-compatible OpenCode Skill with clear triggers, progressive disclosure, optional deterministic helpers, and reviewable resource boundaries."
+description: "写Skill/做技能 | Design and write a focused V2-compatible OpenCode Skill with clear triggers, progressive disclosure, optional deterministic helpers, and reviewable resource boundaries."
 license: MIT
 compatibility: opencode
 metadata:
@@ -25,7 +25,7 @@ Before creating files, make and record all five decisions below.
 2. **Check for overlap and collisions.** Inspect existing `skills/` and the routing table in `runtime/opencode/agents/vibe-main.md`. Extend an existing Skill when the new behavior shares its boundary; do not create a synonym or duplicate capability. The folder name and frontmatter `name` must be identical, lowercase kebab-case, and start with the chosen prefix.
 3. **Use the Skill as the entry point.** OpenCode discovers `SKILL.md` directly. A same-named command is optional glue, not a substitute for the Skill contract.
 4. **Decide automatic versus explicit routing.** Add a row to the `vibe-main` routing table only when user language can identify the capability reliably, activation is low-risk and low-cost, and loading it does not write external systems, run destructive operations, create broad audits, or create a snapshot/package. Otherwise keep it explicit-only, set `metadata.routing: explicit-only`, and state the reason in the Skill.
-5. **Implement and verify the decision.** For an automatic route, add precise trigger wording and the exact Skill name to the routing table. Add the Skill id to the pinned list in `tests/package-shape.test.ts` so the package test guards the Skill, its V2 markers, and its route.
+5. **Implement and verify the decision.** For an automatic route, add precise trigger wording and the exact Skill name to the routing table, and write the `description` with the user's own-language aliases *first* (the package test rejects an English-only route or description, because a request phrased as `归档一下` then never reaches the Skill). Add the Skill id to the pinned list in `tests/package-shape.test.ts` so the package test guards the Skill, its V2 markers, and its route.
 
 Default safety rule: a vague request never justifies automatically starting a high-cost browser audit, Skill/agent/plugin creation, credential operation, destructive action, or irreversible change. Require an explicit user request for those operations.
 
@@ -61,6 +61,7 @@ Verify the trigger description, terminology, input/output contract, normal and b
 - `a-*` or `b-*` classification and reasoning are explicit;
 - folder and frontmatter names match with no collision;
 - automatic or explicit-only routing has an explicit decision and rationale;
+- the routing row and the `description` both begin with user-language aliases, not English-only wording;
 - `vibe-main.md` and `tests/package-shape.test.ts` were updated when the routing decision requires it;
 - `npm run test:core` and the installer tests pass, and the installed copy matches the source.
 

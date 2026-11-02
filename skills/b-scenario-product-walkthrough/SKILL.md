@@ -1,6 +1,6 @@
 ---
 name: b-scenario-product-walkthrough
-description: "Explain a complex product, platform, framework, workflow, or Skill pack through a realistic end-to-end work scenario instead of a feature list. Use when the user asks how a product works, how to use it, what a workflow does, or requests a concrete simulated walkthrough."
+description: "场景讲解/用场景走一遍 | Explain a complex product, platform, framework, workflow, or Skill pack through a realistic end-to-end work scenario instead of a feature list. Use when the user asks how a product works, how to use it, what a workflow does, or requests a concrete simulated walkthrough."
 license: MIT
 compatibility: opencode
 metadata:
