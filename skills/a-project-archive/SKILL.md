@@ -1,6 +1,6 @@
 ---
 name: a-project-archive
-description: "Project archive."
+description: "Archive a V2 project: copy AGENTS.md and .vibe/ into a timestamped snapshot, then commit and push it so the archive survives this machine."
 license: MIT
 compatibility: opencode
 metadata:
