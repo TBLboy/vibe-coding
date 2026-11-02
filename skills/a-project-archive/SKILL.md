@@ -62,7 +62,7 @@ Rules:
 
 - **Never report an archive as done while the snapshot is unpushed.** Exit 4 means "created locally, not archived".
 - Never force-push and never rewrite history. On a rejected push the script integrates once (`fetch` + `rebase`, aborting cleanly on conflict) and retries; a remaining conflict is surfaced to the user.
-- Only the snapshot directory is staged and committed (`git add -- <snapshot>`), never other working-tree changes in the archive repository. Files belonging to other snapshots or unrelated edits are left alone.
+- Only the snapshot directory is staged and committed (`git add -- <snapshot>`), never other working-tree changes in the archive repository. Files belonging to other snapshots or unrelated edits are left alone. Publishing a branch still also publishes any earlier unpushed commits of that branch — Git cannot publish a commit without its ancestors — so keep the archive repository's history clean.
 - `--no-push` exists only for a user who explicitly wants a local-only snapshot. Do not pass it on your own initiative.
 - Never put credentials on a command line; rely on the user's existing Git credential helper or SSH agent.
 
