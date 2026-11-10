@@ -218,65 +218,227 @@ def push(target: Path, remote: str | None = None, message: str | None = None) ->
 
 
 
-# The remembered archive root lives next to this Skill in the *installed* copy
+# The remembered archive location lives next to this Skill in the *installed* copy
 # (~/.config/opencode/skills/a-project-archive/archive_root.conf). It is user data:
 # the installer never ships it, so reinstall/uninstall leave it alone.
+#
+# Two things are remembered, because a snapshot needs both:
+#   repository   absolute path of the archive Git work tree (where commits happen)
+#   snapshot_dir directory *inside* that repository that holds project snapshots
+#                (e.g. "工程记录" for the personal knowledge base; "." for a
+#                 repository dedicated to archives only)
+#
+# File format (JSON, written by --set-*):
+#   {"repository": "<absolute path>", "snapshot_dir": "<relative path or .>"}
+# A legacy plain-text file is still readable: it is treated as
+#   {"repository": <that path>, "snapshot_dir": "."}
 CONFIG_FILE = Path(__file__).resolve().parent.parent / "archive_root.conf"
 EXIT_UNCONFIGURED = 3
+DEFAULT_SNAPSHOT_DIR = "."
 
 
-def load_archive_root(config_file: Path | None = None) -> Path | None:
+def clean_snapshot_dir(value: str) -> str:
+    """Normalise a snapshot directory to a relative POSIX path, or '.' for the repository root."""
+    text = str(value).replace("\\", "/").strip()
+    if not text:
+        return DEFAULT_SNAPSHOT_DIR
+    candidate = Path(text)
+    if candidate.is_absolute():
+        raise ValueError(f"snapshot dir must be relative to the archive repository: {value}")
+    parts = [part for part in candidate.parts if part not in ("", ".")]
+    if any(part == ".." for part in parts):
+        raise ValueError(f"snapshot dir must not leave the archive repository: {value}")
+    return "/".join(parts) if parts else DEFAULT_SNAPSHOT_DIR
+
+
+def work_tree_root(path: Path) -> Path | None:
+    code, output, _ = run_git(["rev-parse", "--show-toplevel"], path)
+    if code != 0 or not output:
+        return None
+    return Path(output).resolve()
+
+
+def resolve_repository(path: Path) -> tuple[Path, str]:
+    """Return (repository or plain directory, snapshot dir implied by `path`).
+
+    Inside a Git work tree the path is canonicalised to the work-tree root and the
+    remaining sub-path becomes the snapshot directory; passing .../工程记录 therefore
+    records "snapshots live in 工程记录 of that repository". A directory that is not
+    Git-managed is kept as-is, so the snapshot can still be created locally and the
+    push step reports why it could not be published.
+    """
+    resolved = path.expanduser().resolve()
+    if not resolved.is_dir():
+        raise ValueError(f"archive location does not exist or is not a directory: {resolved}")
+    top = work_tree_root(resolved)
+    if top is None:
+        return resolved, DEFAULT_SNAPSHOT_DIR
+    relative = resolved.relative_to(top)
+    return top, clean_snapshot_dir(relative.as_posix())
+
+
+def snapshot_parent(repository: Path, snapshot_dir: str) -> Path:
+    """Absolute directory that holds <project>/<timestamp> snapshots."""
+    resolved = repository.expanduser().resolve()
+    if not resolved.is_dir():
+        raise ValueError(f"archive repository does not exist or is not a directory: {resolved}")
+    parent = (resolved / snapshot_dir).resolve()
+    if not contains(resolved, parent):
+        raise ValueError(f"snapshot dir leaves the archive repository: {snapshot_dir}")
+    return parent
+
+
+def load_config(config_file: Path | None = None) -> dict[str, object] | None:
     config_file = config_file or CONFIG_FILE
     try:
-        value = config_file.read_text(encoding="utf-8").strip()
+        text = config_file.read_text(encoding="utf-8").strip()
     except OSError:
         return None
-    return Path(value) if value else None
+    if not text:
+        return None
+    if text.startswith("{"):
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError as error:
+            raise ValueError(f"cannot parse {config_file}: {error}") from error
+        repository = str(data.get("repository") or "").strip()
+        if not repository:
+            raise ValueError(f"{config_file} has no repository entry")
+        return {
+            "repository": Path(repository).expanduser(),
+            "snapshot_dir": clean_snapshot_dir(str(data.get("snapshot_dir", DEFAULT_SNAPSHOT_DIR))),
+        }
+    return {"repository": Path(text).expanduser(), "snapshot_dir": DEFAULT_SNAPSHOT_DIR}
 
 
-def save_archive_root(root: Path, config_file: Path | None = None) -> Path:
+def save_config(repository: Path, snapshot_dir: str, config_file: Path | None = None) -> dict[str, object]:
     config_file = config_file or CONFIG_FILE
-    resolved = root.expanduser()
+    resolved = repository.expanduser()
     if not resolved.is_absolute():
-        raise ValueError(f"archive root must be an absolute path: {root}")
+        raise ValueError(f"archive repository must be an absolute path: {repository}")
     resolved = resolved.resolve()
     if not resolved.is_dir():
-        raise ValueError(f"archive root does not exist or is not a directory: {resolved}")
+        raise ValueError(f"archive repository does not exist or is not a directory: {resolved}")
+    sub = clean_snapshot_dir(snapshot_dir)
     config_file.parent.mkdir(parents=True, exist_ok=True)
-    config_file.write_text(str(resolved) + "\n", encoding="utf-8")
-    return resolved
+    payload = {"repository": str(resolved), "snapshot_dir": sub}
+    config_file.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return {"repository": resolved, "snapshot_dir": sub}
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--project-root", type=Path, help="project to archive (required unless only setting the root)")
-    parser.add_argument("--archive-root", type=Path, help="one-off destination; overrides the remembered root without saving it")
-    parser.add_argument("--set-archive-root", type=Path, metavar="PATH", help="remember PATH as the default archive root for this machine")
-    parser.add_argument("--show-archive-root", action="store_true", help="print the remembered archive root and exit")
+    parser.add_argument("--project-root", type=Path, help="project to archive (required unless only setting the location)")
+    parser.add_argument(
+        "--archive-root",
+        type=Path,
+        help="one-off archive repository or snapshot directory; overrides the remembered setting without saving it",
+    )
+    parser.add_argument(
+        "--snapshot-dir",
+        metavar="REL",
+        help="one-off snapshot directory inside the archive repository (overrides the remembered one)",
+    )
+    parser.add_argument(
+        "--set-archive-root",
+        type=Path,
+        metavar="PATH",
+        help="remember PATH as the archive repository, or as the snapshot directory inside it",
+    )
+    parser.add_argument(
+        "--set-snapshot-dir",
+        metavar="REL",
+        help="remember REL as the snapshot directory inside the remembered archive repository",
+    )
+    parser.add_argument("--show-archive-root", action="store_true", help="print the remembered location and exit")
     parser.add_argument("--remote", default=None, help="Git remote to push to (default: origin, else the only remote)")
-    parser.add_argument("--no-push", action="store_true", help="skip the mandatory publish step (destructive escape hatch; the snapshot then exists only on this machine)")
+    parser.add_argument(
+        "--no-push",
+        action="store_true",
+        help="skip the mandatory publish step (destructive escape hatch; the snapshot then exists only on this machine)",
+    )
     args = parser.parse_args()
     try:
         if args.show_archive_root:
-            root = load_archive_root()
-            print(json.dumps({"archive_root": str(root) if root else None, "config": str(CONFIG_FILE)}, ensure_ascii=False))
-            return 0 if root else EXIT_UNCONFIGURED
-        if args.set_archive_root is not None:
-            saved = save_archive_root(args.set_archive_root)
-            print(json.dumps({"archive_root": str(saved), "config": str(CONFIG_FILE)}, ensure_ascii=False))
+            config = load_config()
+            if config is None:
+                print(json.dumps({"configured": False, "config": str(CONFIG_FILE)}, ensure_ascii=False))
+                return EXIT_UNCONFIGURED
+            repository = Path(config["repository"])
+            sub = str(config["snapshot_dir"])
+            print(
+                json.dumps(
+                    {
+                        "configured": True,
+                        "repository": str(repository),
+                        "snapshot_dir": sub,
+                        "snapshot_parent": str(snapshot_parent(repository, sub)),
+                        "config": str(CONFIG_FILE),
+                    },
+                    ensure_ascii=False,
+                )
+            )
+            return 0
+
+        if args.set_archive_root is not None or args.set_snapshot_dir is not None:
+            if args.set_archive_root is not None:
+                repository, implied = resolve_repository(args.set_archive_root)
+                sub = args.set_snapshot_dir if args.set_snapshot_dir is not None else implied
+            else:
+                config = load_config()
+                if config is None:
+                    print(
+                        "[!] No archive repository is configured. Pass --set-archive-root <path> first.",
+                        file=sys.stderr,
+                    )
+                    return EXIT_UNCONFIGURED
+                repository = Path(config["repository"])
+                sub = str(args.set_snapshot_dir)
+            saved = save_config(repository, sub)
+            print(
+                json.dumps(
+                    {
+                        "repository": str(saved["repository"]),
+                        "snapshot_dir": str(saved["snapshot_dir"]),
+                        "snapshot_parent": str(snapshot_parent(Path(saved["repository"]), str(saved["snapshot_dir"]))),
+                        "config": str(CONFIG_FILE),
+                    },
+                    ensure_ascii=False,
+                )
+            )
             if args.project_root is None:
                 return 0
+
         if args.project_root is None:
             parser.error("--project-root is required to archive")
-        root = args.archive_root or load_archive_root()
-        if root is None:
-            print(
-                "[!] No archive root is configured and none was given. Ask the user for the absolute archive "
-                f"directory, then run again with --set-archive-root <path> (saved to {CONFIG_FILE}).",
-                file=sys.stderr,
-            )
-            return EXIT_UNCONFIGURED
-        target = archive(args.project_root, root)
+
+        if args.archive_root is not None or args.snapshot_dir is not None:
+            if args.archive_root is not None:
+                repository, implied = resolve_repository(args.archive_root)
+                sub = args.snapshot_dir if args.snapshot_dir is not None else implied
+            else:
+                config = load_config()
+                if config is None:
+                    raise ValueError("--snapshot-dir needs a remembered archive repository")
+                repository = Path(config["repository"])
+                sub = str(args.snapshot_dir)
+        else:
+            config = load_config()
+            if config is None:
+                print(
+                    "[!] No archive root is configured and none was given. Ask the user for the archive "
+                    "repository directory (or the snapshot directory inside it), then run again with "
+                    f"--set-archive-root <path> (saved to {CONFIG_FILE}).",
+                    file=sys.stderr,
+                )
+                return EXIT_UNCONFIGURED
+            repository = Path(config["repository"])
+            sub = str(config["snapshot_dir"])
+
+        parent = snapshot_parent(repository, sub)
+        parent.mkdir(parents=True, exist_ok=True)
+
+        target = archive(args.project_root, parent)
         # Archiving is not finished until the snapshot is pushed: a local commit
         # does not survive the machine. Only an explicit --no-push skips this.
         report: dict[str, object] = {"status": "skipped", "reason": "--no-push"}
@@ -285,16 +447,22 @@ def main() -> int:
     except (OSError, ValueError) as error:
         print(f"[!] {error}", file=sys.stderr)
         return 1
-    result = {"archive": str(target), "archive_root": str(root), "publish": report}
+    result = {
+        "archive": str(target),
+        "repository": str(repository),
+        "snapshot_dir": sub,
+        "archive_root": str(parent),
+        "publish": report,
+    }
     if not args.no_push and report.get("status") in {"not-a-repository", "no-remote", "detached-head"}:
         print(json.dumps(result, ensure_ascii=False))
         explanation = {
-            "not-a-repository": f"the archive root is not a Git work tree, so the snapshot stays local: {target}",
+            "not-a-repository": f"the archive location is not a Git work tree, so the snapshot stays local: {target}",
             "no-remote": "the archive repository has no remote configured, so the snapshot stays local",
             "detached-head": "the archive repository is on a detached HEAD, so the snapshot cannot be published; check out a branch",
         }[str(report["status"])]
         print(
-            f"[!] Archive created but NOT pushed: {explanation}. Make the archive root a Git work tree with a "
+            f"[!] Archive created but NOT pushed: {explanation}. Make the archive repository a Git work tree with a "
             "remote (or pass --archive-root to one), then push the snapshot again.",
             file=sys.stderr,
         )

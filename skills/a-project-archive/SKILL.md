@@ -20,30 +20,89 @@ Archive only these project-root inputs:
 
 The archive is a copy-only snapshot of the source project: it does not modify the source project, infer a knowledge-base location, or archive unrelated project files. It **is** committed and pushed in the archive repository, because an archive that exists only on one machine has not been archived.
 
-## Archive root (remembered per machine)
+## Archive repository and layout
 
-The destination root is stored in the installed Skill at `~/.config/opencode/skills/a-project-archive/archive_root.conf`. The installer never writes or deletes this file, so it survives framework upgrades.
+Two settings are remembered per machine in `~/.config/opencode/skills/a-project-archive/archive_root.conf`
+(JSON: `{"repository": "…", "snapshot_dir": "…"}`). The installer never writes or deletes this file, so it
+survives framework upgrades.
 
-The archive root should be a Git work tree with a remote. That is how snapshots get published.
+- `repository` — the Git work tree that receives archive commits; publishing requires a remote;
+- `snapshot_dir` — the directory *inside* that repository that holds project snapshots
+  (`工程记录` on this machine; `.` only for a repository used exclusively for archives).
 
-1. Run the archive; it creates the snapshot and pushes it:
+Effective snapshot parent: `<repository>/<snapshot_dir>`; a run creates
+`<repository>/<snapshot_dir>/<project-name>/<UTC-timestamp>/`.
+
+### This machine
+
+| Setting | Value |
+|---|---|
+| repository | `D:\Project\My_knowledge_base` (remote `TBLboy/My_knowledge_base`, branch `work_record`) |
+| snapshot_dir | `工程记录` |
+| snapshot path | `D:\Project\My_knowledge_base\工程记录\<project-name>\<UTC-timestamp>\` |
+
+Repository layout — **archives belong in `工程记录/` only**:
+
+```text
+My_knowledge_base/
+  AGENTS.md
+  .gitignore
+  个人简历/  学习记录/  学习路线/  工作记录/      # personal files: never write here
+  工程记录/                                     # the only archive entry point
+    README.md
+    <project-name>/                             # one directory per project
+      AGENTS.md                                 # legacy V1 archive file (leave as is)
+      .project-log/                             # legacy V1 memory snapshot (read-only)
+      <UTC-timestamp>/                          # V2 snapshot produced by this Skill
+        AGENTS.md
+        .vibe/
+        manifest.json
+    boss_electrics/  cucumber/  data_collect/  …  Transformer-Koopman/  vibe-coding/  …
+```
+
+Layout rules:
+
+- A snapshot is always `<repository>/<snapshot_dir>/<project>/<timestamp>/`. Never at the repository
+  root, never inside another project's directory.
+- Never modify or delete existing snapshots, other projects, or the unrelated top-level directories.
+- `工程记录/<project>/.project-log/` is a pre-timestamp V1 snapshot. Keep it; do not migrate or rewrite it.
+- Only the new snapshot path is staged and committed, so unrelated working-tree changes in the archive
+  repository are never swept in.
+- Self-check after a run: the reported path must contain `工程记录`. If it does not, the snapshot landed
+  in the wrong place — delete it and re-run with the location set correctly.
+
+### Commands
+
+1. Configure once (already done on this machine):
+
+   ```bash
+   python3 ~/.config/opencode/skills/a-project-archive/scripts/archive_v2.py \
+     --set-archive-root "D:/Project/My_knowledge_base/工程记录"
+   ```
+
+   Naming the snapshot directory is enough: the script canonicalises it to
+   `repository=D:/Project/My_knowledge_base`, `snapshot_dir=工程记录`. Passing the repository root instead
+   implies `snapshot_dir=.`, which is only correct for a repository dedicated to archives.
+
+2. Archive; it creates the snapshot and pushes it:
 
    ```bash
    python3 ~/.config/opencode/skills/a-project-archive/scripts/archive_v2.py --project-root <project-root>
    ```
 
-2. If it exits with code 3 (`No archive root is configured`), ask the user **once** for the absolute archive directory, then save it and archive in the same command:
+3. If it exits with code 3 (`No archive root is configured`), ask the user **once** for the archive repository
+   (or the snapshot directory inside it), then save and archive in the same command:
 
    ```bash
    python3 ~/.config/opencode/skills/a-project-archive/scripts/archive_v2.py \
-     --set-archive-root <absolute-dir> --project-root <project-root>
+     --set-archive-root <absolute-path> --project-root <project-root>
    ```
 
    Never guess a knowledge-base location; the directory must exist and must not be inside the project.
 
-3. The user can later change the root with `--set-archive-root`, inspect it with `--show-archive-root`, override it for one run with `--archive-root <dir>` (not saved), or name the remote with `--remote <name>`.
-
-The command creates `<archive-root>/<project-name>/<UTC-timestamp>/` (staging first, then `manifest.json` with SHA-256 hashes, validated before publication), commits only that snapshot directory, pushes it, and confirms the remote ref equals the local commit.
+4. Inspection and overrides: `--show-archive-root` prints `repository`, `snapshot_dir` and the resolved
+   `snapshot_parent`; `--set-snapshot-dir <rel>` changes only the snapshot directory; `--archive-root <dir>`
+   and `--snapshot-dir <rel>` override for one run without saving; `--remote <name>` selects the remote.
 
 ## Publishing is part of archiving
 
@@ -71,6 +130,7 @@ Rules:
 - Refuse a missing `.vibe/`: there is no V2 project memory to archive.
 - Refuse symlinked source inputs and destination roots inside the source project.
 - Preserve an existing archive; each snapshot receives a new unique directory.
+- Never place a snapshot at the root of a knowledge-base repository that has a dedicated snapshot directory.
 - Treat the manifest as an integrity check, not as a project activity log.
 - Commit and push only the new snapshot directory; never sweep in unrelated changes from the archive repository.
 

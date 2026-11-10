@@ -81,13 +81,27 @@ class ArchiveTests(unittest.TestCase):
             self.assertFalse(conf.exists())
             second = run("--set-archive-root", str(dest), "--project-root", str(project))
             self.assertEqual(second.returncode, 0, second.stderr)
-            self.assertEqual(conf.read_text(encoding="utf-8").strip(), str(dest.resolve()))
+            saved = json.loads(conf.read_text(encoding="utf-8"))
+            self.assertEqual(saved, {"repository": str(dest.resolve()), "snapshot_dir": "."})
             third = run("--project-root", str(project))
             self.assertEqual(third.returncode, 0, third.stderr)
             third_result = json.loads(third.stdout.strip().splitlines()[-1])
             self.assertTrue(third_result["archive"].startswith(str(dest.resolve())))
             self.assertEqual(third_result["publish"]["status"], "pushed")
             self.assertEqual(len(list((dest / "demo").iterdir())), 2)
+
+            # naming the sub-directory that holds snapshots records it as the snapshot dir
+            snapshots = dest / "snapshots"
+            snapshots.mkdir()
+            fourth = run("--set-archive-root", str(snapshots), "--project-root", str(project))
+            self.assertEqual(fourth.returncode, 0, fourth.stderr)
+            self.assertEqual(
+                json.loads(conf.read_text(encoding="utf-8")),
+                {"repository": str(dest.resolve()), "snapshot_dir": "snapshots"},
+            )
+            fourth_result = json.loads(fourth.stdout.strip().splitlines()[-1])
+            self.assertTrue(fourth_result["archive"].startswith(str(snapshots.resolve())))
+            self.assertEqual(fourth_result["publish"]["status"], "pushed")
             bad = run("--set-archive-root", "relative/dir")
             self.assertEqual(bad.returncode, 1)
             missing = run("--set-archive-root", str(root / "nope"))
