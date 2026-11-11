@@ -103,7 +103,7 @@ Do not call the package release-ready until:
 - Every managed V2 capability Skill has a `SKILL.md` with V2 operating boundaries.
 - The main Agent routes every managed capability Skill by an explicit trigger.
 - The installer copies Skill files, verifies their digests, and removes only unchanged managed Skill files on uninstall.
-- No migrated Skill may instruct writes to `.project-log` or create legacy Goal, Run, ledger, SQLite, standalone Evidence, or reviewer transcript objects.
+- No migrated Skill may instruct writes to `.project-log` or create legacy Goal, Run, ledger, SQLite, standalone Evidence, or reviewer transcript objects. `a-project-archive` may *name* the pre-existing V1 snapshots inside the archive repository so it can forbid touching them; a mention that frames creating or writing them fails the test.
 
 ## V2 project archive
 

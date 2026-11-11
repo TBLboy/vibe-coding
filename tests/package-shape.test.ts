@@ -82,7 +82,17 @@ test("managed capability Skills are V2-compatible and routed by the main Agent",
     assert.match(content, /^---\nname: /, id);
     assert.match(content, /metadata:\n  v2: true/, id);
     assert.match(content, /Use only the V2 Task JSON and V2 Project Memory locations/, id);
-    assert.doesNotMatch(content, /\.project-log|SQLite|event ledger|standalone Evidence/, id);
+    // Naming a legacy V1 artifact in order to forbid touching it is not recreating it, so the
+    // archive Skill may describe the pre-existing V1 snapshots inside the archive repository.
+    const legacyGuard =
+      id === "a-project-archive"
+        ? /SQLite|event ledger|standalone Evidence/
+        : /\.project-log|SQLite|event ledger|standalone Evidence/;
+    assert.doesNotMatch(content, legacyGuard, id);
+    if (id === "a-project-archive") {
+      // The only permitted direction is "leave the existing V1 snapshots alone".
+      assert.doesNotMatch(content, /(create|write|append|record)[^.\n]{0,40}\.project-log/i, id);
+    }
     assert.doesNotMatch(content, /\.vibe\/requirements\.md/, `${id}: requirement baselines are per work under .vibe/requirements/`);
     assert.match(main, new RegExp("`" + id + "`"), id);
     const sections = content.split("\n").filter((line) => /^## /.test(line) && !/^## V2 operating rules/.test(line));
