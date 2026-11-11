@@ -27,37 +27,29 @@ Two settings are remembered per machine in `~/.config/opencode/skills/a-project-
 survives framework upgrades.
 
 - `repository` — the Git work tree that receives archive commits; publishing requires a remote;
-- `snapshot_dir` — the directory *inside* that repository that holds project snapshots
-  (`工程记录` on this machine; `.` only for a repository used exclusively for archives).
+- `snapshot_dir` — the directory *inside* that repository that holds project snapshots. Use a dedicated
+  directory when the repository also holds other material (a knowledge base typically has one); `.`
+  only for a repository used exclusively for archives.
 
 Effective snapshot parent: `<repository>/<snapshot_dir>`; a run creates
 `<repository>/<snapshot_dir>/<project-name>/<UTC-timestamp>/`.
 
-### This machine
+Never hardcode these values in this Skill or in a command you improvise: the remembered settings are
+machine-specific, so read them with `--show-archive-root` before reasoning about paths.
 
-| Setting | Value |
-|---|---|
-| repository | `D:\Project\My_knowledge_base` (remote `TBLboy/My_knowledge_base`, branch `work_record`) |
-| snapshot_dir | `工程记录` |
-| snapshot path | `D:\Project\My_knowledge_base\工程记录\<project-name>\<UTC-timestamp>\` |
-
-Repository layout — **archives belong in `工程记录/` only**:
+### Layout
 
 ```text
-My_knowledge_base/
-  AGENTS.md
-  .gitignore
-  个人简历/  学习记录/  学习路线/  工作记录/      # personal files: never write here
-  工程记录/                                     # the only archive entry point
-    README.md
-    <project-name>/                             # one directory per project
-      AGENTS.md                                 # legacy V1 archive file (leave as is)
-      .project-log/                             # legacy V1 memory snapshot (read-only)
-      <UTC-timestamp>/                          # V2 snapshot produced by this Skill
+<repository>/
+  <unrelated directories>          # other material: never write here
+  <snapshot_dir>/                  # the only archive entry point
+    <project-name>/                # one directory per project
+      AGENTS.md                    # pre-timestamp archive file (leave as is)
+      .project-log/                # pre-timestamp V1 memory snapshot (read-only)
+      <UTC-timestamp>/             # V2 snapshot produced by this Skill
         AGENTS.md
         .vibe/
         manifest.json
-    boss_electrics/  cucumber/  data_collect/  …  Transformer-Koopman/  vibe-coding/  …
 ```
 
 Layout rules:
@@ -65,23 +57,24 @@ Layout rules:
 - A snapshot is always `<repository>/<snapshot_dir>/<project>/<timestamp>/`. Never at the repository
   root, never inside another project's directory.
 - Never modify or delete existing snapshots, other projects, or the unrelated top-level directories.
-- `工程记录/<project>/.project-log/` is a pre-timestamp V1 snapshot. Keep it; do not migrate or rewrite it.
+- A `<snapshot_dir>/<project>/.project-log/` directory is a pre-timestamp V1 snapshot. Keep it; do not
+  migrate or rewrite it.
 - Only the new snapshot path is staged and committed, so unrelated working-tree changes in the archive
   repository are never swept in.
-- Self-check after a run: the reported path must contain `工程记录`. If it does not, the snapshot landed
-  in the wrong place — delete it and re-run with the location set correctly.
+- Self-check after a run: the reported path must end with `<snapshot_dir>/<project>/<timestamp>`. If it
+  does not, the snapshot landed in the wrong place — delete it and re-run with the location set correctly.
 
 ### Commands
 
-1. Configure once (already done on this machine):
+1. Configure once per machine:
 
    ```bash
    python3 ~/.config/opencode/skills/a-project-archive/scripts/archive_v2.py \
-     --set-archive-root "D:/Project/My_knowledge_base/工程记录"
+     --set-archive-root "<archive-repository>/<snapshot-dir>"
    ```
 
    Naming the snapshot directory is enough: the script canonicalises it to
-   `repository=D:/Project/My_knowledge_base`, `snapshot_dir=工程记录`. Passing the repository root instead
+   `repository=<archive-repository>`, `snapshot_dir=<snapshot-dir>`. Passing the repository root instead
    implies `snapshot_dir=.`, which is only correct for a repository dedicated to archives.
 
 2. Archive; it creates the snapshot and pushes it:
