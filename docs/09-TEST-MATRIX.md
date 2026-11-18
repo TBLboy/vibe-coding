@@ -130,6 +130,7 @@ Do not call the package release-ready until:
 
 - `tests/package-shape.test.ts` requires every managed Skill to carry at least two methodology sections beyond the shared V2 operating rules and a minimum length, so a Skill cannot regress to a summary stub.
 - Restored helper assets are pinned: `b-opencode-model-config/scripts/configure_models.py` (`scripts/test_v2_configure_models.py`: defaults applied, legacy `attachment` removed, unrelated keys and file mode preserved, dry-run writes nothing, idempotent, unknown provider/model rejected) and `b-source-code-tutoring/references/teaching-template.md`.
+- `b-branch-engineering-review` is pinned in the managed list: an explicit-only branch audit whose trigger requires a named branch, with the four-state comparison, capability ledger and evidence grading as its methodology. Its behaviour is validated by the branch scenarios in the design document (deleted-but-contracted code, half-implemented interface, changed default, cross-file contract break, tests without assertions, legitimate deletion, needless abstraction); those scenarios are run by hand against real branches, since a fixture repository for all seven is not shipped.
 
 ## Per-work requirement baselines (D-21)
 

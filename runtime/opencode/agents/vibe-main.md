@@ -74,5 +74,6 @@ Report what changed, the relevant verification and its result, and any material 
 | 上网查 / 搜一下 / 取网上的证据 · obtain current web evidence safely | `b-web-research-tooling` |
 | 多角色走查 / 体验审计 / 试用这个网站 · audit a running web application across user roles | `b-multi-role-ux-audit` |
 | 拷问方案 / 压力测试计划 · stress-test a proposed plan or design | `b-plan-stress-test` |
+| 分支审查 / 工程审查 / 审查这个分支 / 合并前审查 · review one explicitly named branch as an engineering change against its target branch | `b-branch-engineering-review` |
 
 The V2 main Agent remains the sole orchestrator; only `vibe-reviewer` may be invoked, and only under the strict review gate.

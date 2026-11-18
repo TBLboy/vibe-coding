@@ -70,7 +70,7 @@ const V2_SKILLS = [
   "b-concise-communication", "b-jetson-robot-policy-deployment",
   "b-multi-role-ux-audit", "b-opencode-model-config", "b-plan-stress-test",
   "b-scenario-product-walkthrough", "b-skill-authoring", "b-source-code-tutoring",
-  "b-web-research-tooling",
+  "b-web-research-tooling", "b-branch-engineering-review",
 ];
 
 test("managed capability Skills are V2-compatible and routed by the main Agent", () => {
