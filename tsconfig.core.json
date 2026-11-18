@@ -6,7 +6,15 @@
     "strict": true,
     "noEmit": true,
     "allowImportingTsExtensions": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "types": [
+      "node"
+    ]
   },
-  "include": ["runtime/core/**/*.ts"]
+  "include": [
+    "runtime/core/**/*.ts",
+    "runtime/opencode/plugins/vibe-v2/setup.ts",
+    "runtime/opencode/plugins/vibe-v2/host-contract.ts",
+    "runtime/opencode/plugins/vibe-v2/task-control.ts"
+  ]
 }

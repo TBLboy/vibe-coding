@@ -38,6 +38,13 @@ class InstallerTests(unittest.TestCase):
             self.assertEqual(installed["default_agent"], "vibe-main")
             self.assertTrue((home / "skills" / "a-verification" / "SKILL.md").is_file())
             self.assertTrue((home / "skills" / "b-opencode-model-config" / "SKILL.md").is_file())
+            for skill, reference in [
+                ("a-architecture-decision", "decision-method.md"),
+                ("a-engineering-landing", "change-method.md"),
+                ("a-verification", "test-design.md"),
+            ]:
+                relative = Path("skills") / skill / "references" / reference
+                self.assertEqual((home / relative).read_bytes(), (ROOT / relative).read_bytes())
             installer.verify(ROOT, home)
             installer.uninstall(home)
             restored = json.loads((home / "opencode.json").read_text(encoding="utf-8"))
@@ -66,10 +73,43 @@ class InstallerTests(unittest.TestCase):
             restored = json.loads((home / "opencode.json").read_text(encoding="utf-8"))
             self.assertEqual(restored, original)
 
+    def test_install_refuses_unowned_or_modified_agent(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary) / "opencode"
+            agent = home / "agents" / "vibe-main.md"
+            agent.parent.mkdir(parents=True)
+            agent.write_text("user original", encoding="utf-8")
+            with self.assertRaisesRegex(RuntimeError, "unowned or user-modified"):
+                installer.install(ROOT, home)
+            self.assertEqual(agent.read_text(), "user original")
+            agent.unlink()
+            installer.install(ROOT, home)
+            self.assertTrue((home / "docs" / "03-STATE-MACHINE.md").is_file())
+            self.assertTrue((home / "schemas" / "task.schema.json").is_file())
+            agent.write_text("user edited", encoding="utf-8")
+            with self.assertRaisesRegex(RuntimeError, "unowned or user-modified"):
+                installer.install(ROOT, home)
+            self.assertEqual(agent.read_text(), "user edited")
+
+    def test_uninstall_preserves_user_changed_default_agent(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary) / "opencode"
+            installer.install(ROOT, home)
+            path = home / "opencode.json"
+            config = json.loads(path.read_text())
+            config["default_agent"] = "my-agent"
+            path.write_text(json.dumps(config))
+            with self.assertRaisesRegex(RuntimeError, "default_agent"):
+                installer.install(ROOT, home)
+            installer.uninstall(home)
+            self.assertEqual(json.loads(path.read_text())["default_agent"], "my-agent")
+
     def test_install_skips_python_bytecode_caches(self):
         with tempfile.TemporaryDirectory() as temporary:
             base = Path(temporary)
             source = base / "source"
+            (source / "docs").mkdir(parents=True)
+            (source / "schemas").mkdir(parents=True)
             (source / "runtime" / "core").mkdir(parents=True)
             (source / "runtime" / "core" / "mode.ts").write_text("export {};\n", encoding="utf-8")
             plugin = source / "runtime" / "opencode" / "plugins" / "vibe-v2"
@@ -117,6 +157,8 @@ class InstallerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             base = Path(temporary)
             source = base / "source"
+            (source / "docs").mkdir(parents=True)
+            (source / "schemas").mkdir(parents=True)
             (source / "runtime" / "core").mkdir(parents=True)
             (source / "runtime" / "core" / "mode.ts").write_text("export {};\n", encoding="utf-8")
             plugin = source / "runtime" / "opencode" / "plugins" / "vibe-v2"

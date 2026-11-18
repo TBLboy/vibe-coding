@@ -33,7 +33,7 @@ Phase:
 - `review`
 - `complete`
 
-Status and phase are different dimensions. `blocked` preserves the phase at which work stopped; `resume` returns to that phase by default. Changing phase while resuming requires a recorded decision, and a blocked Task cannot resume directly to `complete`. `completed` and `cancelled` are terminal.
+Status and phase are different dimensions. `blocked` preserves the phase at which work stopped; `resume` returns to that phase by default. Changing phase while resuming requires a recorded decision, and a blocked Task cannot resume directly to `complete`. `completed` and `cancelled` are terminal after close. An unclosed completed Task may invalidate stale verification and return to implementation.
 
 ## 3. Valid transitions
 
@@ -54,7 +54,7 @@ create Task
                            └─ user decision needed / retry cap → blocked
 ```
 
-Any non-terminal Task may be blocked or cancelled. A blocked Task must be resumed before normal phase transitions. Terminal Tasks cannot be reopened by a normal transition.
+Any non-terminal Task may be blocked or cancelled. A blocked Task must be resumed before normal phase transitions. Closed Tasks cannot be reopened. Before close, stale evidence requires explicit invalidation and re-verification.
 
 ## 4. Reviewer repair cap
 
@@ -90,3 +90,32 @@ Once the queued command is processed, the Session mode changes; the currently ru
 - a new independent request: use the newly selected Session mode for the new Task/work.
 
 Do not split a single Task into multiple policies mid-flight. Do not run more than one registered active Task per Session in the first version. Separate OpenCode Sessions have separate recovery paths and active-Task pointers; project-level `progress.md` remains shared.
+
+## 7. Runtime-owned lifecycle API (P0 repair)
+
+Create a fresh JSON matching the schema (`active/prepare`, `not_run`, empty decisions, no review), then call `vibe_task_control` with `{action, taskID, event?}`. Once registered, **never edit the Task file directly**. Runtime transitions update the canonical JSON and a project-scoped integrity/ownership receipt in plugin storage.
+
+| action | event / conditions |
+|---|---|
+| `start` | Fresh prepare record; policy equals current Session mode |
+| `transition` | `{type:"begin_implementation", risk:"quick"\|"standard"\|"strict"}`; strict risk requires strict policy |
+| `transition` | `{type:"record_decision", decision:"…"}` in prepare/implement |
+| `transition` | `{type:"begin_verification", artifacts:["relative/path", ...]}` BEFORE checks; include requirements, test harness, dependency locks and unchanged relevant artifacts |
+| `transition` | `{type:"verification_passed", summary:"…", checks:["command + result"], limitations:[]}`; optionally `status:"not_applicable"` and `notApplicableReason` for justified N/A |
+| `transition` | `{type:"verification_failed", summary:"…", checks:[...], limitations:[...]}` |
+| `transition` | `{type:"invalidate_verification"}` if covered artifacts changed; re-enter implementation then verify again |
+| `transition` | `{type:"block", reason:"…"}` or `{type:"cancel", reason:"…"}` |
+| `pause` | Blocked Task; releases Session active pointer |
+| `resume` | Reclaim unclosed non-blocked Task after interruption; preserves policy and invalidates old reviewer permit |
+| `resume_blocked` | `{decision:"…", phase:"implement", nextAction:"…"}` when a decision changes the plan; otherwise omit phase to resume the same phase |
+| `authorize_review` | Current verified strict Task, pending verdict; one-time permit |
+| `reset_review` | Invalidate interrupted or malformed pending review before requesting another permit |
+| `close` | Completed Task with current evidence (strict also needs host-recorded `go`), or cancelled Task |
+
+A fresh foreground native `subagent` call with agent `vibe-reviewer`, `background:false` and no reused child `sessionID` is required. Permission admission consumes the permit but does not record completion. Only the matching successful host `execute.after` event, verified child identity, valid verdict JSON and still-current artifact digest can advance the Task. Read the updated Task after the call; if pending, inspect the failure and reset. Review verdict events are not available to the main Agent.
+
+Risk is an independent minimum, not a ceiling set by mode. Fast/balanced can use deeper tests but must not run a strict-risk implementation. Ask the user for `/strict`, cancel/close or pause the old Task as appropriate, and start a new strict Task. Runtime enforces declared strict risk at entry; correct risk classification and reclassification remain Agent duties (shell writes are not sandboxed).
+
+Artifact evidence includes explicit relative regular files, Git HEAD and changed tracked/untracked files (excluding routine Task/session/progress memory changes from automatic collection). External services, ignored files, dependencies outside the workspace and hardware need separately reported evidence; the fingerprint is freshness, not proof of test execution. Non-Git projects require explicit coverage. Cross-worktree resume needs fresh evidence in the new workspace.
+
+Legacy/unregistered or externally modified Task records fail closed. Preserve the old record for history, create a new ID with the same approved goal and acceptance criteria, and verify again. Do not import old verdicts. If storage fails after a file write, restore the exact last registered bytes if available or start a new ID. The receipt is not a security boundary against a hostile user with direct plugin storage access; simultaneous independent host processes are not a supported write model.

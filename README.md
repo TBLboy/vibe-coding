@@ -1,6 +1,6 @@
 # Vibe Coding V2 — Engineering Pack
 
-> Status: clean-room rewrite baseline + small executable core reference. Core tests pass; OpenCode 2.0.29 plugin loading, mode-command registration, and a queued `/fast` Session smoke pass in an isolated profile. Provider-dependent continuation, strict reviewer enforcement, and installation remain unaccepted.
+> Status: P2 engineering-method candidate on the P0/P1 repaired baseline. Local regression and fixture checks are documented in `P2_PLAN.md`; the repaired Runtime has not passed the target OpenCode host and real-model acceptance gates. Historical smoke results below apply to earlier versions.
 
 Vibe Coding V2 is a deliberately small, policy-driven framework for OpenCode. It preserves useful engineering discipline while removing mandatory process ceremony.
 
@@ -99,3 +99,11 @@ No legacy upgrade/uninstall scripts, compatibility shims, old-state migration, t
 ## Optional V2 capability Skills
 
 The V2 installer includes a user-approved, managed capability pack under `skills/`. These Skills restore focused abilities such as codebase onboarding, clarification, architecture/specification, implementation, verification, research, code tutoring, model configuration, UX audit, and plan stress testing. `vibe-main` contains the trigger routing table, and every trigger carries the user's own-language aliases next to the English wording — a colloquial request such as 归档 routes to the registered Skill instead of an improvised flow. They are V2-compatible: they use `AGENTS.md`, `.vibe` memory, and optional Task JSON only; they do not recreate the old Project Log, Goal, Run, ledger, SQLite, standalone Evidence, or dynamic subagent architecture.
+
+## P0/P1 repair candidate
+
+See `REPAIR_PLAN.md` for changes, migration, verified scope and outstanding release gates. Registered Tasks now use Runtime transitions; old unregistered Tasks must be preserved and restarted with a new ID and fresh evidence. Run `npm run verify`; run `npm install` then `npm run typecheck:core` for the typed core/adapter. Actual OpenCode host and model acceptance are pending (see `evaluations/README.md`).
+
+## P2 engineering methods
+
+See [`P2_PLAN.md`](P2_PLAN.md) for scope, reasoning models, changes, and verification boundaries. The architecture, implementation and verification Skills now contain practical analysis procedures and worked references, with no new workflow state or Runtime changes. Use `python3 evaluations/prepare_p2.py <case-id> <new-directory>` for runnable L4 scenario repositories; see [`evaluations/README.md`](evaluations/README.md). Fixture self-tests are not real-model evaluations.

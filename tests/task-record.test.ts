@@ -26,5 +26,5 @@ test("state-machine invariants are enforced structurally", () => {
   assert.match(validateTaskRecord({ ...valid(), status: "completed" }).join(), /phase complete/);
   assert.match(validateTaskRecord({ ...valid(), phase: "review" }).join(), /only strict/);
   assert.match(validateTaskRecord({ ...valid(), policy: "strict", phase: "review", review: { verdict: "pending", findings: [], repairRounds: 3 } }).join(), /repairRounds/);
-  assert.deepEqual(validateTaskRecord({ ...valid(), policy: "strict", phase: "review", review: { verdict: "pending", findings: [], repairRounds: 1 } }), []);
+  assert.deepEqual(validateTaskRecord({ ...valid(), policy: "strict", phase: "review", verification: {status: "passed", summary: "ok", checks: ["test ok"], limitations: []}, review: { verdict: "pending", findings: [], repairRounds: 1 } }), []);
 });

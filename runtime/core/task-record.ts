@@ -43,6 +43,11 @@ export function validateTaskRecord(value: unknown, expectedTaskID?: string): str
     if (typeof record.summary !== "string") problems.push("verification.summary must be a string");
     if (!isStringArray(record.checks)) problems.push("verification.checks must be an array of strings");
     if (!isStringArray(record.limitations)) problems.push("verification.limitations must be an array of strings");
+    if (record.status === "passed" && (typeof record.summary !== "string" || !record.summary.trim() || !isStringArray(record.checks) || !record.checks.some(c => c.trim()))) problems.push("passed verification requires summary and checks");
+    if (record.evidence !== undefined) {
+      const e = record.evidence as Record<string, unknown> | null;
+      if (!e || typeof e.root !== "string" || !isStringArray(e.paths) || !e.paths.length || typeof e.digest !== "string" || !/^[a-f0-9]{64}$/.test(e.digest)) problems.push("verification.evidence is invalid");
+    }
     if (record.status === "not_applicable" && (typeof record.notApplicableReason !== "string" || !record.notApplicableReason.trim())) {
       problems.push("not_applicable verification requires notApplicableReason");
     }
@@ -76,12 +81,19 @@ export function validateTaskRecord(value: unknown, expectedTaskID?: string): str
   }
 
   // Cross-field invariants from the Task state machine.
-  if (task.policy === "strict" && isStringArray(task.doneWhen) && task.doneWhen.length === 0) problems.push("strict Tasks require at least one doneWhen criterion");
+  if (task.policy === "strict" && isStringArray(task.doneWhen) && !task.doneWhen.some(v => v.trim())) problems.push("strict Tasks require at least one doneWhen criterion");
   if (task.status === "blocked" && (typeof task.blocker !== "string" || !task.blocker.trim())) problems.push("blocked Tasks require a blocker");
   if (task.status === "cancelled" && (typeof task.cancelReason !== "string" || !task.cancelReason.trim())) problems.push("cancelled Tasks require a cancelReason");
+  if (task.phase === "complete" && task.status !== "completed") problems.push("complete phase requires completed status");
   if (task.status === "completed" && task.phase !== "complete") problems.push("completed Tasks must be in phase complete");
   if (task.phase === "review" && task.policy !== "strict") problems.push("only strict Tasks enter the review phase");
   if (task.phase === "review" && task.review === undefined) problems.push("review phase requires a review object");
 
+  const verificationState = task.verification as Record<string, unknown> | undefined;
+  const review = task.review as Record<string, unknown> | undefined;
+  if (["review", "complete"].includes(String(task.phase)) && !["passed", "not_applicable"].includes(String(verificationState?.status))) problems.push("review or complete requires sufficient verification");
+  if (task.policy !== "strict" && review !== undefined) problems.push("only strict Tasks may have review records");
+  if (task.policy === "strict" && task.phase === "complete" && review?.verdict !== "go") problems.push("strict completion requires reviewer go");
+  if (review && ["go", "pending"].includes(String(review.verdict)) && Array.isArray(review.findings) && review.findings.length) problems.push("go or pending requires no findings");
   return problems;
 }

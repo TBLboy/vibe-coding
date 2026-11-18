@@ -30,6 +30,8 @@ Before performing any named, workflow-shaped action, match the user's own wordin
 
 Do not create separate lifecycle commands or files for every preparation step.
 
+For material engineering choices, use `a-architecture-decision` to derive boundaries and tradeoffs from the approved rules and current system. Use `a-engineering-landing` to protect affected existing capabilities and trace the production wiring. Use `a-verification` to derive claims, failure mechanisms, test targets and independent oracles. Carry the relevant decisions/constraints through the existing spec, Task or current context; no additional durable ledger or compulsory Skill sequence is introduced. For trivial changes apply only the necessary reasoning and targeted check. These methods do not override product authority, risk or Runtime transitions.
+
 ## 3. Task creation
 
 - Strict: always create a Task before substantial implementation.
@@ -38,8 +40,8 @@ Do not create separate lifecycle commands or files for every preparation step.
 - A Task's policy is frozen at start.
 - Use `schemas/task.schema.json` and `runtime/core/task-machine.ts`. Do not invent new statuses or phases.
 - After writing a new Task JSON, call `vibe_task_control(action=start)` before substantial implementation. The tool verifies that the Task policy matches the current Session mode. If registration is rejected, do not proceed as if the Task were registered; resolve the mismatch first.
-- When resuming an existing Task in a Session without an active pointer, update the Task to `active` after resolving blockers, then call `vibe_task_control(action=resume)`. If resolving a user/business decision changes the phase, record the decision in the Task and set the appropriate next phase before resuming.
-- When a Task becomes blocked, persist the blocker and call `vibe_task_control(action=pause)` so another Task can be started in this Session. On completion/cancellation, persist the terminal state and call `vibe_task_control(action=close)`.
+- Resume registered work with `resume` or `resume_blocked`; record user decisions in the event. Never directly modify a registered Task.
+- Use `transition` events for implementation, verification, blockers, decisions and cancellation, then pause or close as appropriate. See the exact API in `03-STATE-MACHINE.md`.
 
 ## 4. Implementation
 
@@ -50,7 +52,7 @@ Do not create separate lifecycle commands or files for every preparation step.
 
 ## 5. Verification
 
-- Choose checks based on changed behavior and risk.
+- Choose checks based on changed behavior and risk. Capture artifact evidence using `begin_verification` before running checks; re-run if stale. Strict risk in non-strict mode requires explicit `/strict` and a new Task, not a weaker check.
 - Run the narrowest relevant test first, then the necessary adjacent regression checks.
 - A test invocation is not evidence of a pass; inspect the exit status and relevant output.
 - If a check cannot run, state why and choose an alternative only if it genuinely verifies the requirement.
@@ -61,11 +63,11 @@ Do not create separate lifecycle commands or files for every preparation step.
 Only for a Task whose frozen policy is `strict`:
 
 1. Complete verification first.
-2. Persist Task `phase=review`, verification result, and `review.verdict=pending`.
+2. Submit `verification_passed` through the Runtime; it enters review with pending verdict.
 3. Call `vibe_task_control(action=authorize_review)` for the active Task. This validates the persisted Task and issues a one-time permit.
-4. Invoke `vibe-reviewer` with the Task goal, `doneWhen`, explicit constraints, changed diff/files, verification result, and relevant project rules.
-5. Do not send the whole operation history or unrelated repository context.
-6. On fixable findings, make the minimum required repair, re-run verification, persist the next review-ready Task state, obtain a new permit, and request review again.
+4. Invoke a fresh foreground `vibe-reviewer` (no reused sessionID) with the Task goal, `doneWhen`, explicit constraints, changed diff/files, verification result, and relevant project rules.
+5. Do not send the whole operation history or unrelated repository context. Read the Runtime-updated Task after the call; a pending verdict requires failure inspection and reset, never a direct write.
+6. On fixable findings, make the minimum required repair, re-run verification, submit the next verification result through Runtime, obtain a new permit, and request review again.
 7. Stop after two automatic repair rounds. If a further review still is not `go`, block, report unresolved findings, pause the Task, and wait for a new explicit user request; do not retry automatically.
 8. If a finding requires a product/business decision, block, pause the Task, and ask that decision immediately.
 

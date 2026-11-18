@@ -12,9 +12,9 @@ Value: one of `fast`, `balanced`, `strict`. Missing/invalid values mean `balance
 
 ## 2. Per-Session Task control pointer
 
-The plugin stores a minimal active Task ID keyed by OpenCode `sessionID`. This pointer is not a second Task record and is not Project Memory; it exists only to enforce that reviewer invocation is authorized for the active Task in that Session. The Task JSON remains the canonical source of `policy`, `status`, `phase`, verification, and review verdict.
+The plugin stores a minimal active Task ID keyed by OpenCode `sessionID`. This pointer is not a second Task record. A separate project-scoped integrity receipt stores owner, frozen policy, Task JSON digest, closed flag and pending reviewer call identity. It stores no duplicate business goal or verification content. The Task JSON remains the canonical source of `policy`, `status`, `phase`, verification, and review verdict.
 
-The main Agent uses `vibe_task_control` only when a persistent Task starts, resumes, pauses, closes, or needs strict review authorization. It is not called for trivial work without a Task and does not log intermediate actions.
+The main Agent creates a fresh prepare record, then uses `vibe_task_control` for all registered lifecycle changes. Runtime owns subsequent writes (see state machine API). It is not called for trivial work without a Task and does not log intermediate actions.
 
 ## 3. Task persistence
 
@@ -74,3 +74,7 @@ Final reviewer verdict is `go`, `conditional`, or `no-go`. A `go` result has no 
 - Project rules → root `AGENTS.md`.
 
 Do not add a second canonical copy of the same fact to make a report look complete.
+
+## Evidence freshness
+
+`verification.evidence` is a Runtime-created object with `root`, `paths`, `digest` (SHA-256), and Git HEAD incorporated in the digest. This is part of the Task, not a standalone evidence store. Legacy records remain readable but are not trusted for resume or close without a receipt.

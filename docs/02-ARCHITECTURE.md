@@ -51,7 +51,7 @@ The plugin owns Session mode commands/injection, a minimal per-Session active-Ta
 
 Use plain files. There is no database in V2 baseline.
 
-- Session mode and active-Task pointer: OpenCode plugin storage keyed by `sessionID`; the Task JSON remains the canonical source of Task policy/status.
+- Session mode and active-Task pointer: OpenCode plugin storage keyed by `sessionID`; the Task JSON remains canonical; registered lifecycle writes are Runtime-owned, with a project-scoped integrity/ownership receipt and version-bound verification.
 - Task: one JSON file per persistent Task.
 - Current session: one Session-specific Markdown recovery snapshot, written only while work needs recovery.
 - Progress: one Markdown project-facts summary, updated only on meaningful durable changes.

@@ -81,7 +81,7 @@ Do not perform an open-ended quality audit. Do not propose unrelated refactors, 
 
 ## Output contract
 
-Return exactly one verdict and a concise findings list:
+Return exactly one JSON verdict object (a single JSON code fence is also accepted). Do not call lifecycle tools or edit the Task file. Runtime records this result only after the native foreground subagent tool completes:
 
 ```json
 {

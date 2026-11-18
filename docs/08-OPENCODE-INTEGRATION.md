@@ -16,8 +16,8 @@ Official API references checked while preparing this pack:
 `runtime/opencode/plugins/vibe-v2/index.ts` has three narrow responsibilities:
 
 1. Register the explicit `/fast`, `/balanced`, and `/strict` commands, persist the selected mode per OpenCode `sessionID`, and inject the authoritative mode policy into model context.
-2. Keep a minimal per-Session active-Task pointer through `vibe_task_control`; the Task JSON remains the source of truth.
-3. Deny `vibe-reviewer` subagent invocation unless the active Task is persisted as strict, active, in review phase, verification-passed, and a one-time review permit has been issued.
+2. Own registered Task transitions through `vibe_task_control`, with a per-Session pointer and project-scoped integrity receipt; Task JSON remains canonical.
+3. Deny reviewer admission without a current one-time permit, and accept verdicts only from the matching completed native foreground subagent hook. Admission is not completion.
 
 It must not watch every file operation, write project logs, run tests, maintain a second Task state machine, call external services, or install dependencies.
 
@@ -37,7 +37,7 @@ Only commands registered by the plugin change the mode. Ordinary user text and m
 
 Before each primary model request, read the mode using the current `sessionID`. If no valid value exists, use `balanced`. Inject the mode policy from `runtime/core/mode.ts`.
 
-The policy injection must be bounded and must not include project operation history. It must clearly state that an existing Task's frozen policy takes precedence over the current Session mode for that Task. The mode-setting tool must reject calls without an unused pending token created by the explicit command handler. `vibe_task_control` verifies Task JSON before changing the per-Session pointer. The permission hook must deny reviewer calls without a matching one-time permit and must re-check the Task file before allowing the subagent.
+The policy injection must be bounded and must not include project operation history. It must clearly state that an existing Task's frozen policy takes precedence over the current Session mode for that Task. The mode-setting tool must reject calls without an unused pending token created by the explicit command handler. `vibe_task_control` validates and writes Task JSON through the state machine; direct edits invalidate the receipt. The permission hook must deny reviewer calls without a matching one-time permit and must re-check the Task file before allowing the subagent.
 
 ## Agent permissions
 
@@ -73,3 +73,7 @@ Before release, verify in a clean OpenCode V2 environment:
 - review permits are one-time and consumed by the permission hook;
 - Task control start/resume/pause/close keeps the pointer consistent;
 - missing/invalid mode storage safely defaults to balanced and does not claim a different mode.
+
+## P0/P1 host validation boundary
+
+The adapter uses OpenCode v2.0.32 native `permission.evaluate` and `tool.execute.after` hooks. The SDK source contract was inspected ([native subagent](https://github.com/anomalyco/opencode/blob/v2.0.32/packages/core/src/tool/plugin/subagent.ts), [tool hooks](https://github.com/anomalyco/opencode/blob/v2.0.32/packages/plugin/src/promise/tool.ts)). Tests invoke the actual local adapter with a simulated host, not a running OpenCode provider. Previous host smoke results do not validate this revised implementation. Before production rollout, run the host smoke checklist in `evaluations/README.md` on the exact supported build.

@@ -179,6 +179,50 @@ class ArchiveTests(unittest.TestCase):
             self.assertTrue(all(path.startswith(report["snapshot"]) for path in changed), changed)
             self.assertNotIn("stray.txt", changed)
 
+    def test_unrelated_unpublished_commit_is_never_pushed(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            _, work = self.make_publishing_repo(root)
+            env = self.git_env()
+            def git(*args):
+                return subprocess.run(["git", "-C", str(work), *args], env=env, check=True, text=True, capture_output=True).stdout.strip()
+            old_remote = git("ls-remote", "origin", "refs/heads/main")
+            (work / "unrelated.txt").write_text("private work")
+            git("add", "unrelated.txt"); git("commit", "-qm", "unrelated")
+            local_head = git("rev-parse", "HEAD")
+            target = archive_v2.archive(self.make_project(root), work, datetime(2026, 10, 19, tzinfo=timezone.utc))
+            with self.assertRaisesRegex(ValueError, "unrelated unpublished"):
+                archive_v2.push(target)
+            self.assertEqual(git("ls-remote", "origin", "refs/heads/main"), old_remote)
+            self.assertEqual(git("rev-parse", "HEAD"), local_head)
+
+    def test_private_key_memory_is_rejected(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            project = self.make_project(root)
+            dest = root / "archive"; dest.mkdir()
+            (project / ".vibe" / "private.md").write_text("-----BEGIN RSA PRIVATE KEY-----\nsecret\n-----END RSA PRIVATE KEY-----")
+            with self.assertRaisesRegex(ValueError, "Possible secret"):
+                archive_v2.archive(project, dest, datetime(2026, 10, 19, tzinfo=timezone.utc))
+
+    def test_credential_words_in_document_are_a_warning_not_a_block(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            project = self.make_project(root)
+            dest = root / "archive"; dest.mkdir()
+            (project / ".vibe" / "security-notes.md").write_text("password: documented-example-value-that-is-not-a-secret")
+            target = archive_v2.archive(project, dest, datetime(2026, 10, 19, tzinfo=timezone.utc))
+            self.assertTrue(target.is_dir())
+
+    def test_non_utf8_memory_is_skipped_by_secret_scan(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            project = self.make_project(root)
+            dest = root / "archive"; dest.mkdir()
+            (project / ".vibe" / "legacy-note.bin").write_bytes(b"\xff\xfe\x00\x81")
+            target = archive_v2.archive(project, dest, datetime(2026, 10, 19, tzinfo=timezone.utc))
+            self.assertTrue((target / ".vibe" / "legacy-note.bin").is_file())
+
     def test_reports_why_a_snapshot_could_not_be_pushed(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

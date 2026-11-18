@@ -8,7 +8,7 @@ Run `npm run test:core`.
 
 - `fast`, `balanced`, `strict` are the only valid modes.
 - missing/invalid mode normalizes to balanced.
-- mode, active Task, and reviewer permit storage keys are Session-scoped.
+- Mode and active Task keys are Session-scoped; reviewer permits are bound to the project-scoped receipt and exact native call.
 - mode command prompt with no task text only requests confirmation.
 - mode command prompt with task text preserves the task payload.
 - injected policy clearly prohibits reviewer in fast/balanced and requires it in strict.
@@ -51,7 +51,7 @@ Run `npm run test:core`.
 
 These are required before declaring the framework installable; pure core tests do not cover them.
 
-Current smoke evidence (2026-10-19): in an OpenCode 2.0.29 isolated profile, the local plugin directory loads as `vibe-coding-v2` and `/fast`, `/balanced`, and `/strict` register. In the current provider-backed OpenCode 2.0.32 control layer, a bare `/fast` consumed its one-time token and produced the required confirmation only. A `/strict <task>` smoke completed a persisted strict Task through verification, one-time review authorization, read-only `vibe-reviewer` invocation, reviewer `go`, and Task close. These are targeted compatibility observations, not a general claim for every OpenCode V2 build.
+Historical smoke evidence for the pre-repair implementation (2026-10-19; does not validate the P0/P1 changes): in an OpenCode 2.0.29 isolated profile, the local plugin directory loads as `vibe-coding-v2` and `/fast`, `/balanced`, and `/strict` register. In the current provider-backed OpenCode 2.0.32 control layer, a bare `/fast` consumed its one-time token and produced the required confirmation only. A `/strict <task>` smoke completed a persisted strict Task through verification, one-time review authorization, read-only `vibe-reviewer` invocation, reviewer `go`, and Task close. These are targeted compatibility observations, not a general claim for every OpenCode V2 build.
 
 | Case | Expected result |
 |---|---|
@@ -145,3 +145,11 @@ Do not call the package release-ready until:
 - `tests/package-shape.test.ts`: plugin wires `resolveMemoryRoot`, `validateTaskRecord`, the review-completion marker and the gated close; sample config uses the real `plugin` key.
 - `scripts/test_vibe_v2_installer.py`: config permission bits preserved; backup dir `0700` / files `0600`; stale managed files removed only when unmodified.
 - `scripts/test_v2_project_init.py`: nested `.vibe/` refused unless `--allow-nested`.
+
+## P0/P1 additions
+
+Production adapter simulation tests now drive registered tools and permission/completion hooks, with ownership, policy freeze, stale evidence and reviewer replay regressions. Installer/archive tests use temporary profiles and local Git remotes. See `evaluations/README.md` for actual host and L3/L4 model evaluation gates.
+
+## P2 — engineering capability evaluation
+
+The existing L1/L2 suite remains unchanged in scope. The installer regression also checks that the three new Skill references are copied byte-for-byte. `evaluations/test_p2_fixtures.py` exercises all six materialized L4 scenarios, fresh Git baselines, the dirty user-edit setup, seeded production bypass and destination rejection. `evaluations/cases.json` contains the six new criteria sets; see `evaluations/README.md` for preparation and independent evaluation. Local fixture checks are not L4 model execution. Real host and model acceptance remain separate release gates.
