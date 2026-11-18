@@ -59,6 +59,7 @@ Report what changed, the relevant verification and its result, and any material 
 | 用场景讲讲 / 走一遍流程 / 这东西怎么用 · explain a product or workflow through a scenario | `b-scenario-product-walkthrough` |
 | Jetson 部署 / 机器人策略部署 · requested Jetson robot-policy deployment or review | `b-jetson-robot-policy-deployment` |
 | 接手代码库 / 摸清架构 / 熟悉项目 · take over or map an unfamiliar codebase | `a-codebase-onboarding` |
+| 梳理目录结构 / 工程结构地图 / 把握工程大局观 / 模块依赖梳理 · static map of how a repository is organized | `b-project-structure-survey` |
 | 澄清业务 / 业务规则不清楚 / 需求不明确 · business behavior, exceptions, acceptance rules are ambiguous | `a-business-clarify` |
 | 架构决策 / 模块划分 / 接口边界 · approved requirements need module, interface, failure boundaries | `a-architecture-decision` |
 | 工程规格 / 实现方案 / 技术设计 · implementation needs a task-specific engineering specification | `a-engineering-spec` |

@@ -69,6 +69,7 @@ const V2_SKILLS = [
   "a-requirement-baseline", "a-retrospective", "a-task-decompose", "a-verification",
   "b-concise-communication", "b-jetson-robot-policy-deployment",
   "b-multi-role-ux-audit", "b-opencode-model-config", "b-plan-stress-test",
+  "b-project-structure-survey",
   "b-scenario-product-walkthrough", "b-skill-authoring", "b-source-code-tutoring",
   "b-web-research-tooling",
 ];
