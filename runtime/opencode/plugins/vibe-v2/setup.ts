@@ -33,7 +33,7 @@ export async function setup(ctx: HostContext) {
         const directory = info.directory ?? info.location?.directory;
         if (!directory) return null;
         const cwd = await realpath(directory);
-        try { return await realpath(execFileSync("git", ["-C", cwd, "rev-parse", "--show-toplevel"], { encoding: "utf8", timeout: 5000, stdio: ["ignore", "pipe", "ignore"] }).trim()); }
+        try { return await realpath(execFileSync("git", ["-C", cwd, "rev-parse", "--show-toplevel"], { encoding: "utf8", timeout: 5000, windowsHide: true, stdio: ["ignore", "pipe", "ignore"] }).trim()); }
         catch { return resolveMemoryRoot(cwd, hasMemoryDirectory); }
       } catch { return null; }
     };
@@ -41,7 +41,7 @@ export async function setup(ctx: HostContext) {
       const workspace = await workspaceFor(sessionID);
       if (!workspace) return null;
       try {
-        const common = execFileSync("git", ["-C", workspace, "rev-parse", "--path-format=absolute", "--git-common-dir"], { encoding: "utf8", timeout: 5000, stdio: ["ignore", "pipe", "ignore"] }).trim();
+        const common = execFileSync("git", ["-C", workspace, "rev-parse", "--path-format=absolute", "--git-common-dir"], { encoding: "utf8", timeout: 5000, windowsHide: true, stdio: ["ignore", "pipe", "ignore"] }).trim();
         const canonical = resolve(common, "..");
         if (hasMemoryDirectory(canonical)) return await realpath(canonical);
       } catch { /* non-Git projects keep ancestor resolution */ }

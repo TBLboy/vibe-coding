@@ -152,6 +152,10 @@ def archive(project_root: Path, archive_root: Path, now: datetime | None = None)
 
 EXIT_PUSH_FAILED = 4
 
+# Windows opens a console window for every child process unless it is suppressed,
+# which makes an interactive archive flash a black box per git call.
+_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
 
 def run_git(arguments: list[str], cwd: Path) -> tuple[int, str, str]:
     """Run git in `cwd`; return (returncode, stdout, stderr) as stripped text."""
@@ -161,6 +165,7 @@ def run_git(arguments: list[str], cwd: Path) -> tuple[int, str, str]:
             capture_output=True,
             text=True,
             timeout=300,
+            creationflags=_NO_WINDOW,
         )
     except (OSError, subprocess.SubprocessError) as error:
         return 1, "", f"{type(error).__name__}: {error}"

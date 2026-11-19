@@ -15,7 +15,7 @@ export async function fingerprintArtifacts(root: string, paths: string[]): Promi
   // Include changed tracked and nonignored untracked files in a Git workspace.
   // The explicit paths also cover unchanged dependencies and ignored artifacts.
   let gitRoot: string | undefined;
-  const git = (args: string[]) => execFileSync("git", ["-C", canonical, ...args], { encoding: "utf8", timeout: 10000, maxBuffer: 32 * 1024 * 1024, stdio: ["ignore", "pipe", "ignore"] });
+  const git = (args: string[]) => execFileSync("git", ["-C", canonical, ...args], { encoding: "utf8", timeout: 10000, maxBuffer: 32 * 1024 * 1024, windowsHide: true, stdio: ["ignore", "pipe", "ignore"] });
   try { gitRoot = git(["rev-parse", "--show-toplevel"]).trim(); } catch { /* non-Git workspace: explicit scope only */ }
   const all = new Set(paths);
   const hash = createHash("sha256");

@@ -19,8 +19,10 @@ def prepare(case_id, destination):
     if destination.is_relative_to(ROOT.parent):
         raise ValueError('destination must be outside the framework checkout')
     shutil.copytree(ROOT / 'fixtures' / case['fixture'], destination, ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
+    # Windows flashes a console window for every child process unless suppressed.
+    flags = getattr(subprocess, 'CREATE_NO_WINDOW', 0)
     def git(*args):
-        return subprocess.check_output(['git', '-C', str(destination), *args], text=True).strip()
+        return subprocess.check_output(['git', '-C', str(destination), *args], text=True, creationflags=flags).strip()
     git('init', '-q'); git('add', '.'); git('-c', 'user.name=Vibe Eval', '-c', 'user.email=eval@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '-qm', 'Evaluation baseline')
     sha = git('rev-parse', 'HEAD')
     if case.get('dirty_note'):

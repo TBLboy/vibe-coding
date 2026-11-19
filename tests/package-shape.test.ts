@@ -38,6 +38,24 @@ test("plugin entry delegates to the tested host adapter", () => {
   assert.ok(existsSync(resolve(root, "runtime/opencode/plugins/vibe-v2/setup.ts")));
 });
 
+test("every runtime child process is hidden on Windows", () => {
+  // Without `windowsHide`, each git call from the plugin flashes a console window
+  // on Windows because the plugin shells out while rendering Session context.
+  const sources = [
+    "runtime/opencode/plugins/vibe-v2/setup.ts",
+    "runtime/core/artifact-evidence.ts",
+  ];
+  for (const relative of sources) {
+    const content = readNormalized(relative);
+    const calls = content.split("\n").filter((line) => /execFileSync\(|execSync\(|spawnSync\(|spawn\(/.test(line));
+    assert.ok(calls.length > 0, `${relative} should shell out`);
+    for (const call of calls) {
+      if (/^\s*import\b/.test(call)) continue;
+      assert.match(call, /windowsHide: true/, `${relative}: child process must set windowsHide`);
+    }
+  }
+});
+
 test("reviewer configuration is read-only and has no shell permission", () => {
   const reviewer = readFileSync(resolve(root, "runtime/opencode/agents/vibe-reviewer.md"), "utf8");
   assert.match(reviewer, /mode: subagent/);
