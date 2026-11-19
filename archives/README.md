@@ -1,5 +1,21 @@
 # Branch archives
 
+## 2026-11-19 — `vibe-opencode-v2` development branch
+
+`branch-vibe-opencode-v2-20261119T015510Z.bundle` holds the tip of the short-lived
+`vibe-opencode-v2` branch (`a65d6b8`) that carried the P0-P2 engineering repairs,
+the `b-branch-engineering-review` Skill and the Windows console fix. All of its
+commits are already merged into `main`; the bundle exists only so the branch ref
+itself can be restored. It records one ref, `tmp-archive-v2`:
+
+```sh
+tmp=$(mktemp -d)
+git clone -b tmp-archive-v2 archives/branch-vibe-opencode-v2-20261119T015510Z.bundle "$tmp/restore"
+git -C "$tmp/restore" log --oneline -3
+```
+
+## 2026-11-16 — pre-consolidation snapshot
+
 `branches-pre-consolidation-20261116T060547Z.bundle` is a full `--all` snapshot
 of this repository taken immediately before the branch consolidation that left
 `main` as the only branch.
