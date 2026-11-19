@@ -1,3 +1,4 @@
+import type { ArtifactEvidence } from "./artifact-evidence.ts";
 import type { Mode } from "./mode.ts";
 
 export type TaskStatus = "active" | "blocked" | "completed" | "cancelled";
@@ -11,6 +12,7 @@ export interface VerificationResult {
   checks: string[];
   limitations: string[];
   notApplicableReason?: string;
+  evidence?: ArtifactEvidence;
 }
 
 export interface ReviewFinding {
@@ -46,7 +48,9 @@ export interface Task {
 
 export type TaskEvent =
   | { type: "begin_implementation" }
-  | { type: "begin_verification" }
+  | { type: "begin_verification"; evidence?: ArtifactEvidence }
+  | { type: "invalidate_verification" }
+  | { type: "record_decision"; decision: string }
   | { type: "verification_passed"; status?: "passed" | "not_applicable"; summary: string; checks?: string[]; limitations?: string[]; notApplicableReason?: string }
   | { type: "verification_failed"; summary: string; checks?: string[]; limitations?: string[] }
   | { type: "review_go" }
@@ -62,7 +66,7 @@ export function createTask(input: Pick<Task, "id" | "title" | "goal" | "doneWhen
   if (!TASK_ID_PATTERN.test(input.id) || !input.title.trim() || !input.goal.trim()) {
     throw new Error("Task id must use 1-128 letters, digits, hyphens or underscores; title and goal are required");
   }
-  if (input.doneWhen.length === 0 && input.policy === "strict") {
+  if (input.policy === "strict" && !input.doneWhen.some(v => v.trim())) {
     throw new Error("Strict Tasks require at least one doneWhen acceptance criterion");
   }
   return {
@@ -91,6 +95,16 @@ function assertVerificationSufficient(task: Task): void {
 }
 
 export function transitionTask(task: Task, event: TaskEvent): Task {
+  if (event.type === "invalidate_verification") {
+    if (task.status === "cancelled" || task.status === "blocked" || !["verify", "review", "complete"].includes(task.phase)) throw new Error("No verification to invalidate");
+    return { ...task, status: "active", phase: "implement", blocker: undefined, verification: { status: "not_run", summary: "", checks: [], limitations: [] }, review: task.review ? { ...task.review, verdict: "pending", findings: [] } : undefined };
+  }
+  if (event.type === "record_decision") {
+    assertMutable(task);
+    if (!event.decision.trim()) throw new Error("Decision is required");
+    if (["verify", "review"].includes(task.phase)) throw new Error("Invalidate verification before changing decisions");
+    return { ...task, decisions: [...task.decisions, event.decision.trim()] };
+  }
   if (event.type === "cancel") {
     assertMutable(task);
     if (!event.reason.trim()) throw new Error("Cancellation reason is required");
@@ -106,11 +120,13 @@ export function transitionTask(task: Task, event: TaskEvent): Task {
   if (event.type === "resume") {
     if (task.status !== "blocked") throw new Error("Only a blocked Task can be resumed");
     if (event.phase === "complete") throw new Error("A blocked Task cannot resume directly to complete");
+    if (event.phase && event.phase !== task.phase && !(event.phase === "implement" && ["verify", "review"].includes(task.phase))) throw new Error("Resume cannot skip forward to a new phase");
     if (event.phase && event.phase !== task.phase && !event.decision?.trim()) {
       throw new Error("Changing phase while resuming a blocked Task requires a recorded decision");
     }
     const nextPhase = event.phase ?? task.phase;
-    const phaseChangedFromReviewToImplement = task.phase === "review" && nextPhase === "implement";
+    if (event.decision?.trim() && ["verify", "review"].includes(task.phase) && nextPhase !== "implement") throw new Error("A new decision invalidates verification; resume into implementation");
+    const phaseChangedFromReviewToImplement = task.phase !== "implement" && nextPhase === "implement";
     return {
       ...task,
       status: "active",
@@ -137,7 +153,7 @@ export function transitionTask(task: Task, event: TaskEvent): Task {
       return {
         ...task,
         phase: "verify",
-        verification: { status: "not_run", summary: "", checks: [], limitations: [] },
+        verification: { status: "not_run", summary: "", checks: [], limitations: [], ...(event.evidence ? { evidence: event.evidence } : {}) },
       };
     }
     case "verification_failed": {
@@ -158,6 +174,7 @@ export function transitionTask(task: Task, event: TaskEvent): Task {
     case "verification_passed": {
       if (task.phase !== "verify") throw new Error("Verification result requires phase=verify");
       const notApplicable = event.status === "not_applicable";
+      if (!event.summary.trim() || (!notApplicable && !event.checks?.some(check => check.trim()))) throw new Error("Verification requires a nonempty summary and checks");
       if (notApplicable && !event.notApplicableReason?.trim()) {
         throw new Error("not_applicable verification requires a reason");
       }
@@ -167,6 +184,7 @@ export function transitionTask(task: Task, event: TaskEvent): Task {
         checks: event.checks ?? [],
         limitations: event.limitations ?? [],
         ...(notApplicable ? { notApplicableReason: event.notApplicableReason } : {}),
+        ...(task.verification.evidence ? { evidence: task.verification.evidence } : {}),
       };
       if (task.policy === "strict") {
         return {

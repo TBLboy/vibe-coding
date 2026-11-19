@@ -144,3 +144,12 @@ test("not-applicable verification requires a reason", () => {
   assert.equal(completed.verification.status, "not_applicable");
   assert.equal(completed.status, "completed");
 });
+
+test("blocked preparation cannot skip the risk entry and blocked verification cannot invalidate around resume", () => {
+  const fresh = createTask({ id: "guard", title: "Guard", goal: "G", doneWhen: [], policy: "balanced" });
+  const blocked = transitionTask(fresh, { type: "block", reason: "Need decision" });
+  assert.throws(() => transitionTask(blocked, { type: "resume", phase: "implement", decision: "approved" }), /cannot skip/);
+  const verifying = startVerification(fresh);
+  const blockedVerify = transitionTask(verifying, { type: "block", reason: "Need decision" });
+  assert.throws(() => transitionTask(blockedVerify, { type: "invalidate_verification" }), /No verification/);
+});

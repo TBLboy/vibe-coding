@@ -10,7 +10,12 @@
   "scripts": {
     "test:core": "node --experimental-strip-types --test tests/*.test.ts",
     "test:py": "python3 scripts/test_vibe_v2_installer.py && python3 scripts/test_v2_project_init.py && python3 scripts/test_v2_project_archive.py && python3 scripts/test_v2_configure_models.py",
-    "typecheck:core": "npm exec --yes --package typescript@5.9.3 -- tsc --noEmit -p tsconfig.core.json",
-    "verify": "npm run test:core && npm run test:py"
+    "typecheck:core": "tsc --noEmit -p tsconfig.core.json",
+    "verify": "npm run test:core && npm run test:py && npm run test:eval",
+    "test:eval": "python3 evaluations/test_score.py && python3 evaluations/test_p2_fixtures.py"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "5.9.3"
   }
 }

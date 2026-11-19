@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -36,6 +37,38 @@ def safe_tree(root: Path) -> list[Path]:
     return sorted(files)
 
 
+# Defense in depth, not a proof of absence of secrets. Never print matched content.
+SECRET_NAME = re.compile(r"(^\.env(?:\.|$)|^\.npmrc$|^\.pypirc$|^credentials(?:\.|$)|^auth\.json$|^service-account|^id_(?:rsa|ed25519)|\.(?:pem|key|p12|pfx)$)", re.I)
+SECRET_CONTENT = re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----|\b(?:sk-(?:proj-)?[A-Za-z0-9_-]{20,}|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|AKIA[A-Z0-9]{16}|xox[baprs]-[A-Za-z0-9-]{12,})\b", re.I)
+SECRET_HINT = re.compile(r"(?:api[_-]?key|access[_-]?token|client[_-]?secret|password)\s*[:=]\s*[\"']?(?:Bearer\s+)?[A-Za-z0-9+/=_-]{24,}", re.I)
+
+
+def check_sensitive(file: Path, relative: Path, warnings: list[dict[str, str]] | None = None) -> None:
+    if not file.is_file() or any(SECRET_NAME.search(part) for part in relative.parts):
+        raise ValueError(f"Unsafe/sensitive archive path: {relative}; sanitize before archiving")
+    try:
+        text = file.read_text(encoding="utf-8")
+    except UnicodeError:
+        if warnings is not None:
+            warnings.append({"path": relative.as_posix(), "reason": "non-UTF-8 or binary; not scanned"})
+        return
+    if "\x00" in text or SECRET_CONTENT.search(text):
+        raise ValueError(f"Possible secret in archive input: {relative}; sanitize before archiving")
+    if warnings is not None and SECRET_HINT.search(text):
+        warnings.append({"path": relative.as_posix(), "reason": "credential-like assignment needs manual review"})
+
+
+def check_snapshot(target: Path, warnings: list[dict[str, str]] | None = None) -> None:
+    files = safe_tree(target)
+    for file in files:
+        check_sensitive(file, file.relative_to(target), warnings)
+    manifest = json.loads((target / "manifest.json").read_text(encoding="utf-8"))
+    actual = {file.relative_to(target).as_posix(): digest(file) for file in files if file != target / "manifest.json"}
+    expected = {entry["path"]: entry["sha256"] for entry in manifest["files"]}
+    if actual != expected:
+        raise ValueError("Archive snapshot no longer matches its manifest")
+
+
 def contains(parent: Path, candidate: Path) -> bool:
     try:
         candidate.relative_to(parent)
@@ -60,6 +93,12 @@ def archive(project_root: Path, archive_root: Path, now: datetime | None = None)
         raise ValueError(f"Unsafe AGENTS.md: {agents}")
     if not agents.exists() and not memory_files:
         raise ValueError("No archiveable V2 project memory")
+
+    warnings: list[dict[str, str]] = []
+    for file in memory_files:
+        check_sensitive(file, file.relative_to(source), warnings)
+    if agents.exists():
+        check_sensitive(agents, Path("AGENTS.md"), warnings)
 
     stamp = (now or datetime.now(timezone.utc)).strftime("%Y%m%dT%H%M%SZ")
     parent = destination_root / source.name
@@ -91,7 +130,13 @@ def archive(project_root: Path, archive_root: Path, now: datetime | None = None)
             archived = staging / entry["path"]
             if not archived.is_file() or digest(archived) != entry["sha256"]:
                 raise ValueError(f"Archive validation failed: {entry['path']}")
+        check_snapshot(staging, warnings)
         staging.rename(target)
+        if warnings:
+            unique = {(item["path"], item["reason"]): item for item in warnings}
+            print(f"[!] {len(unique)} file(s) need manual review before publishing:", file=sys.stderr)
+            for item in unique.values():
+                print(f"    {item['path']}: {item['reason']}", file=sys.stderr)
         return target
     except Exception:
         shutil.rmtree(staging, ignore_errors=True)
@@ -107,6 +152,10 @@ def archive(project_root: Path, archive_root: Path, now: datetime | None = None)
 
 EXIT_PUSH_FAILED = 4
 
+# Windows opens a console window for every child process unless it is suppressed,
+# which makes an interactive archive flash a black box per git call.
+_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
 
 def run_git(arguments: list[str], cwd: Path) -> tuple[int, str, str]:
     """Run git in `cwd`; return (returncode, stdout, stderr) as stripped text."""
@@ -116,6 +165,7 @@ def run_git(arguments: list[str], cwd: Path) -> tuple[int, str, str]:
             capture_output=True,
             text=True,
             timeout=300,
+            creationflags=_NO_WINDOW,
         )
     except (OSError, subprocess.SubprocessError) as error:
         return 1, "", f"{type(error).__name__}: {error}"
@@ -135,19 +185,27 @@ def publishing_repository(target: Path) -> tuple[Path | None, str]:
 
 
 def choose_remote(repository: Path, requested: str | None) -> str | None:
-    if requested:
-        return requested
     _, output, _ = run_git(["remote"], repository)
     remotes = [line for line in output.splitlines() if line.strip()]
+    if requested:
+        if requested not in remotes:
+            raise ValueError("Requested remote is not a configured remote name")
+        return requested
     if not remotes:
         return None
-    return "origin" if "origin" in remotes else remotes[0]
+    if "origin" in remotes:
+        return "origin"
+    if len(remotes) != 1:
+        raise ValueError("Multiple archive remotes; select one explicitly")
+    return remotes[0]
 
 
 def remote_head(repository: Path, remote: str, branch: str) -> str | None:
-    code, output, _ = run_git(["ls-remote", "--heads", remote, branch], repository)
-    if code != 0 or not output:
+    code, output, error = run_git(["ls-remote", "--exit-code", "--heads", remote, f"refs/heads/{branch}"], repository)
+    if code == 2:
         return None
+    if code != 0 or not output:
+        raise ValueError("Could not verify the remote branch; no push attempted")
     return output.split()[0]
 
 
@@ -170,38 +228,55 @@ def push(target: Path, remote: str | None = None, message: str | None = None) ->
     if code != 0 or not branch:
         return {"status": "detached-head", "repository": str(repository), "snapshot": relative}
 
-    run_git(["add", "-A", "--", relative], repository)
-    staged_code, _, staged_error = run_git(["diff", "--cached", "--quiet", "--", relative], repository)
-    if staged_code not in (0, 1):
-        raise ValueError(f"cannot inspect staged snapshot: {staged_error}")
-
-    commit_note = message or f"archive: {Path(relative).parent.name} {Path(relative).name}"
-    if staged_code == 1:
-        added, stdout, error = run_git(["commit", "-q", "-m", commit_note, "--", relative], repository)
+    check_snapshot(target)
+    head_code, head, _ = run_git(["rev-parse", "HEAD"], repository)
+    if head_code != 0 or not head:
+        raise ValueError("Archive repository must have an existing published baseline commit")
+    remote_commit = remote_head(repository, chosen, branch)
+    if remote_commit is None:
+        raise ValueError("Archive branch is not published; publish its baseline explicitly first")
+    if head != remote_commit:
+        # A retry is safe only when the one unpublished commit is exactly this snapshot.
+        _, parents, _ = run_git(["rev-list", "--parents", "-n", "1", head], repository)
+        _, changed, _ = run_git(["diff-tree", "--no-commit-id", "--name-only", "-r", "-z", head], repository)
+        paths = [p for p in changed.split("\x00") if p]
+        if parents.split() != [head, remote_commit] or not paths or any(not p.startswith(relative + "/") for p in paths):
+            raise ValueError("Archive branch contains unrelated unpublished commits or diverged; reconcile manually before publishing")
+        if run_git(["diff", "--quiet", head, "--", relative], repository)[0] != 0 or run_git(["ls-files", "--others", "--exclude-standard", "--", relative], repository)[1]:
+            raise ValueError("Snapshot changed since its local commit; do not publish")
+        commit, outcome = head, "pushed"
+    else:
+        added, _, error = run_git(["add", "-A", "--", relative], repository)
         if added != 0:
+            raise ValueError(f"cannot stage archive snapshot (check whether the repository ignores it): {error}")
+        staged_code, _, staged_error = run_git(["diff", "--cached", "--quiet", "--", relative], repository)
+        if staged_code not in (0, 1):
+            raise ValueError(f"cannot inspect staged snapshot: {staged_error}")
+        # Every manifest file must actually be staged; ignore rules must not produce a partial snapshot.
+        _, tracked, _ = run_git(["ls-files", "-z", "--", relative], repository)
+        expected = {f.relative_to(repository).as_posix() for f in safe_tree(target)}
+        if set(tracked.split("\x00")) - {""} != expected:
+            raise ValueError("Archive repository ignores some snapshot files; refusing partial snapshot")
+        if staged_code == 0:
+            return {"status": "already-published", "repository": str(repository), "snapshot": relative, "remote": chosen, "branch": branch, "commit": head}
+        commit_note = message or f"archive: {Path(relative).parent.name} {Path(relative).name}"
+        committed, stdout, error = run_git(["commit", "-q", "-m", commit_note, "--", relative], repository)
+        if committed != 0:
             raise ValueError(f"cannot commit archive snapshot: {error or stdout}")
         commit = run_git(["rev-parse", "HEAD"], repository)[1]
         outcome = "pushed"
-    else:
-        if run_git(["ls-files", "--error-unmatch", relative], repository)[0] != 0:
-            raise ValueError(
-                f"archive repository ignores {relative}; remove it from .gitignore so the snapshot can be published"
-            )
-        commit = run_git(["rev-parse", "HEAD"], repository)[1]
-        outcome = "already-published"
-
-    pushed, _, push_error = run_git(["push", "-q", chosen, f"HEAD:{branch}"], repository)
+    # Revalidate the exact outgoing commit; push an immutable SHA, never mutable HEAD.
+    _, parents, _ = run_git(["rev-list", "--parents", "-n", "1", commit], repository)
+    _, changed, _ = run_git(["diff-tree", "--no-commit-id", "--name-only", "-r", "-z", commit], repository)
+    paths = [p for p in changed.split("\x00") if p]
+    if parents.split() != [commit, remote_commit] or not paths or any(not p.startswith(relative + "/") for p in paths):
+        raise ValueError("Outgoing commit contains unrelated history or files; no push attempted")
+    _, committed_files, _ = run_git(["ls-tree", "-r", "--name-only", "-z", commit, "--", relative], repository)
+    if set(committed_files.split("\x00")) - {""} != {f.relative_to(repository).as_posix() for f in safe_tree(target)} or run_git(["diff", "--quiet", commit, "--", relative], repository)[0] != 0:
+        raise ValueError("Outgoing snapshot is incomplete or differs from the validated files; no push attempted")
+    pushed, _, push_error = run_git(["push", "-q", chosen, f"{commit}:refs/heads/{branch}"], repository)
     if pushed != 0:
-        # Someone else pushed first: integrate once, then retry. Never force.
-        run_git(["fetch", "-q", chosen, branch], repository)
-        rebased, _, rebase_error = run_git(["rebase", "-q", f"{chosen}/{branch}"], repository)
-        if rebased != 0:
-            run_git(["rebase", "--abort"], repository)
-            raise ValueError(f"cannot integrate with {chosen}/{branch}: {rebase_error or push_error}")
-        commit = run_git(["rev-parse", "HEAD"], repository)[1]
-        pushed, _, push_error = run_git(["push", "-q", chosen, f"HEAD:{branch}"], repository)
-        if pushed != 0:
-            raise ValueError(f"cannot push archive snapshot to {chosen}/{branch}: {push_error}")
+        raise ValueError(f"Cannot push snapshot to {chosen}/{branch}; no automatic fetch/rebase: {push_error}")
 
     published = remote_head(repository, chosen, branch)
     if published != commit:

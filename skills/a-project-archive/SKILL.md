@@ -113,8 +113,8 @@ Archiving finishes when the snapshot is on the remote. The script does this itse
 Rules:
 
 - **Never report an archive as done while the snapshot is unpushed.** Exit 4 means "created locally, not archived".
-- Never force-push and never rewrite history. On a rejected push the script integrates once (`fetch` + `rebase`, aborting cleanly on conflict) and retries; a remaining conflict is surfaced to the user.
-- Only the snapshot directory is staged and committed (`git add -- <snapshot>`), never other working-tree changes in the archive repository. Files belonging to other snapshots or unrelated edits are left alone. Publishing a branch still also publishes any earlier unpushed commits of that branch — Git cannot publish a commit without its ancestors — so keep the archive repository's history clean.
+- Never force-push and never rewrite history. On a rejected push the script stops; it does not rebase or force-push. Resolve divergence explicitly.
+- Only the snapshot directory is staged and committed (`git add -- <snapshot>`), never other working-tree changes in the archive repository. Files belonging to other snapshots or unrelated edits are left alone. The script refuses an unpublished/diverged branch and unrelated unpushed commits, except retrying exactly the single verified snapshot commit. It publishes the immutable snapshot commit only after preflight and verifies the remote ref.
 - `--no-push` exists only for a user who explicitly wants a local-only snapshot. Do not pass it on your own initiative.
 - Never put credentials on a command line; rely on the user's existing Git credential helper or SSH agent.
 
@@ -125,9 +125,11 @@ Rules:
 - Preserve an existing archive; each snapshot receives a new unique directory.
 - Never place a snapshot at the root of a knowledge-base repository that has a dedicated snapshot directory.
 - Treat the manifest as an integrity check, not as a project activity log.
-- Commit and push only the new snapshot directory; never sweep in unrelated changes from the archive repository.
+- Commit and push only the new snapshot directory; never sweep in unrelated changes from the archive repository. Secret-name/content heuristics run before copying/publishing; they are not a guarantee. Inspect project memory for sensitive data before archiving.
 
 ## V2 operating rules
+
+- For registered Tasks, use Runtime lifecycle events in `docs/03-STATE-MACHINE.md`; never edit Task JSON directly.
 
 - Follow the current project `AGENTS.md` and Session policy.
 - Use a persistent `.vibe/tasks/<task-id>.json` only when V2 Task policy warrants it.

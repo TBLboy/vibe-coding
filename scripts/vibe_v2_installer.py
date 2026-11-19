@@ -14,6 +14,7 @@ import os
 from pathlib import Path
 import shutil
 import sys
+import tempfile
 from datetime import datetime, timezone
 
 
@@ -24,6 +25,8 @@ COPY_ROOTS = (
     (Path("runtime/core"), Path("runtime/core")),
     (Path("runtime/opencode/plugins/vibe-v2"), Path("runtime/opencode/plugins/vibe-v2")),
     (Path("skills"), Path("skills")),
+    (Path("docs"), Path("docs")),
+    (Path("schemas"), Path("schemas")),
 )
 # Running the Python tests creates bytecode caches next to the Skill scripts.
 # They are build artifacts, not framework assets, so they must never be copied
@@ -64,17 +67,23 @@ def write_json_atomic(path: Path, value) -> None:
     user's 0600 to the umask default and silently widen read access.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
-    mode = path.stat().st_mode & 0o777 if path.exists() else None
-    temporary = path.with_name(path.name + ".tmp")
-    temporary.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    if mode is not None:
+    mode = path.stat().st_mode & 0o777 if path.exists() else 0o600
+    fd, name = tempfile.mkstemp(prefix=f".{path.name}-", dir=path.parent)
+    temporary = Path(name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as stream:
+            stream.write(json.dumps(value, ensure_ascii=False, indent=2) + "\n")
         os.chmod(temporary, mode)
-    os.replace(temporary, path)
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def assert_within(root: Path, candidate: Path) -> Path:
     root = root.resolve()
     resolved = candidate.resolve(strict=False)
+    if candidate.absolute() != resolved:
+        raise RuntimeError(f"Symlink or noncanonical destination is not allowed: {candidate}")
     try:
         resolved.relative_to(root)
     except ValueError as error:
@@ -111,12 +120,12 @@ def state_path(home: Path) -> Path:
 
 def backup(home: Path, paths: list[Path]) -> Path:
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f")
-    directory = home / "backups" / f"vibe-v2-{stamp}"
+    directory = assert_within(home, home / "backups" / f"vibe-v2-{stamp}")
     directory.mkdir(parents=True, exist_ok=False)
     # The backup contains opencode.json and therefore plaintext credentials: owner-only.
     os.chmod(directory, 0o700)
     for relative in paths:
-        source = home / relative
+        source = assert_within(home, home / relative)
         if source.is_file():
             destination = directory / relative
             destination.parent.mkdir(parents=True, exist_ok=True)
@@ -185,13 +194,32 @@ def remove_stale_managed_files(home: Path, prior_state, current: set[str]) -> No
 
 def install(root: Path, home: Path) -> None:
     home.mkdir(parents=True, exist_ok=True)
+    assert_within(home, state_path(home))
+    assert_within(home, config_path(home))
     prior = read_json(state_path(home), None)
     if prior is not None and not isinstance(prior, dict):
         raise RuntimeError("V2 installation state is malformed")
     files = list(source_files(root))
-    tracked = [Path("opencode.json"), Path(STATE_FILE)] + [relative for _, relative in files]
-    backup_dir = backup(home, tracked)
+    expected = prior.get("managed_files", {}) if prior else {}
+    if not isinstance(expected, dict):
+        raise RuntimeError("Invalid managed_files in installation state")
+    # Preflight the entire install before touching any managed file/configuration.
+    conflicts = []
+    for _, relative in files:
+        target = assert_within(home, home / relative)
+        key = relative.as_posix()
+        if target.exists() and (not target.is_file() or key not in expected or sha256(target) != expected[key]):
+            conflicts.append(key)
+    if conflicts:
+        raise RuntimeError("Install refused; existing unowned or user-modified files must be reconciled explicitly: " + ", ".join(conflicts))
     merged = merge_config(home, prior)
+    if prior and read_json(config_path(home), {}).get("default_agent") != "vibe-main":
+        raise RuntimeError("Install refused; default_agent was changed by the user. Reconcile explicitly before updating.")
+    tracked = list(dict.fromkeys([Path("opencode.json"), Path(STATE_FILE)] + [relative for _, relative in files] + [Path(key) for key in expected]))
+    for relative in tracked:
+        assert_within(home, home / relative)
+    original_modes = {relative: (home / relative).stat().st_mode & 0o777 for relative in tracked if (home / relative).is_file()}
+    backup_dir = backup(home, tracked)
     copied = {}
     created_dirs = set()
     try:
@@ -213,8 +241,22 @@ def install(root: Path, home: Path) -> None:
             "backup_dir": str(backup_dir),
         }
         write_json_atomic(state_path(home), state)
-    except Exception:
-        raise RuntimeError(f"Install failed after backup {backup_dir}; restore from that backup before retrying")
+    except Exception as error:
+        # Restore pre-install files, including stale managed files; remove newly created files.
+        try:
+            for relative in tracked:
+                target = assert_within(home, home / relative)
+                original = backup_dir / relative
+                if original.is_file():
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    # Backup permissions are deliberately restrictive; restore original bits separately.
+                    shutil.copyfile(original, target)
+                    os.chmod(target, original_modes[relative])
+                elif target.is_file():
+                    target.unlink()
+        except Exception as rollback_error:
+            raise RuntimeError(f"Install and rollback failed; restore from {backup_dir}: {rollback_error}") from error
+        raise RuntimeError(f"Install failed; previous files restored from {backup_dir}: {error}") from error
     print(f"[+] Installed Vibe Coding V2 to {home}")
     print(f"[+] Backup: {backup_dir}")
     print("[!] The backup contains opencode.json with plaintext credentials (owner-only permissions). Delete it once the install is verified.")
@@ -228,9 +270,10 @@ def verify(root: Path, home: Path) -> None:
     if not isinstance(expected, dict):
         raise RuntimeError("V2 installation state has invalid managed_files")
     failures = []
-    for relative, digest in expected.items():
-        target = home / relative
-        if not target.is_file() or sha256(target) != digest:
+    current = {relative.as_posix(): sha256(source) for source, relative in source_files(root)}
+    for relative in sorted(set(expected) | set(current)):
+        target = assert_within(home, home / relative)
+        if relative not in current or expected.get(relative) != current.get(relative) or not target.is_file() or sha256(target) != current.get(relative):
             failures.append(relative)
     config = read_json(config_path(home), {})
     if PLUGIN_SPEC not in config.get("plugin", []):
@@ -263,14 +306,15 @@ def uninstall(home: Path) -> None:
     plugins = config.get("plugin")
     if isinstance(plugins, list) and ownership.get("plugin_added"):
         config["plugin"] = [entry for entry in plugins if entry != PLUGIN_SPEC]
-    if ownership.get("default_agent_was_present"):
-        config["default_agent"] = ownership.get("default_agent_previous")
-    elif config.get("default_agent") == "vibe-main":
-        config.pop("default_agent", None)
+    if config.get("default_agent") == "vibe-main":
+        if ownership.get("default_agent_was_present"):
+            config["default_agent"] = ownership.get("default_agent_previous")
+        else:
+            config.pop("default_agent", None)
     write_json_atomic(config_path(home), config)
     state_path(home).unlink(missing_ok=True)
     for relative in sorted(state.get("created_dirs", []), key=lambda item: item.count("/"), reverse=True):
-        target = home / relative
+        target = assert_within(home, home / relative)
         try:
             target.rmdir()
         except OSError:

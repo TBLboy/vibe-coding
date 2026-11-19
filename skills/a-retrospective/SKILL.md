@@ -51,6 +51,8 @@ Persist only durable results: project-level lessons and limitations into `.vibe/
 
 ## V2 operating rules
 
+- For registered Tasks, use Runtime lifecycle events in `docs/03-STATE-MACHINE.md`; never edit Task JSON directly.
+
 - Follow the current project `AGENTS.md` and Session policy.
 - Use a persistent `.vibe/tasks/<task-id>.json` only when V2 Task policy warrants it.
 - Write `.vibe/sessions/<session-id>/current-session.md` only for resumable unfinished work or a blocker.

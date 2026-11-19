@@ -40,3 +40,7 @@ Do not report style preferences, speculative concerns without a concrete failure
 - A review verdict is not a substitute for verification.
 - Only `go` permits strict Task completion.
 - Two automatic repair rounds are the maximum. A third unsuccessful review blocks the Task; report the unresolved findings and do not retry automatically. Any further attempt requires a new explicit user request.
+
+## Native result protocol
+
+Return exactly one JSON object (or one JSON fenced block): `{"verdict":"go","findings":[],"requiresUserDecision":false}`. For `conditional` or `no-go`, include non-empty structured findings and the boolean decision flag. The Runtime accepts only the matching successful foreground native subagent completion and checks the child identity and artifact freshness. A permit or parent-authored verdict is not a completion.
