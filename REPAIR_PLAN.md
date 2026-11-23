@@ -25,7 +25,7 @@
 
 - `runtime/core/task-machine.ts`：生命周期转换、阻塞恢复、证据失效、决策记录；拒绝越级及非法终态。
 - `runtime/opencode/plugins/vibe-v2/task-control.ts`：新 Task 只能从 fresh prepare 注册；Runtime 持有后续写入权。原 Task JSON 仍是可读的业务状态；插件存储额外保存项目级小型 receipt（owner、policy、digest、closed、pending review call），没有复制 Task 的业务内容。跨 Session 恢复转交所有权，不改变冻结策略。
-- `runtime/opencode/plugins/vibe-v2/setup.ts`：原生产入口调用的实际适配层，权限许可只登记 native call identity，真实 `tool.execute.after` 完成才处理 Reviewer JSON；必须匹配新前台子 Session、父 Session、Agent、调用 ID 与当前产物。失败、伪造、陈旧结果不完成 Task。
+- `runtime/opencode/plugins/vibe-v2/setup.ts`：原生产入口调用的实际适配层；权限许可登记 native call identity，`tool.execute.after` 将后台 launch 绑定到子 Session；父会话自然继续时由 Runtime 读取该子会话的成功终态。也保留旧同步完成路径。必须匹配新子 Session、父 Session、Agent、调用 ID 与当前产物；running、失败、伪造、陈旧结果不完成 Task。协议以 `docs/03-STATE-MACHINE.md` 为准。
 - `runtime/core/artifact-evidence.ts`：验证开始时记录显式文件、Git HEAD、改动的 tracked/untracked 文件的 SHA-256 指纹（含路径、内容及模式）；验证结果提交、review 授权/完成及 close 检查新鲜度。对符号链接及越界路径拒绝处理。验证期间或验证后发生变化，重新验证。
 - `docs/03-STATE-MACHINE.md`：完整工具调用契约。Main 与 Reviewer 的操作提示、核心 Skill 的公共规则和数据契约同步。
 

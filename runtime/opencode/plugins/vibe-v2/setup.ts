@@ -50,7 +50,8 @@ export async function setup(ctx: HostContext) {
     const controller = createTaskController({
       storage: { get: key => ctx.storage.get(key), set: async (key, value) => { await ctx.storage.set(key, JSON.parse(JSON.stringify(value))); }, remove: key => ctx.storage.remove(key) },
       memoryRoot: memoryRootFor, workspace: workspaceFor,
-      childSession: async sessionID => await ctx.session.get({ sessionID }) as { parentID?: string; agent?: string },
+      childSession: async sessionID => await ctx.session.get({ sessionID }) as { parentID?: string; agent?: string; outcome?: string },
+      childContext: sessionID => ctx.session.context({ sessionID }),
     });
 
     await ctx.command.transform((editor) => {
@@ -138,6 +139,10 @@ export async function setup(ctx: HostContext) {
     });
 
     await ctx.session.hook("context", async (event) => {
+      try { await controller.reconcile(event.sessionID); }
+      catch {
+        event.system.push({ type: "text", text: "Strict reviewer result could not be accepted. Read the active Task; inspect the host result and reset the pending review before retrying. Never submit a verdict yourself." });
+      }
       const storedMode: unknown = await ctx.storage.get(modeStorageKey(event.sessionID));
       const mode = isMode(storedMode) ? storedMode : normalizeMode(storedMode);
       const pointer: unknown = await ctx.storage.get(activeTaskStorageKey(event.sessionID));

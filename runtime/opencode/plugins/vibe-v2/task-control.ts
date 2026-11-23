@@ -12,11 +12,12 @@ export interface ControlHost {
   storage: ControlStorage;
   memoryRoot(sessionID: string): Promise<string | null>;
   workspace(sessionID: string): Promise<string | null>;
-  childSession(sessionID: string): Promise<{ parentID?: string; agent?: string }>;
+  childSession(sessionID: string): Promise<{ parentID?: string; agent?: string; outcome?: string }>;
+  childContext(sessionID: string): Promise<readonly unknown[]>;
 }
 export interface Caller { sessionID: string; agent?: string }
 export interface ReviewCall { messageID: string; id: string }
-interface Receipt { owner: string; policy: Task["policy"]; digest: string; closed: boolean; review?: { digest: string; call?: ReviewCall } }
+interface Receipt { owner: string; policy: Task["policy"]; digest: string; closed: boolean; review?: { digest: string; call?: ReviewCall; childSessionID?: string } }
 const hash = (s: string) => createHash("sha256").update(s).digest("hex");
 const idPattern = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 const locks = new Map<string, Promise<void>>();
@@ -40,6 +41,47 @@ const optionalStrings = (x: unknown) => x === undefined ? undefined : strings(x)
 function parseFindings(x: unknown): ReviewFinding[] {
   if (!Array.isArray(x)) throw new Error("Expected findings array");
   return x.map(v => { const f = object(v); if (f.severity !== "critical" && f.severity !== "major" && f.severity !== "minor") throw new Error("Invalid finding severity"); return { severity: f.severity, requirement: string(f.requirement), location: string(f.location), problem: string(f.problem), requiredChange: string(f.requiredChange) }; });
+}
+
+function verdictEvent(text: string): TaskEvent | null {
+  // Accept an exact JSON object or one JSON code fence, never a substring or
+  // parent-authored notification text.
+  const trimmed = text.trim();
+  const fenced = trimmed.match(/^```(?:json)?\s*\n([\s\S]*?)\n```$/i);
+  const record = object(JSON.parse(fenced ? fenced[1] : trimmed));
+  const findings = parseFindings(record.findings);
+  if (typeof record.requiresUserDecision !== "boolean") return null;
+  if (record.verdict === "go" && findings.length === 0 && !record.requiresUserDecision) return { type: "review_go" };
+  if ((record.verdict === "conditional" || record.verdict === "no-go") && findings.length) {
+    return { type: "review_changes_required", verdict: record.verdict, findings, requiresUserDecision: record.requiresUserDecision };
+  }
+  return null;
+}
+
+/** Only the first un-compacted successful turn of a fresh child is usable.
+ * Later prompts, compaction summaries, reasoning and intermediate text are not verdicts. */
+function terminalReviewerText(messages: readonly unknown[]): string | null {
+  const records = messages.map(object);
+  if (records.filter(m => m.type === "user").length !== 1 || records.filter(m => m.type === "idle").length !== 1) return null;
+  if (records.some(m => ["compaction", "synthetic", "agent-switched"].includes(String(m.type)))) return null;
+  const idle = records.at(-1), assistant = records.at(-2);
+  if (idle?.type !== "idle" || idle.outcome !== "succeeded" || idle.error !== undefined) return null;
+  if (assistant?.type !== "assistant" || assistant.agent !== "vibe-reviewer" || assistant.finish !== "stop" || assistant.error !== undefined) return null;
+  const time = object(assistant.time);
+  if (time.completed === undefined || time.completed === null || !Array.isArray(assistant.content)) return null;
+  // Unsettled steps cannot be a completed review. A tool error that the reviewer
+  // recovered from is not by itself a failed child execution.
+  for (const message of records.filter(m => m.type === "assistant")) {
+    if (message.agent !== "vibe-reviewer" || message.error !== undefined || object(message.time).completed === undefined) return null;
+    if (!Array.isArray(message.content)) return null;
+    for (const part of message.content.map(object)) {
+      if (part.type === "tool" && !["completed", "error"].includes(String(object(part.state).status))) return null;
+    }
+  }
+  const parts = assistant.content.map(object);
+  if (parts.some(p => p.type === "tool")) return null;
+  const text = parts.filter(p => p.type === "text").map(p => string(p.text)).join("");
+  return text || null;
 }
 
 /** Runtime-owned lifecycle. The persisted Task remains the human-readable source;
@@ -154,7 +196,7 @@ export function createTaskController(host: ControlHost) {
         if (task.policy !== "strict" || task.phase !== "review" || task.status !== "active" || task.review?.verdict !== "pending" || !await current(task, sessionID)) throw new Error("Review requires active strict Task with current verification and pending verdict");
         if (receipt.review) throw new Error("Review already authorized; use reset_review if the call failed or was interrupted");
         await storage.set(loc.key, { ...receipt, review: { digest: receipt.digest } });
-        return `Reviewer permit issued for ${taskID}. Invoke a fresh vibe-reviewer in the foreground (background=false) with the current Task and diff. Runtime records only the completed native subagent result.`;
+        return `Reviewer permit issued for ${taskID}. Invoke a fresh native vibe-reviewer with the current Task and diff; omit sessionID. A running result is only a launch: wait for the host notification without polling. Runtime reads the child's terminal verdict at the next natural parent continuation. Never submit or copy a verdict yourself.`;
       }
       if (action === "reset_review") {
         if (task.phase !== "review" || task.review?.verdict !== "pending") throw new Error("No pending review");
@@ -203,8 +245,8 @@ export function createTaskController(host: ControlHost) {
       return true;
     });
   }
-  /** Accept only a host-observed successful foreground native subagent result.
-   * The main Agent cannot submit a verdict through a custom tool. */
+  /** Observe a native launch/completion. Admission and status running are not verdicts.
+    * The main Agent cannot submit a verdict through a custom tool. */
   async function complete(parent: string, agent: string, call: ReviewCall, input: unknown, output: unknown): Promise<boolean> {
     if (agent !== "vibe-main") return false;
     const p = await storage.get(activeTaskStorageKey(parent));
@@ -215,23 +257,48 @@ export function createTaskController(host: ControlHost) {
       const expected = receipt.review?.call;
       if (receipt.owner !== parent || receipt.closed || !expected || expected.id !== call.id || expected.messageID !== call.messageID || receipt.review?.digest !== receipt.digest || task.phase !== "review" || task.status !== "active" || !await current(task, parent)) return false;
       const request = object(input), result = object(output);
-      if (request.agent !== "vibe-reviewer" || request.background === true || request.sessionID || result.status !== "completed" || typeof result.sessionID !== "string" || typeof result.output !== "string") return false;
+      if (request.agent !== "vibe-reviewer" || request.sessionID !== undefined || typeof result.sessionID !== "string" || !result.sessionID) return false;
+      // A duplicate launch cannot replace the bound child or inject a completed result.
+      if (receipt.review?.childSessionID) return false;
       const child = await host.childSession(result.sessionID);
       if (child.parentID !== parent || child.agent !== "vibe-reviewer" || await host.workspace(result.sessionID) !== await host.workspace(parent)) return false;
-      // Accept an exact JSON object or one JSON code fence, never a substring or parent-authored text.
-      const text = result.output.trim();
-      const fenced = text.match(/^```(?:json)?\s*\n([\s\S]*?)\n```$/i);
-      const verdictRecord = object(JSON.parse(fenced ? fenced[1] : text));
-      const verdict = verdictRecord.verdict, findings = parseFindings(verdictRecord.findings);
-      if (typeof verdictRecord.requiresUserDecision !== "boolean") return false;
-      let event: TaskEvent;
-      if (verdict === "go" && findings.length === 0 && !verdictRecord.requiresUserDecision) event = { type: "review_go" };
-      else if ((verdict === "conditional" || verdict === "no-go") && findings.length) event = { type: "review_changes_required", verdict, findings, requiresUserDecision: verdictRecord.requiresUserDecision };
-      else return false;
+      if (result.status === "running") {
+        if (!await current(task, parent)) return false;
+        await storage.set(loc.key, { ...receipt, review: { ...receipt.review!, childSessionID: result.sessionID } });
+        return false;
+      }
+      // Preserve the older synchronous native contract; a background launch must
+      // use the separate host-owned child transcript path below.
+      if (request.background === true || result.status !== "completed" || typeof result.output !== "string") return false;
+      const event = verdictEvent(result.output);
+      if (!event || !await current(task, parent)) return false;
       const next = transitionTask(task, event);
       await save(loc, next, { owner: parent, policy: task.policy, digest: "", closed: false });
       return true;
     });
   }
-  return { control, admit, complete };
+
+  /** Called only on a natural parent context continuation (including the host's
+   * background completion notice), not by an Agent completion tool or timer. */
+  async function reconcile(parent: string): Promise<boolean> {
+    const p = await storage.get(activeTaskStorageKey(parent));
+    if (!isTaskPointer(p) || !p.active || p.policy !== "strict") return false;
+    const loc = await location(parent, p.taskID);
+    return serial(loc.root, async () => {
+      const { task, receipt } = await registered(loc, p.taskID);
+      const review = receipt.review;
+      if (receipt.owner !== parent || receipt.closed || !review?.call || !review.childSessionID || review.digest !== receipt.digest || task.phase !== "review" || task.status !== "active" || !await current(task, parent)) return false;
+      const child = await host.childSession(review.childSessionID);
+      if (child.parentID !== parent || child.agent !== "vibe-reviewer" || child.outcome !== "succeeded" || await host.workspace(review.childSessionID) !== await host.workspace(parent)) return false;
+      const text = terminalReviewerText(await host.childContext(review.childSessionID));
+      if (text === null) return false;
+      const event = verdictEvent(text);
+      const settledChild = await host.childSession(review.childSessionID);
+      if (!event || settledChild.parentID !== parent || settledChild.agent !== "vibe-reviewer" || settledChild.outcome !== "succeeded" || await host.workspace(review.childSessionID) !== await host.workspace(parent) || !await current(task, parent)) return false;
+      const next = transitionTask(task, event);
+      await save(loc, next, { owner: parent, policy: task.policy, digest: "", closed: false });
+      return true;
+    });
+  }
+  return { control, admit, complete, reconcile };
 }
