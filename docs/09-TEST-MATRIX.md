@@ -47,6 +47,19 @@ Run `npm run test:core`.
 - material feature/decision/stage/limitation changes progress.
 - ordinary retries/tool operations do not trigger memory writes.
 
+### Team workspace foundations (opt-in product extension)
+
+- `tests/team-projection.test.ts`, `team-manifest.test.ts`, `team-binding.test.ts`:
+  shared path projection/private-area exclusion, stable manifests/hashes and binding validation.
+- `tests/team-change-feed.test.ts`: contiguous sequences, path/op/hash/version validation,
+  cursor advancement and unsafe integer rejection.
+- `tests/team-store.test.ts`: real SQLite migrations and pragmas, optimistic version
+  checks, historical content and tombstones, resurrection, workspace isolation,
+  fault-injected transaction rollback, gap detection, count/serialized UTF-8 byte
+  bounds, WAL file reopen and stale writes across independent connections.
+- These tests cover T1/T2 foundations, not HTTP authentication, plugin synchronization
+  or the live OpenCode team workflow. Those belong to later M1 slices.
+
 ## B. OpenCode live smoke tests
 
 These are required before declaring the framework installable; pure core tests do not cover them.
