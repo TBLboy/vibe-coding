@@ -57,7 +57,13 @@ Run `npm run test:core`.
   checks, historical content and tombstones, resurrection, workspace isolation,
   fault-injected transaction rollback, gap detection, count/serialized UTF-8 byte
   bounds, WAL file reopen and stale writes across independent connections.
-- These tests cover T1/T2 foundations, not HTTP authentication, plugin synchronization
+- `tests/team-write-router.test.ts`: complete changed/unchanged layer/namespace/owner
+  decision table, authorized deletes, local preservation requirements, unmapped ignore,
+  nullable-hash conflict recovery, malformed facts and input immutability.
+- `tests/team-task-scope.test.ts`: canonical relative paths, exact-file/directory-prefix
+  overlap, boundary false-positive rejection, deterministic pairs, immutability,
+  path validation and count/UTF-8 limits.
+- These tests cover T1–T3 foundations, not HTTP authentication, plugin synchronization
   or the live OpenCode team workflow. Those belong to later M1 slices.
 
 ## B. OpenCode live smoke tests

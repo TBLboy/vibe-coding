@@ -6,7 +6,7 @@ export interface Binding {
 
 const ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/u;
 
-function assertId(value: unknown, field: "workspaceId" | "accountId"): asserts value is string {
+export function assertId(value: unknown, field: "workspaceId" | "accountId"): asserts value is string {
   if (typeof value !== "string" || !ID_PATTERN.test(value)) {
     throw new Error(`invalid ${field}`);
   }
