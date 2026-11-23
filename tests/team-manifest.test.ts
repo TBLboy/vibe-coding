@@ -12,6 +12,13 @@ import {
 
 const HASH_ABC = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
 
+test("manifest round-trip preserves prototype-like names as ordinary own keys",()=>{
+  const entries=Object.fromEntries(["__proto__","constructor"].map(path=>[path,{version:1,hash:HASH_ABC}]));
+  const parsed=parseManifest(serializeManifest({schemaVersion:1,cursor:2,entries}));
+  assert.equal(Object.hasOwn(parsed.entries,"__proto__"),true);assert.equal(Object.hasOwn(parsed.entries,"constructor"),true);
+  assert.deepEqual(Object.keys(parsed.entries),["__proto__","constructor"]);
+});
+
 function sampleManifest(): Manifest {
   return {
     schemaVersion: 1,

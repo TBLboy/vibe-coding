@@ -40,6 +40,8 @@ files; a live WAL database is not safely backed up by copying the main file alon
 
 - Account session: `POST /api/auth/login`, `GET/POST /api/workspaces`,
   `POST /api/connect`, membership requests and invitation acceptance.
+- Connect replies also include the authenticated `accountId` for local plugin
+  namespace selection; caller-provided identity is never trusted.
 - Workspace token: metadata/members, owner invitations/approvals/removal/key
   rotation, documents and change feed. Scope and current membership are checked
   on every request. All active members may read all workspace documents.

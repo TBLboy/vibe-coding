@@ -136,8 +136,8 @@ export function createTeamServer(store:TeamDatabase, options:ServerOptions): Ser
         const sessionToken=typeof header==="string" && /^Bearer [A-Za-z0-9_-]{43}$/u.test(header)?header.slice(7):"";
         reply=store.transaction(()=>{
           const auth=connectWorkspace(store,orgId,sessionToken,body.key,now);
-          touchPresence(store,auth.workspaceId,authenticateSession(store,orgId,sessionToken,now).id,now);
-          return {status:200,body:{workspaceToken:auth.workspaceToken,workspace:workspaceInfo(store,orgId,auth.workspaceId),role:auth.role}};
+          touchPresence(store,auth.workspaceId,auth.accountId,now);
+          return {status:200,body:{workspaceToken:auth.workspaceToken,accountId:auth.accountId,workspace:workspaceInfo(store,orgId,auth.workspaceId),role:auth.role}};
         });
       } else if(rawPath==="/api/workspaces" && method==="POST") {
         route="workspaces.create"; const account=session();

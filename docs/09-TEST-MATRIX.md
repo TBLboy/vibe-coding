@@ -79,9 +79,22 @@ Run `npm run test:core`.
   revocation and cross-workspace preservation; current presence/five-minute boundary,
   latest task, immutable-version authors and 50-entry metadata cap; no-JS HTML form,
   token auth and XSS escaping; v2 additive migration and independent WAL connections.
+- `tests/team-plugin-sync.test.ts`: real existing setup with fake HTTP/temp filesystem
+  and child Git repos; unbound registry equivalence/no I/O, canonical binding and
+  repo/branch enforcement, primary/root/reviewer isolation, safe push/pull/restore,
+  409 preservation/lost-response acknowledgment, old-version/deletion replay,
+  unmanaged/conflict-copy retention, prototype-like path keys, corrupt/gapped/hash
+  failure, atomic manifest recovery, symlink/case/stale-snapshot guards, live/stale
+  lock behavior, budgets/backoff/auth/redirect/response limits and progress/tools/
+  bounded context without activity reads; executable CLI and no-raw-secret reconnect
+  schema/environment path. `team-manifest` retains own special keys.
+- T6 review regressions: initial pull/replacement at214/215/255-byte ASCII and
+  255-byte multibyte basenames, byte-exact binary conflict preservation and temp
+  cleanup; editor-save injection after progress snapshot capture (existing/absent
+  append and existing replace) rejects without overwriting or uploading.
 - T4/T5 use additive schema upgrades and nested savepoints, covered by API upgrade and
-  `team-store` rollback tests. Plugin synchronization and the full
-  live OpenCode team workflow remain later M1 slices.
+  `team-store` rollback tests. Full real-server/two-client and live OpenCode team
+  workflow acceptance remain T7/release gates, not proven by host simulations.
 
 ## B. OpenCode live smoke tests
 

@@ -17,6 +17,7 @@ import { resolveMemoryRoot } from "../../../core/memory-root.ts";
 import { createTaskController } from "./task-control.ts";
 import { statSync } from "node:fs";
 import { execFileSync } from "node:child_process";
+import { shouldEnableTeamModules } from "./team/gate.ts";
 
 export async function setup(ctx: HostContext) {
     const hasMemoryDirectory = (candidate: string): boolean => {
@@ -155,4 +156,16 @@ export async function setup(ctx: HostContext) {
         }),
       });
     });
+
+    // No binding: no team registrations, writes or network. Initial connection is
+    // an explicit local CLI operation, not a globally exposed bootstrap tool.
+    if(ctx.location?.directory) {
+      let root=resolveMemoryRoot(await realpath(ctx.location.directory),hasMemoryDirectory);
+      const canonical=ctx.location.project?.canonical;
+      if(canonical&&hasMemoryDirectory(canonical))root=await realpath(canonical);
+      if(await shouldEnableTeamModules(root)) {
+        const {setupTeam}=await import("./team/setup-team.ts");
+        await setupTeam(ctx,root,memoryRootFor);
+      }
+    }
 }

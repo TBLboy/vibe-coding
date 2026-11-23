@@ -47,12 +47,12 @@ function assertManifest(value: unknown): asserts value is Manifest {
 
 function orderedManifest(manifest: Manifest): Manifest {
   assertManifest(manifest);
-  const entries: Record<string, ManifestEntry> = {};
+  const pairs: [string, ManifestEntry][] = [];
   for (const path of Object.keys(manifest.entries).sort()) {
     const entry = manifest.entries[path];
-    entries[path] = { version: entry.version, hash: entry.hash };
+    pairs.push([path, { version: entry.version, hash: entry.hash }]);
   }
-  return { schemaVersion: 1, cursor: manifest.cursor, entries };
+  return { schemaVersion: 1, cursor: manifest.cursor, entries: Object.fromEntries(pairs) };
 }
 
 export function parseManifest(text: string): Manifest {

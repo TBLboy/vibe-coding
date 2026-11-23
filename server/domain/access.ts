@@ -27,7 +27,7 @@ export function rotateTaskKey(store:TeamDatabase, auth:WorkspaceAuth, expiresAt:
   });
 }
 
-export function connectWorkspace(store:TeamDatabase, orgId:string, sessionToken:string, key:unknown, now:number): {workspaceToken:string; workspaceId:string; role:"owner"|"member"} {
+export function connectWorkspace(store:TeamDatabase, orgId:string, sessionToken:string, key:unknown, now:number): {workspaceToken:string; workspaceId:string; accountId:string; role:"owner"|"member"} {
   if(typeof key!=="string" || !/^[A-Za-z0-9_-]{32}$/u.test(key)) unauthenticated();
   return store.transaction(db=>{
     // A key grants no identity: a separately authenticated active account is mandatory.
@@ -42,7 +42,7 @@ export function connectWorkspace(store:TeamDatabase, orgId:string, sessionToken:
     const workspaceToken=issueSecret();
     db.prepare("INSERT INTO workspace_token (token_hash,workspace_id,account_id,created_at,expires_at) VALUES (?,?,?,?,?)")
       .run(hashToken(workspaceToken),found.workspace_id,account.id,now,now+WORKSPACE_TTL_MS);
-    return {workspaceToken,workspaceId:found.workspace_id,role:membership.role};
+    return {workspaceToken,workspaceId:found.workspace_id,accountId:account.id,role:membership.role};
   });
 }
 

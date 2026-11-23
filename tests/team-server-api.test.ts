@@ -61,6 +61,7 @@ test("HTTP login/workspace/connect scopes credentials and persists hashes only",
   assert.equal((await h.req("/api/workspaces")).status,401);
   assert.equal((await h.req("/api/auth/login","POST",undefined,{email:"owner@example.test",password:"bad password"})).status,401);
   const w = await h.workspace(session);
+  assert.equal((await h.connect(session,w.key)).body.accountId,h.owner.id);
   assert.equal((await h.req("/api/connect","POST",undefined,{key:w.key},{authorization:session})).status,401);
   assert.equal((await h.req(`/api/workspaces/${w.id}`,"GET",session)).status,401);
   const meta = await h.req(`/api/workspaces/${w.id}`,"GET",w.token);

@@ -16,6 +16,7 @@
     "server/**/*.ts",
     "runtime/opencode/plugins/vibe-v2/setup.ts",
     "runtime/opencode/plugins/vibe-v2/host-contract.ts",
-    "runtime/opencode/plugins/vibe-v2/task-control.ts"
+    "runtime/opencode/plugins/vibe-v2/task-control.ts",
+    "runtime/opencode/plugins/vibe-v2/team/**/*.ts"
   ]
 }
