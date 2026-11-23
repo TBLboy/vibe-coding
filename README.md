@@ -29,6 +29,7 @@ Four concepts only:
 
 - No compatibility with, or migration from, any previous framework.
 - No independent reviewer toggle. `fast` and `balanced` never invoke the reviewer; `strict` requires reviewer `go` before Task completion. Native background reviewer launches stay pending until Runtime reads the bound child's successful terminal result; see the [completion protocol](docs/03-STATE-MACHINE.md).
+- Team-workspace development is opt-in. The account/workspace HTTP server foundation and local provisioning instructions are in [`server/README.md`](server/README.md); task/board and plugin synchronization are later M1 slices, not a completed team-product claim.
 - Task policy is frozen when the Task starts; changing Session mode affects new work only.
 - No Goal runtime, Run state machine, event-sourced operation ledger, SQLite projection, standalone Evidence model, default MCPs or third-party workflow plugins.
 - No logs for file reads, searches, shell commands, ordinary retries or intermediate actions.

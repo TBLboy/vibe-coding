@@ -63,8 +63,18 @@ Run `npm run test:core`.
 - `tests/team-task-scope.test.ts`: canonical relative paths, exact-file/directory-prefix
   overlap, boundary false-positive rejection, deterministic pairs, immutability,
   path validation and count/UTF-8 limits.
-- These tests cover T1–T3 foundations, not HTTP authentication, plugin synchronization
-  or the live OpenCode team workflow. Those belong to later M1 slices.
+- `tests/team-auth.test.ts`: scrypt parameters and independent standard-library oracle,
+  salt uniqueness, malformed hashes, token/key entropy/digests and TTL constants.
+- `tests/team-server-api.test.ts`: real HTTP/SQLite account/workspace/join/key flows,
+  current credential/membership/organization scopes, write boundaries and If-Match,
+  history/feed, expiry/revocation/removal, idempotent replay/atomic rollback and secret
+  exclusion, bounded input/path/UTF-8 validation, concurrent login admission/throttling
+  and safe logs.
+- `tests/team-server-main.test.ts`: real executable bootstrap/HTTP/shutdown smoke,
+  private database mode, loopback config and explicit local account provisioning.
+- T4 uses additive schema upgrades and nested savepoints, covered by API upgrade and
+  `team-store` rollback tests. Plugin synchronization, task/board APIs and the full
+  live OpenCode team workflow remain later M1 slices.
 
 ## B. OpenCode live smoke tests
 

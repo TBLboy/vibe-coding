@@ -1,6 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
 
-export const CURRENT_SCHEMA_VERSION = 1;
+export const CURRENT_SCHEMA_VERSION = 2;
 
 export interface Migration {
   version: number;
@@ -89,6 +89,59 @@ export const MIGRATIONS: readonly Migration[] = [
           ON change (workspace_id, path, seq);
         CREATE INDEX IF NOT EXISTS document_version_lookup_idx
           ON document_version (document_id, version);
+      `);
+    },
+  },
+  {
+    version: 2,
+    apply(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS workspace_repo (
+          id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspace(id) ON DELETE CASCADE,
+          url TEXT NOT NULL, branch TEXT NOT NULL, is_primary INTEGER NOT NULL CHECK (is_primary IN (0,1))
+        );
+        CREATE TABLE IF NOT EXISTS membership (
+          workspace_id TEXT NOT NULL REFERENCES workspace(id) ON DELETE CASCADE,
+          account_id TEXT NOT NULL REFERENCES account(id),
+          role TEXT NOT NULL CHECK (role IN ('owner','member')),
+          status TEXT NOT NULL CHECK (status IN ('invited','requested','active','removed')),
+          invited_by TEXT REFERENCES account(id), created_at INTEGER NOT NULL, decided_at INTEGER,
+          PRIMARY KEY (workspace_id, account_id)
+        );
+        CREATE TABLE IF NOT EXISTS invitation (
+          id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspace(id) ON DELETE CASCADE,
+          org_id TEXT NOT NULL REFERENCES org(id), email TEXT NOT NULL,
+          role TEXT NOT NULL CHECK (role = 'member'),
+          status TEXT NOT NULL CHECK (status IN ('pending','accepted','revoked')),
+          created_by TEXT NOT NULL REFERENCES account(id), created_at INTEGER NOT NULL, decided_at INTEGER,
+          UNIQUE (workspace_id, email)
+        );
+        CREATE TABLE IF NOT EXISTS session_token (
+          token_hash TEXT PRIMARY KEY, account_id TEXT NOT NULL REFERENCES account(id),
+          created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, revoked_at INTEGER,
+          CHECK (expires_at > created_at)
+        );
+        CREATE TABLE IF NOT EXISTS workspace_token (
+          token_hash TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspace(id) ON DELETE CASCADE,
+          account_id TEXT NOT NULL REFERENCES account(id), created_at INTEGER NOT NULL,
+          expires_at INTEGER NOT NULL, revoked_at INTEGER,
+          FOREIGN KEY (workspace_id, account_id) REFERENCES membership(workspace_id, account_id),
+          CHECK (expires_at > created_at)
+        );
+        CREATE TABLE IF NOT EXISTS task_key (
+          id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspace(id) ON DELETE CASCADE,
+          secret_hash TEXT NOT NULL UNIQUE, created_at INTEGER NOT NULL, expires_at INTEGER, revoked_at INTEGER,
+          CHECK (expires_at IS NULL OR expires_at > created_at)
+        );
+        CREATE TABLE IF NOT EXISTS idempotency (
+          workspace_id TEXT NOT NULL REFERENCES workspace(id) ON DELETE CASCADE,
+          key TEXT NOT NULL, request_hash TEXT NOT NULL, status INTEGER NOT NULL,
+          response_json TEXT NOT NULL, created_at INTEGER NOT NULL,
+          PRIMARY KEY (workspace_id, key)
+        );
+        CREATE INDEX IF NOT EXISTS membership_account_idx ON membership(account_id, status);
+        CREATE INDEX IF NOT EXISTS workspace_token_member_idx ON workspace_token(workspace_id, account_id);
+        CREATE INDEX IF NOT EXISTS idempotency_expiry_idx ON idempotency(created_at);
       `);
     },
   },

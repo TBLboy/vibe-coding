@@ -1,5 +1,6 @@
 import { DatabaseSync, type DatabaseSyncOptions } from "node:sqlite";
 import { isAsyncFunction } from "node:util/types";
+import { randomUUID } from "node:crypto";
 import { CURRENT_SCHEMA_VERSION, MIGRATIONS } from "./schema.ts";
 
 export interface TeamDatabase {
@@ -10,18 +11,19 @@ export interface TeamDatabase {
 
 export function withTransaction<T>(db: DatabaseSync, work: (db: DatabaseSync) => T): T {
   if (isAsyncFunction(work)) throw new Error("SQLite transactions require a synchronous callback");
-  db.exec("BEGIN IMMEDIATE");
+  const savepoint = db.isTransaction ? `vibe_${randomUUID().replaceAll("-", "")}` : null;
+  db.exec(savepoint ? `SAVEPOINT ${savepoint}` : "BEGIN IMMEDIATE");
   try {
     const result = work(db);
     if (result !== null && (typeof result === "object" || typeof result === "function") &&
         typeof (result as { then?: unknown }).then === "function") {
       throw new Error("SQLite transactions require a synchronous callback");
     }
-    db.exec("COMMIT");
+    db.exec(savepoint ? `RELEASE SAVEPOINT ${savepoint}` : "COMMIT");
     return result;
   } catch (error) {
     try {
-      db.exec("ROLLBACK");
+      db.exec(savepoint ? `ROLLBACK TO SAVEPOINT ${savepoint}; RELEASE SAVEPOINT ${savepoint}` : "ROLLBACK");
     } catch {
       // Preserve the original failure; SQLite will already have rolled back on fatal errors.
     }

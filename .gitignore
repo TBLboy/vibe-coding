@@ -7,4 +7,5 @@ Thumbs.db
 __pycache__/
 *.pyc
 .vibe/
+/team-data/
 skills/a-project-archive/archive_root.conf

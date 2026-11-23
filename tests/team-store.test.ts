@@ -11,6 +11,7 @@ import {
 } from "../server/domain/documents.ts";
 import { getChanges } from "../server/domain/changes.ts";
 import { applyMigrations, openTeamDatabase } from "../server/store/sqlite.ts";
+import { CURRENT_SCHEMA_VERSION } from "../server/store/schema.ts";
 import { hashContent } from "../runtime/core/team/manifest.ts";
 
 function open() {
@@ -34,7 +35,7 @@ test("SQLite setup enables required pragmas and idempotent migrations", () => {
     const version = store.db.prepare("SELECT version FROM schema_meta WHERE id = 1").get() as { version: number };
     const foreignKeys = store.db.prepare("PRAGMA foreign_keys").get() as { foreign_keys: number };
     const busyTimeout = store.db.prepare("PRAGMA busy_timeout").get() as { timeout: number };
-    assert.equal(version.version, 1);
+    assert.equal(version.version, CURRENT_SCHEMA_VERSION);
     assert.equal(foreignKeys.foreign_keys, 1);
     assert.equal(busyTimeout.timeout, 5000);
     assert.doesNotThrow(() => applyMigrations(store.db));
@@ -305,4 +306,23 @@ test("transaction boundary rejects async callbacks and rolls back returned promi
     assert.equal(store.db.prepare("SELECT count(*) AS n FROM org WHERE id = 'rolled-back'").get()?.n, 0);
     assert.equal(store.transaction(() => 42), 42);
   } finally { store.close(); }
+});
+
+test("nested savepoints roll back only the failed inner mutation and preserve the outer boundary", () => {
+  const store=open();
+  try {
+    store.transaction(db=>{
+      db.exec("INSERT INTO org VALUES ('outer','Outer','now')");
+      assert.throws(()=>store.transaction(inner=>{
+        inner.exec("INSERT INTO org VALUES ('inner','Inner','now')"); throw new Error("injected inner failure");
+      }),/injected inner failure/);
+      assert.equal(db.prepare("SELECT count(*) AS n FROM org WHERE id='inner'").get()?.n,0);
+    });
+    assert.equal(store.db.prepare("SELECT count(*) AS n FROM org WHERE id='outer'").get()?.n,1);
+    assert.throws(()=>store.transaction(()=>{
+      store.transaction(db=>db.exec("INSERT INTO org VALUES ('joined','Joined','now')"));
+      throw new Error("injected outer failure");
+    }),/injected outer failure/);
+    assert.equal(store.db.prepare("SELECT count(*) AS n FROM org WHERE id='joined'").get()?.n,0);
+  } finally {store.close();}
 });
