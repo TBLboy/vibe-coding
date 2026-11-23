@@ -1,6 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
 
-export const CURRENT_SCHEMA_VERSION = 2;
+export const CURRENT_SCHEMA_VERSION = 3;
 
 export interface Migration {
   version: number;
@@ -142,6 +142,31 @@ export const MIGRATIONS: readonly Migration[] = [
         CREATE INDEX IF NOT EXISTS membership_account_idx ON membership(account_id, status);
         CREATE INDEX IF NOT EXISTS workspace_token_member_idx ON workspace_token(workspace_id, account_id);
         CREATE INDEX IF NOT EXISTS idempotency_expiry_idx ON idempotency(created_at);
+      `);
+    },
+  },
+  {
+    version: 3,
+    apply(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS task (
+          id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspace(id) ON DELETE CASCADE,
+          title TEXT NOT NULL, note TEXT, scope_json TEXT NOT NULL,
+          status TEXT NOT NULL CHECK (status IN ('open','claimed','done','abandoned')),
+          declared_by TEXT NOT NULL, claimed_by TEXT,
+          created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, closed_reason TEXT,
+          FOREIGN KEY (workspace_id, declared_by) REFERENCES membership(workspace_id, account_id),
+          FOREIGN KEY (workspace_id, claimed_by) REFERENCES membership(workspace_id, account_id),
+          CHECK ((status IN ('claimed','done') AND claimed_by IS NOT NULL) OR
+                 (status IN ('open','abandoned') AND claimed_by IS NULL)),
+          CHECK (status != 'abandoned' OR length(trim(closed_reason)) > 0 AND closed_reason IS NOT NULL)
+        );
+        CREATE INDEX IF NOT EXISTS task_workspace_status_idx ON task(workspace_id, status, updated_at);
+        CREATE TABLE IF NOT EXISTS presence (
+          workspace_id TEXT NOT NULL, account_id TEXT NOT NULL, last_seen_at INTEGER NOT NULL,
+          PRIMARY KEY (workspace_id, account_id),
+          FOREIGN KEY (workspace_id, account_id) REFERENCES membership(workspace_id, account_id) ON DELETE CASCADE
+        );
       `);
     },
   },

@@ -72,8 +72,15 @@ Run `npm run test:core`.
   and safe logs.
 - `tests/team-server-main.test.ts`: real executable bootstrap/HTTP/shutdown smoke,
   private database mode, loopback config and explicit local account provisioning.
-- T4 uses additive schema upgrades and nested savepoints, covered by API upgrade and
-  `team-store` rollback tests. Plugin synchronization, task/board APIs and the full
+- `tests/team-task-board.test.ts`: real HTTP scope advisory warnings, exclusive claims,
+  holder-only transitions/abandonment/reclaim, work version/change serialization,
+  idempotent replay and fault-injected atomic rollback (including presence failure);
+  member release/credential
+  revocation and cross-workspace preservation; current presence/five-minute boundary,
+  latest task, immutable-version authors and 50-entry metadata cap; no-JS HTML form,
+  token auth and XSS escaping; v2 additive migration and independent WAL connections.
+- T4/T5 use additive schema upgrades and nested savepoints, covered by API upgrade and
+  `team-store` rollback tests. Plugin synchronization and the full
   live OpenCode team workflow remain later M1 slices.
 
 ## B. OpenCode live smoke tests

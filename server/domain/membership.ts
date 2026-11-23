@@ -3,6 +3,7 @@ import type { TeamDatabase } from "../store/sqlite.ts";
 import { type Account, normalizeEmail } from "./identity.ts";
 import { type WorkspaceAuth, requireOwner } from "./access.ts";
 import { conflict, forbidden, invalid, notFound } from "../http/errors.ts";
+import { releaseMemberTasks } from "./tasks.ts";
 
 function assertWorkspace(store:TeamDatabase, workspaceId:string, orgId:string): void {
   if(!store.db.prepare("SELECT id FROM workspace WHERE id=? AND org_id=? AND archived_at IS NULL").get(workspaceId,orgId)) notFound();
@@ -72,6 +73,8 @@ export function removeMember(store:TeamDatabase, auth:WorkspaceAuth, accountId:s
       const owners=db.prepare("SELECT count(*) AS n FROM membership WHERE workspace_id=? AND role='owner' AND status='active'").get(auth.workspaceId) as {n:number};
       if(owners.n<=1) conflict("Cannot remove the sole active owner");
     }
+    releaseMemberTasks(store,auth.workspaceId,accountId,auth.account.id,now);
+    db.prepare("DELETE FROM presence WHERE workspace_id=? AND account_id=?").run(auth.workspaceId,accountId);
     db.prepare("UPDATE membership SET status='removed',decided_at=? WHERE workspace_id=? AND account_id=?").run(now,auth.workspaceId,accountId);
     db.prepare("UPDATE workspace_token SET revoked_at=? WHERE workspace_id=? AND account_id=? AND revoked_at IS NULL").run(now,auth.workspaceId,accountId);
     db.prepare(`UPDATE invitation SET status='revoked',decided_at=? WHERE workspace_id=? AND email=(SELECT email FROM account WHERE id=?) AND status='pending'`)

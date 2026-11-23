@@ -11,12 +11,15 @@ import { DocumentConflictError, writeDocument, deleteDocument, getDocument } fro
 import { getChanges } from "../domain/changes.ts";
 import { ApiError, bodyObject, forbidden, invalid, notFound, unauthenticated } from "./errors.ts";
 import { idempotentMutation, type Reply } from "./idempotency.ts";
+import { declareTask, claimTask, updateTask } from "../domain/tasks.ts";
+import { getBoard, touchPresence } from "../domain/board.ts";
+import { boardForm, renderBoard } from "./board.ts";
 
 export interface RequestLog { event:"api_request"; method:string; route:string; status:number; durationMs:number }
 export interface ServerOptions { orgId:string; now?:()=>number; logger?:(entry:RequestLog)=>void }
 const MAX_BODY=2*1024*1024;
 
-function readBody(req:IncomingMessage): Promise<Record<string,unknown>> {
+function readBody(req:IncomingMessage,form=false): Promise<Record<string,unknown>> {
   return new Promise((resolve,reject)=>{
     let bytes=0, failed=false; const chunks:Buffer[]=[];
     req.on("data",(chunk:Buffer)=>{
@@ -29,8 +32,14 @@ function readBody(req:IncomingMessage): Promise<Record<string,unknown>> {
       if(failed) return;
       try {
         if(bytes===0) {resolve({});return;}
-        if(!/^application\/json(?:\s*;|$)/iu.test(req.headers["content-type"]??"")) throw new ApiError(400,"invalid_request","Expected application/json");
         const text=new TextDecoder("utf-8",{fatal:true}).decode(Buffer.concat(chunks));
+        if(form) {
+          if(!/^application\/x-www-form-urlencoded(?:\s*;|$)/iu.test(req.headers["content-type"]??"")) throw new ApiError(400,"invalid_request","Expected a form submission");
+          const fields=new URLSearchParams(text);
+          for(const key of fields.keys())if(fields.getAll(key).length!==1)throw new ApiError(400,"invalid_request","Duplicate form field");
+          resolve(Object.fromEntries(fields));return;
+        }
+        if(!/^application\/json(?:\s*;|$)/iu.test(req.headers["content-type"]??"")) throw new ApiError(400,"invalid_request","Expected application/json");
         resolve(bodyObject(JSON.parse(text)));
       } catch(error) {reject(error instanceof ApiError?error:new ApiError(400,"invalid_request","Invalid JSON body"));}
     });
@@ -81,15 +90,30 @@ export function createTeamServer(store:TeamDatabase, options:ServerOptions): Ser
   store.db.prepare("DELETE FROM idempotency WHERE created_at<=?").run(clock()-24*60*60*1000);
   return createServer({requestTimeout:5000,headersTimeout:5000,keepAliveTimeout:1000,maxHeaderSize:16384},async(req,res)=>{
     const started=Date.now(), method=req.method??"GET";
-    let route="not_found", reply:Reply;
+    let route="not_found", reply:Reply, html:string|undefined;
+    let accessed:{workspaceId:string;accountId:string}|undefined;
     try {
       const target=req.url??"/";
       if(!target.startsWith("/") || target.startsWith("//") || target.includes("#")) throw new ApiError(400,"invalid_request","Invalid request target");
       const rawPath=target.split("?")[0], url=new URL(target,"http://localhost");
-      const body=["POST","PUT","DELETE"].includes(method)?await readBody(req):{};
+      const body=["POST","PUT","DELETE"].includes(method)?await readBody(req,rawPath==="/board"):{};
       const now=clock(), orgId=options.orgId;
       const session=()=>authenticateSession(store,orgId,bearer(req),now);
-      if(rawPath==="/api/healthz" && method==="GET") {
+      if(rawPath==="/board" && ["GET","POST"].includes(method)) {
+        route="board.html";
+        if(url.searchParams.has("token")) throw new ApiError(400,"invalid_request","Use the form body or Authorization header, not URL credentials");
+        const workspace=method==="POST"?body.workspaceId:parameter(url,"workspaceId");
+        if(method==="GET" && workspace===null)html=boardForm();
+        else {
+          if(typeof workspace!=="string")invalid("workspaceId is required");
+          const workspaceId=identifier(workspace);
+          const token=method==="POST"?body.token:bearer(req);
+          if(typeof token!=="string" || !/^[A-Za-z0-9_-]{43}$/u.test(token))unauthenticated();
+          const auth=authenticateWorkspace(store,orgId,token,workspaceId,now);
+          html=renderBoard(workspaceInfo(store,orgId,workspaceId).name,getBoard(store,auth,now));
+        }
+        reply={status:200,body:null};
+      } else if(rawPath==="/api/healthz" && method==="GET") {
         route="healthz";
         const count=store.db.prepare("SELECT count(*) AS n FROM workspace WHERE org_id=?").get(orgId) as {n:number};
         reply={status:200,body:{ok:true,schemaVersion:CURRENT_SCHEMA_VERSION,workspaceCount:count.n}};
@@ -110,8 +134,11 @@ export function createTeamServer(store:TeamDatabase, options:ServerOptions): Ser
         // Key validity is checked before session authentication in the domain.
         const header=req.headers.authorization;
         const sessionToken=typeof header==="string" && /^Bearer [A-Za-z0-9_-]{43}$/u.test(header)?header.slice(7):"";
-        const auth=connectWorkspace(store,orgId,sessionToken,body.key,now);
-        reply={status:200,body:{workspaceToken:auth.workspaceToken,workspace:workspaceInfo(store,orgId,auth.workspaceId),role:auth.role}};
+        reply=store.transaction(()=>{
+          const auth=connectWorkspace(store,orgId,sessionToken,body.key,now);
+          touchPresence(store,auth.workspaceId,authenticateSession(store,orgId,sessionToken,now).id,now);
+          return {status:200,body:{workspaceToken:auth.workspaceToken,workspace:workspaceInfo(store,orgId,auth.workspaceId),role:auth.role}};
+        });
       } else if(rawPath==="/api/workspaces" && method==="POST") {
         route="workspaces.create"; const account=session();
         if(req.headers["idempotency-key"]!==undefined) invalid("Workspace creation is not workspace-scoped; Idempotency-Key is unsupported");
@@ -132,8 +159,13 @@ export function createTeamServer(store:TeamDatabase, options:ServerOptions): Ser
             ()=>({status:200,body:acceptInvitation(store,account,workspaceId,now)}));
         } else {
           const auth=authenticateWorkspace(store,orgId,bearer(req),workspaceId,now);
-          const mutate=(action:()=>Reply)=>idempotentMutation(store,workspaceId,req.headers["idempotency-key"],
-            {accountId:auth.account.id,method,path:rawPath,ifMatch:req.headers["if-match"],body},now,action);
+          accessed={workspaceId,accountId:auth.account.id};
+          const mutate=(action:()=>Reply)=>store.transaction(()=>{
+            const result=idempotentMutation(store,workspaceId,req.headers["idempotency-key"],
+              {accountId:auth.account.id,method,path:rawPath,ifMatch:req.headers["if-match"],body},now,action);
+            if(result.status>=200 && result.status<300)touchPresence(store,workspaceId,auth.account.id,now);
+            accessed=undefined;return result;
+          });
           if(suffix==="" && method==="GET") {
             route="workspaces.get"; reply={status:200,body:{workspace:workspaceInfo(store,orgId,workspaceId),role:auth.role}};
           } else if(suffix==="/invitations" && method==="POST") {
@@ -150,6 +182,16 @@ export function createTeamServer(store:TeamDatabase, options:ServerOptions): Ser
           } else if(/^\/members\/[^/]+$/u.test(suffix) && method==="DELETE") {
             route="members.remove"; requireOwner(auth); const accountId=identifier(suffix.split("/")[2]);
             reply=mutate(()=>({status:200,body:removeMember(store,auth,accountId,now)}));
+          } else if(suffix==="/tasks" && method==="POST") {
+            route="tasks.declare";reply=mutate(()=>({status:201,body:declareTask(store,auth,body,now)}));
+          } else if(/^\/tasks\/[^/]+\/claim$/u.test(suffix) && method==="POST") {
+            route="tasks.claim";const taskId=identifier(suffix.split("/")[2]);
+            reply=mutate(()=>({status:200,body:{task:claimTask(store,auth,taskId,now)}}));
+          } else if(/^\/tasks\/[^/]+\/status$/u.test(suffix) && method==="POST") {
+            route="tasks.update";const taskId=identifier(suffix.split("/")[2]);
+            reply=mutate(()=>({status:200,body:{task:updateTask(store,auth,taskId,body,now)}}));
+          } else if(suffix==="/board" && method==="GET") {
+            route="board.json";reply={status:200,body:getBoard(store,auth,now)};accessed=undefined;
           } else if(suffix==="/changes" && method==="GET") {
             route="changes.list";
             const since=integer(parameter(url,"since"),"since",0), limit=integer(parameter(url,"limit"),"limit",200);
@@ -173,6 +215,7 @@ export function createTeamServer(store:TeamDatabase, options:ServerOptions): Ser
           } else notFound();
         }
       }
+      if(accessed && reply.status>=200 && reply.status<300)touchPresence(store,accessed.workspaceId,accessed.accountId,now);
     } catch(error) {
       let failure:ApiError;
       if(error instanceof ApiError) failure=error;
@@ -182,8 +225,9 @@ export function createTeamServer(store:TeamDatabase, options:ServerOptions): Ser
       else failure=new ApiError(500,"internal_error","Internal server error");
       reply={status:failure.status,body:{error:{code:failure.code,message:failure.message,...(failure.details===undefined?{}:{details:failure.details})}}};
     }
-    res.writeHead(reply.status,{"content-type":"application/json; charset=utf-8","cache-control":"no-store","x-content-type-options":"nosniff"});
-    res.end(JSON.stringify(reply.body));
+    res.writeHead(reply.status,{"content-type":html===undefined?"application/json; charset=utf-8":"text/html; charset=utf-8","cache-control":"no-store","x-content-type-options":"nosniff",
+      ...(html===undefined?{}:{"content-security-policy":"default-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'","referrer-policy":"no-referrer","x-frame-options":"DENY"})});
+    res.end(html??JSON.stringify(reply.body));
     const counter=`${method} ${route} ${reply.status}`; counters.set(counter,(counters.get(counter)??0)+1);
     try {options.logger?.({event:"api_request",method,route,status:reply.status,durationMs:Date.now()-started});}
     catch {process.stderr.write("Team workspace request logger failed\n");}

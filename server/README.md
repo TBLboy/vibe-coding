@@ -69,6 +69,33 @@ files; a live WAL database is not safely backed up by copying the main file alon
 - Health is `/api/healthz`; `/api/metrics` requires an account session. Structured
   request logs contain route/status/timing, never body, headers, passwords or tokens.
 
-Task/board APIs and plugin synchronization are the next M1 slices, not claimed
-implemented by this T4 server foundation. TLS and real deployment remain operator
+## Tasks and board (M1 T5)
+
+Active workspace members may declare `POST /api/workspaces/{id}/tasks` with
+`{title,scope?:["src/auth/"],note?}`. Title <=200 characters; note/reason <=4000.
+Scopes are relative literals (not globs); trailing `/` denotes a directory.
+Existing overlapping scopes return advisory `overlapWarnings`, never block creation.
+
+`POST .../tasks/{taskId}/claim` exclusively claims open or abandoned tasks; a 409
+includes the current `claimedBy`/status. Only the holder may POST
+`.../tasks/{taskId}/status` with `{status:"done"}` or
+`{status:"abandoned",reason:"..."}`. Done is final; abandoned is reclaimable.
+Optional workspace-scoped idempotency applies to all three operations. Each
+operation atomically writes its task and versioned `work/{taskId}.json` change.
+Removing a member releases their claimed tasks to open in the same transaction;
+completed attribution and other workspaces are retained.
+
+`GET /api/workspaces/{id}/board` uses the workspace token and returns four task
+columns, active members, five-minute online status/latest current task, and the
+last 50 change metadata entries (no document content). Successful workspace
+access/connect updates presence; failed requests do not. Presence adds no sync seq.
+
+Open `/board` in a browser, enter workspace ID and the workspace token obtained
+from `/api/connect`, and submit the form. It renders once without cookies or JS;
+credentials are sent only in the bounded POST body and not echoed. Refreshing
+requires resubmitting; this is a minimal shell, not account-management UI. Use
+HTTPS outside loopback. A Bearer header also works with
+`GET /board?workspaceId=...`; never put tokens in query parameters.
+
+Plugin synchronization and full team end-to-end validation remain T6/T7. TLS and real deployment remain operator
 responsibilities; these local HTTP/SQLite tests are not a production security audit.
