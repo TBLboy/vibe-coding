@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { MEMORY_LAYERS } from "../../../../core/team/layout.ts";
 import { readdir } from "node:fs/promises";
 import { validateBinding } from "../../../../core/team/binding.ts";
 import { parseManifest, serializeManifest, hashContent, type Manifest } from "../../../../core/team/manifest.ts";
@@ -143,6 +144,7 @@ export class TeamMirror {
         validateBinding({workspaceId:workspace.id,accountId:workspace.ownerAccountId,serverUrl:this.credentials.serverUrl});
         if(workspace.id!==this.credentials.workspaceId||typeof workspace.name!=="string"||!["owner","member"].includes(info.role))throw new TeamError("invalid_response");
         this.workspace={name:workspace.name,ownerAccountId:workspace.ownerAccountId,role:info.role};
+        for(const layer of MEMORY_LAYERS){this.check();await this.files.directory(`.vibe/${layer}`);}
         const initialized=this.manifest.cursor>0||Object.keys(this.manifest.entries).length>0;
         if(initialized)await this.push(await this.candidates());
         let hasMore=true;

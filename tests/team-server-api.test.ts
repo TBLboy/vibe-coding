@@ -32,9 +32,14 @@ async function harness(t: {after(fn: () => Promise<void>): void}) {
   const workspace = async(sessionToken:string,name="Workspace") => {
     const created = await req("/api/workspaces","POST",sessionToken,{name,repos:[{url:"https://example.test/team.git",branch:"main"}]});
     assert.equal(created.status,201,JSON.stringify(created.body));
+    const initialSeq=1; // New workspaces contain exactly the server-managed index event.
+    assert.equal(created.body.workspace.seq,initialSeq);
     const connected = await connect(sessionToken,created.body.taskKey);
     assert.equal(connected.status,200,JSON.stringify(connected.body));
-    return {id:created.body.workspace.id as string,key:created.body.taskKey as string,token:connected.body.workspaceToken as string};
+    const baseline=await req(`/api/workspaces/${created.body.workspace.id}/changes?since=0`,"GET",connected.body.workspaceToken);
+    assert.equal(baseline.status,200);assert.equal(baseline.body.changes.length,1);
+    assert.equal(baseline.body.changes[0].path,"index.json");assert.equal(baseline.body.changes[0].seq,initialSeq);
+    return {id:created.body.workspace.id as string,key:created.body.taskKey as string,token:connected.body.workspaceToken as string,initialSeq};
   };
   return {store,server,base,orgId,owner,alice,bob,logs,req,login,connect,workspace,advance:(ms:number)=>{now+=ms;},now:()=>now};
 }
@@ -138,10 +143,10 @@ test("documents enforce current namespace/owner permissions and If-Match without
   for (const path of ["work/t.json","activity/a.json","index.json"]) assert.equal((await h.req(`${p}/documents/${path}`,"PUT",w.token,{content:"no"},{"if-match":"0"})).status,422);
   assert.equal((await h.req(doc,"DELETE",w.token,undefined,{"if-match":"1"})).status,200);
   assert.equal((await h.req(doc+"?version=1","GET",ac)).body.content,"PRIVATE SERVER CONTENT");
-  const changes=await h.req(`${p}/changes?since=0&limit=2`,"GET",ac);
+  const changes=await h.req(`${p}/changes?since=${w.initialSeq}&limit=2`,"GET",ac);
   assert.equal(changes.status,200); assert.equal(changes.body.hasMore,true);
-  assert.deepEqual(changes.body.changes.map((c:any)=>c.seq),[1,2]);
-  assert.equal((await h.req(`${p}/changes?since=2`,"GET",ac)).body.changes[0].op,"delete");
+  assert.deepEqual(changes.body.changes.map((c:any)=>c.seq),[w.initialSeq+1,w.initialSeq+2]);
+  assert.equal((await h.req(`${p}/changes?since=${w.initialSeq+2}`,"GET",ac)).body.changes[0].op,"delete");
   assert.equal(JSON.stringify(h.logs).includes("PRIVATE SERVER CONTENT"),false);
   for (const secret of [os,as,w.key,w.token,ac,PASSWORD]) assert.equal(JSON.stringify(h.logs).includes(secret),false);
 });
@@ -165,7 +170,7 @@ test("workspace-bound idempotency is atomic, account scoped and never stores pla
   const first=await h.req(doc,"PUT",w.token,{content:"once"},headers);
   assert.equal(first.status,200); assert.deepEqual(await h.req(doc,"PUT",w.token,{content:"once"},headers).then(r=>r.body),first.body);
   assert.equal((await h.req(doc,"PUT",w.token,{content:"different"},headers)).status,409);
-  assert.equal(h.store.db.prepare("SELECT count(*) AS n FROM change WHERE workspace_id=?").get(w.id)?.n,1);
+  assert.equal(h.store.db.prepare("SELECT count(*) AS n FROM change WHERE workspace_id=?").get(w.id)?.n,w.initialSeq+1);
   const rotated=await h.req(`${p}/keys/rotate`,"POST",w.token,{}, {"idempotency-key":"rotate-once"});
   assert.equal(rotated.status,200);
   assert.equal((await h.req(`${p}/keys/rotate`,"POST",w.token,{}, {"idempotency-key":"rotate-once"})).status,409);
@@ -214,16 +219,17 @@ test("idempotency failure rolls back nested document writes and cannot replay ac
   const headers={"idempotency-key":"atomic","if-match":"0"}, doc=`${p}/documents/specs/a.md`;
   h.store.db.exec(`CREATE TRIGGER fail_idempotency BEFORE INSERT ON idempotency BEGIN SELECT RAISE(ABORT,'injected'); END`);
   assert.equal((await h.req(doc,"PUT",w.token,{content:"atomic"},headers)).status,500);
-  for(const table of ["document","document_version","change","idempotency"]) {
-    assert.equal(h.store.db.prepare(`SELECT count(*) AS n FROM ${table}`).get()?.n,0);
+  for(const table of ["document","document_version","change"]) {
+    assert.equal(h.store.db.prepare(`SELECT count(*) AS n FROM ${table}`).get()?.n,1,"only the initial index survives rollback");
   }
-  assert.equal(h.store.db.prepare("SELECT seq FROM workspace_seq WHERE workspace_id=?").get(w.id)?.seq,0);
+  assert.equal(h.store.db.prepare("SELECT count(*) AS n FROM idempotency").get()?.n,0);
+  assert.equal(h.store.db.prepare("SELECT seq FROM workspace_seq WHERE workspace_id=?").get(w.id)?.seq,w.initialSeq);
   h.store.db.exec("DROP TRIGGER fail_idempotency");
   assert.equal((await h.req(doc,"PUT",w.token,{content:"atomic"},headers)).body.version,1);
   await h.req(`${p}/invitations`,"POST",w.token,{email:"alice@example.test"}); const as=await h.login("alice@example.test");
   await h.req(`${p}/invitations/accept`,"POST",as,{}); const ac=(await h.connect(as,w.key)).body.workspaceToken;
   assert.equal((await h.req(`${p}/documents/members/${h.alice.id}/x.md`,"PUT",ac,{content:"atomic"},headers)).status,409);
-  assert.equal(h.store.db.prepare("SELECT count(*) AS n FROM document").get()?.n,1);
+  assert.equal(h.store.db.prepare("SELECT count(*) AS n FROM document").get()?.n,2);
   const changed=await h.req(`${p}/keys/rotate`,"POST",w.token,{}, {"idempotency-key":"rotate-expiry"});
   h.advance(24*60*60*1000);
   const again=await h.req(`${p}/keys/rotate`,"POST",w.token,{}, {"idempotency-key":"rotate-expiry"});
@@ -240,11 +246,11 @@ test("invalid JSON/UTF-8 and malformed queries do not mutate state or leak error
   assert.equal((await h.req(`${p}/documents/specs/a.md?version=0`,"GET",w.token)).status,422);
   assert.equal((await h.req(`${p}/keys/rotate`,"POST",w.token,{expiresAt:"not a timestamp"})).status,422);
   assert.equal((await h.req(`${p}/keys/rotate`,"POST",w.token,{expiresAt:new Date(h.now()).toISOString()})).status,422);
-  assert.equal((await h.req(`${p}/changes?since=1`,"GET",w.token)).status,422);
+  assert.equal((await h.req(`${p}/changes?since=${w.initialSeq+1}`,"GET",w.token)).status,422);
   assert.equal((await h.req("/api/metrics")).status,401);
   assert.equal((await h.req("/api/metrics","GET",os)).status,200);
   assert.equal((await h.req("/api/healthz")).body.schemaVersion,CURRENT_SCHEMA_VERSION);
-  assert.equal(h.store.db.prepare("SELECT count(*) AS n FROM document").get()?.n,0);
+  assert.equal(h.store.db.prepare("SELECT count(*) AS n FROM document").get()?.n,1,"invalid requests leave only the initial index");
 });
 
 test("an account disabled during asynchronous password verification cannot receive a session", async t => {

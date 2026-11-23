@@ -1,6 +1,7 @@
 import { Buffer } from "node:buffer";
 
-export type Layer = "constitution" | "specs" | "work" | "members" | "activity" | "index";
+export const MEMORY_LAYERS = ["constitution", "specs", "work", "members", "activity"] as const;
+export type Layer = typeof MEMORY_LAYERS[number] | "index";
 
 export type ValidPath = { ok: true; path: string };
 export type InvalidPath = { ok: false; reason: string };
@@ -37,7 +38,7 @@ export function validateServerPath(path: unknown): PathValidation {
 
 export function layerOf(path: string): Layer | undefined {
   if (path === "index.json") return "index";
-  for (const layer of ["constitution", "specs", "work", "members", "activity"] as const) {
+  for (const layer of MEMORY_LAYERS) {
     if (path.startsWith(`${layer}/`)) return layer;
   }
   return undefined;

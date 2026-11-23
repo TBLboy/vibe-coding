@@ -95,6 +95,13 @@ Run `npm run test:core`.
 - T4/T5 use additive schema upgrades and nested savepoints, covered by API upgrade and
   `team-store` rollback tests. Full real-server/two-client and live OpenCode team
   workflow acceptance remain T7/release gates, not proven by host simulations.
+- `tests/team-e2e.test.ts`: real file-backed SQLite/server and independent clients cover
+  authoritative index plus five-layer initialization, file/symlink collision safety,
+  Q1/Q3 projection and shared-write rejection, ten-account Q2 convergence, task/board
+  removal, restart/offline recovery, 205-document pagination/checkpoint convergence,
+  atomic index-bootstrap rollback, and isolated installer/actual module wiring. This
+  validates the product slice locally; it is not a live provider-backed OpenCode SDK
+  or production deployment smoke.
 
 ## B. OpenCode live smoke tests
 

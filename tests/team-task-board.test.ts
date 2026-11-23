@@ -28,13 +28,17 @@ async function harness(t:{after(fn:()=>Promise<void>):void}) {
   const login=async(email:string)=>(await req("/api/auth/login","POST",undefined,{email,password})).body.sessionToken as string;
   const os=await login("owner@example.test"), as=await login("alice@example.test");
   const w=(await req("/api/workspaces","POST",os,{name:"<Team & Workspace>",repos:[{url:"https://example.test/team.git",branch:"main"}]})).body;
+  const initialSeq=1;assert.equal(w.workspace.seq,initialSeq);
   const ot=(await req("/api/connect","POST",os,{key:w.taskKey})).body.workspaceToken as string;
   const p=`/api/workspaces/${w.workspace.id}`;
+  const baseline=await req(`${p}/changes?since=0`,"GET",ot);
+  assert.equal(baseline.status,200);assert.equal(baseline.body.changes.length,1);
+  assert.equal(baseline.body.changes[0].path,"index.json");assert.equal(baseline.body.changes[0].seq,initialSeq);
   assert.equal((await req(`${p}/invitations`,"POST",ot,{email:"alice@example.test"})).status,201);
   assert.equal((await req(`${p}/invitations/accept`,"POST",as,{})).status,200);
   const at=(await req("/api/connect","POST",as,{key:w.taskKey})).body.workspaceToken as string;
   const declare=async(title="Task",scope:string[]=[],token=at,extra:Record<string,unknown>={},headers:Record<string,string>={})=>req(`${p}/tasks`,"POST",token,{title,scope,...extra},headers);
-  return {store,base,req,p,ot,at,os,as,owner,alice,w,logs,declare,advance:(ms:number)=>{now+=ms;},now:()=>now};
+  return {store,base,req,p,ot,at,os,as,owner,alice,w,initialSeq,logs,declare,advance:(ms:number)=>{now+=ms;},now:()=>now};
 }
 
 test("task declaration normalizes scopes, warns on existing overlap and mirrors one work document",async t=>{
@@ -47,7 +51,7 @@ test("task declaration normalizes scopes, warns on existing overlap and mirrors 
   assert.equal(next.body.overlapWarnings[0].taskId,first.body.task.id);
   assert.deepEqual(next.body.overlapWarnings[0].overlaps,[{left:"src/auth/login.ts",right:"src/auth/",reason:"directory-prefix"}]);
   assert.deepEqual((await h.declare("Unscoped")).body.overlapWarnings,[]);
-  const feed=await h.req(`${h.p}/changes?since=0`,"GET",h.at);assert.deepEqual(feed.body.changes.map((c:any)=>c.seq),[1,2,3]);
+  const feed=await h.req(`${h.p}/changes?since=${h.initialSeq}`,"GET",h.at);assert.deepEqual(feed.body.changes.map((c:any)=>c.seq),[h.initialSeq+1,h.initialSeq+2,h.initialSeq+3]);
   assert.equal(feed.body.changes[0].path,`work/${first.body.task.id}.json`);
   assert.deepEqual(JSON.parse(feed.body.changes[0].content),first.body.task);
   assert.equal((await h.req(`${h.p}/documents/work/${first.body.task.id}.json`,"PUT",h.ot,{content:"forged"},{"if-match":"1"})).status,422);
@@ -68,7 +72,7 @@ test("exclusive HTTP claims return the holder; only holder closes, abandoned tas
   assert.equal((await h.req(`${h.p}/tasks/${id}/claim`,"POST",other,{})).status,200);
   assert.equal((await h.req(`${h.p}/tasks/${id}/status`,"POST",other,{status:"done"})).status,200);
   assert.equal((await h.req(`${h.p}/tasks/${id}/claim`,"POST",token,{})).status,409);
-  const feed=(await h.req(`${h.p}/changes?since=0`,"GET",h.at)).body.changes;
+  const feed=(await h.req(`${h.p}/changes?since=${h.initialSeq}`,"GET",h.at)).body.changes;
   assert.deepEqual(feed.map((c:any)=>JSON.parse(c.content).status),["open","claimed","abandoned","claimed","done"]);
   assert.equal(JSON.parse(feed[2].content).closedReason,"Needs another approach");
 });
@@ -86,8 +90,8 @@ test("task mutations replay once and roll back task/work/history/seq on failure"
   assert.equal((await h.req(`${h.p}/tasks/${id}/status`,"POST",h.at,{status:"done"})).status,500);
   assert.equal((await h.declare("Rollback")).status,500);
   assert.equal(JSON.stringify(h.store.db.prepare("SELECT * FROM task").all()),before);
-  assert.equal(h.store.db.prepare("SELECT count(*) AS n FROM document_version").get()?.n,2);
-  assert.equal(h.store.db.prepare("SELECT seq FROM workspace_seq WHERE workspace_id=?").get(h.w.workspace.id)?.seq,2);
+  assert.equal(h.store.db.prepare("SELECT count(*) AS n FROM document_version").get()?.n,h.initialSeq+2);
+  assert.equal(h.store.db.prepare("SELECT seq FROM workspace_seq WHERE workspace_id=?").get(h.w.workspace.id)?.seq,h.initialSeq+2);
   h.store.db.exec("DROP TRIGGER task_fail");
   const done=await h.req(`${h.p}/tasks/${id}/status`,"POST",h.at,{status:"done"},{"idempotency-key":"task-done"});
   assert.equal(done.status,200);
@@ -125,7 +129,7 @@ test("board uses current presence/latest task, and recent metadata joins each im
   const board=(await h.req(`${h.p}/board`,"GET",h.ot)).body;
   const member=board.members.find((m:any)=>m.accountId===h.alice.id);assert.equal(member.online,true);assert.equal(member.currentTaskId,second);
   assert.equal(board.tasks.claimed.length,2);assert.equal(JSON.stringify(board).includes("NEVER IN BOARD"),false);
-  const changes=board.recentChanges;assert.equal(changes[0].seq,5);
+  const changes=board.recentChanges;assert.equal(changes[0].seq,h.initialSeq+5);
   assert.deepEqual(changes.filter((c:any)=>c.path===`work/${first}.json`).map((c:any)=>c.by),[h.alice.id,h.owner.id]);
   h.advance(300000);const later=(await h.req(`${h.p}/board`,"GET",h.ot)).body;
   assert.equal(later.members.find((m:any)=>m.accountId===h.alice.id).online,false);
@@ -181,11 +185,13 @@ test("recent board metadata is limited to latest 50 and task idempotency failure
   const h=await harness(t);
   h.store.db.exec("CREATE TRIGGER idem_fail BEFORE INSERT ON idempotency BEGIN SELECT RAISE(ABORT,'injected'); END");
   assert.equal((await h.declare("Must roll back",[],h.at,{}, {"idempotency-key":"fault"})).status,500);
-  for(const table of ["task","document","document_version","change","idempotency"])assert.equal(h.store.db.prepare(`SELECT count(*) AS n FROM ${table}`).get()?.n,0);
+  for(const table of ["task","idempotency"])assert.equal(h.store.db.prepare(`SELECT count(*) AS n FROM ${table}`).get()?.n,0);
+  for(const table of ["document","document_version","change"])assert.equal(h.store.db.prepare(`SELECT count(*) AS n FROM ${table}`).get()?.n,1,"rollback retains only the initial index");
+  assert.equal(h.store.db.prepare("SELECT seq FROM workspace_seq WHERE workspace_id=?").get(h.w.workspace.id)?.seq,h.initialSeq);
   h.store.db.exec("DROP TRIGGER idem_fail");
   for(let i=0;i<51;i++)assert.equal((await h.declare(`Task ${i}`)).status,201);
   const board=(await h.req(`${h.p}/board`,"GET",h.at)).body;
-  assert.equal(board.recentChanges.length,50);assert.equal(board.recentChanges[0].seq,51);assert.equal(board.recentChanges.at(-1).seq,2);
+  assert.equal(board.recentChanges.length,50);assert.equal(board.recentChanges[0].seq,h.initialSeq+51);assert.equal(board.recentChanges.at(-1).seq,h.initialSeq+2);
   assert.equal(board.tasks.open.length,51);
 });
 
@@ -194,7 +200,7 @@ test("presence failure cannot leave a committed mutation behind a failed HTTP re
   h.store.db.exec("CREATE TRIGGER presence_fail BEFORE INSERT ON presence BEGIN SELECT RAISE(ABORT,'injected'); END");
   assert.equal((await h.declare("Presence rollback")).status,500);
   assert.equal(h.store.db.prepare("SELECT count(*) AS n FROM task").get()?.n,0);
-  assert.equal(h.store.db.prepare("SELECT count(*) AS n FROM change").get()?.n,0);
+  assert.equal(h.store.db.prepare("SELECT count(*) AS n FROM change").get()?.n,1,"only the initial index survives");
   assert.equal((await h.req("/api/connect","POST",h.as,{key:h.w.taskKey})).status,500);
   assert.equal(h.store.db.prepare("SELECT count(*) AS n FROM workspace_token").get()?.n,tokens);
 });
@@ -231,6 +237,7 @@ test("separate WAL connections observe exclusive claim, stale actors rejected an
   const one=openTeamDatabase(path);
   const account=await createAccount(one,{orgId:"org",email:"one@example.test",displayName:"One",password:"connection test password"});
   const workspace=createWorkspace(one,account,{name:"Test",repos:[{url:"https://example.test/a.git",branch:"main"}]},0).workspace;
+  assert.equal(workspace.seq,1); // Initial index plus two task versions after claim.
   const auth={workspaceId:workspace.id,account,role:"owner" as const};
   const task=declareTask(one,auth,{title:"Concurrent"},0).task;
   const two=openTeamDatabase(path);
@@ -241,6 +248,6 @@ test("separate WAL connections observe exclusive claim, stale actors rejected an
     assert.throws(()=>updateTask(one,auth,task.id,{status:"done"},3),(error:unknown)=>{assert.equal((error as {status:number}).status,403);return true;});
   } finally {two.close();one.close();}
   const reopened=openTeamDatabase(path);
-  try {assert.equal(reopened.db.prepare("SELECT status FROM task WHERE id=?").get(task.id)?.status,"claimed");assert.equal(reopened.db.prepare("SELECT count(*) AS n FROM document_version").get()?.n,2);}
+  try {assert.equal(reopened.db.prepare("SELECT status FROM task WHERE id=?").get(task.id)?.status,"claimed");assert.equal(reopened.db.prepare("SELECT count(*) AS n FROM document_version").get()?.n,3);}
   finally {reopened.close();}
 });

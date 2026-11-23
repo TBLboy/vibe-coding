@@ -99,5 +99,12 @@ requires resubmitting; this is a minimal shell, not account-management UI. Use
 HTTPS outside loopback. A Bearer header also works with
 `GET /board?workspaceId=...`; never put tokens in query parameters.
 
-Plugin synchronization and full team end-to-end validation remain T6/T7. TLS and real deployment remain operator
-responsibilities; these local HTTP/SQLite tests are not a production security audit.
+New workspaces atomically receive a static `index.json` navigation document with
+`schemaVersion`, `workspaceId`, and the five layer names. Existing workspaces are
+not backfilled. The plugin creates the five empty local layer directories only
+after successful metadata/authentication validation and preserves pre-existing
+files, directory collisions, and unmanaged copies.
+
+Real two-client, ten-account, restart/offline, pagination, rollback and isolated
+installer checks are in `tests/team-e2e.test.ts`. These local checks do not claim a
+live provider-backed OpenCode SDK activation, TLS deployment, or production audit.

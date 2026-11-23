@@ -3,6 +3,8 @@ import type { TeamDatabase } from "../store/sqlite.ts";
 import type { Account } from "./identity.ts";
 import { createTaskKey } from "./access.ts";
 import { bodyObject, invalid, notFound, text } from "../http/errors.ts";
+import { MEMORY_LAYERS } from "../../runtime/core/team/layout.ts";
+import { writeDocument } from "./documents.ts";
 
 export interface WorkspaceInfo { id:string; orgId:string; name:string; ownerAccountId:string; repos:{url:string;branch:string}[]; seq:number }
 export function workspaceInfo(store:TeamDatabase, orgId:string, id:string): WorkspaceInfo {
@@ -36,6 +38,8 @@ export function createWorkspace(store:TeamDatabase, account:Account, body:Record
     repos.forEach((repo,i)=>db.prepare("INSERT INTO workspace_repo (id,workspace_id,url,branch,is_primary) VALUES (?,?,?,?,?)")
       .run(`repo_${randomUUID()}`,id,repo.url,repo.branch,i===0?1:0));
     const taskKey=createTaskKey(store,id,now,null);
+    writeDocument(store,{workspaceId:id,path:"index.json",accountId:account.id,expectedVersion:0,
+      content:JSON.stringify({schemaVersion:1,workspaceId:id,layers:MEMORY_LAYERS}),now:new Date(now).toISOString()});
     return {workspace:workspaceInfo(store,account.orgId,id),taskKey};
   });
 }

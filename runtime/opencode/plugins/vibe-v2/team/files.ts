@@ -32,6 +32,10 @@ export class SafeFiles {
   async read(relative:string):Promise<Buffer|null> {
     try {const path=await this.path(relative);if((await lstat(path)).size>16*1024*1024)throw new Error("local file too large");return await readFile(path);}catch(error){if(missing(error))return null;throw error;}
   }
+  async directory(relative:string):Promise<void> {
+    // The guarded probe creates/validates only its parent directories, no file.
+    await this.path(`${relative}/.tmp-${randomUUID()}`,true);
+  }
   async write(relative:string,bytes:string|Uint8Array,expected?:string|null):Promise<void> {
     const target=await this.path(relative,true), tmp=resolve(dirname(target),`.tmp-${randomUUID()}`);
     try {await writeFile(tmp,bytes,{flag:"wx",mode:0o600});await this.path(relative);
