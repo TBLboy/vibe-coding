@@ -43,4 +43,4 @@ Do not report style preferences, speculative concerns without a concrete failure
 
 ## Native result protocol
 
-Return exactly one JSON object (or one JSON fenced block): `{"verdict":"go","findings":[],"requiresUserDecision":false}`. For `conditional` or `no-go`, include non-empty structured findings and the boolean decision flag. The Runtime accepts only the matching successful foreground native subagent completion and checks the child identity and artifact freshness. A permit or parent-authored verdict is not a completion.
+Return exactly one JSON object (or one JSON fenced block): `{"verdict":"go","findings":[],"requiresUserDecision":false}`. For `conditional` or `no-go`, include non-empty structured findings and the boolean decision flag. Runtime accepts only a correlated successful native reviewer completion and checks child identity and artifact freshness. A background launch stays pending until Runtime retrieves the bound child's terminal assistant result; a permit or parent-authored verdict is not a completion. See `03-STATE-MACHINE.md` for the canonical completion protocol.

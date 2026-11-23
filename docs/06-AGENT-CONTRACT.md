@@ -65,7 +65,7 @@ Only for a Task whose frozen policy is `strict`:
 1. Complete verification first.
 2. Submit `verification_passed` through the Runtime; it enters review with pending verdict.
 3. Call `vibe_task_control(action=authorize_review)` for the active Task. This validates the persisted Task and issues a one-time permit.
-4. Invoke a fresh foreground `vibe-reviewer` (no reused sessionID) with the Task goal, `doneWhen`, explicit constraints, changed diff/files, verification result, and relevant project rules.
+4. Invoke a fresh native `vibe-reviewer` (no reused sessionID) with the Task goal, `doneWhen`, explicit constraints, changed diff/files, verification result, and relevant project rules. If it returns running, wait for the host's notification without polling; Runtime retrieves the child's terminal result on the next natural parent continuation. Never invent a foreground option or forward the verdict yourself.
 5. Do not send the whole operation history or unrelated repository context. Read the Runtime-updated Task after the call; a pending verdict requires failure inspection and reset, never a direct write.
 6. On fixable findings, make the minimum required repair, re-run verification, submit the next verification result through Runtime, obtain a new permit, and request review again.
 7. Stop after two automatic repair rounds. If a further review still is not `go`, block, report unresolved findings, pause the Task, and wait for a new explicit user request; do not retry automatically.

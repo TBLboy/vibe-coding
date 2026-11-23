@@ -111,7 +111,7 @@ export function renderModeInstructions(mode: Mode, sessionID?: string, facts: Se
       "Policy: STRICT.",
       "Create and persist a Task. Register it with vibe_task_control(action=start) before substantial implementation; preserve the Task's policy until it closes.",
       "Explicitly clarify business rules and acceptance criteria, make necessary technical decisions, and decompose work when useful before implementation.",
-      "Use begin_verification before running checks and report verification through a transition. Then authorize review and invoke a fresh foreground vibe-reviewer. Runtime records the completed native result; read the Task afterwards. Strict cannot complete unless the reviewer returns go. Never write the verdict yourself.",
+      "Use begin_verification before running checks and report verification through a transition. Then authorize review and invoke a fresh native vibe-reviewer with no reused sessionID. A running result is only a launch: wait for the host notification without polling. Runtime retrieves the child's terminal verdict at the next natural parent continuation; read the Task then. Do not invent a foreground option or write/forward a verdict yourself. Strict cannot complete unless the reviewer returns go.",
       "Reviewer findings may trigger at most two automatic repair rounds. Re-verify after every repair before asking for review again. If unresolved after the limit, block and explain.",
       "Reviewer must assess only the agreed request, doneWhen, relevant constraints and verification result. It must not add features, perform unrelated refactors, or edit product code.",
     ],

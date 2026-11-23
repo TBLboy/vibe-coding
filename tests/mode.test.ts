@@ -58,6 +58,15 @@ test("mode policy does not expose reviewer in fast or balanced", () => {
   assert.match(renderModeInstructions("strict"), /reviewer returns go/);
 });
 
+test("strict instructions treat background launch as pending without inventing tool parameters", () => {
+  const text = renderModeInstructions("strict");
+  assert.match(text, /running result is only a launch/);
+  assert.match(text, /without polling/);
+  assert.match(text, /natural parent continuation/);
+  assert.match(text, /Do not invent a foreground option/);
+  assert.doesNotMatch(text, /fresh foreground|background=false|background:false/);
+});
+
 test("Session context carries the absolute memory root and the registered Task", () => {
   const text = renderModeInstructions("balanced", "ses_a", { memoryRoot: "/proj", activeTask: { taskID: "t1", policy: "strict", active: false } });
   assert.match(text, /Project memory root: \/proj/);

@@ -28,7 +28,7 @@ Four concepts only:
 ## Non-negotiable decisions
 
 - No compatibility with, or migration from, any previous framework.
-- No independent reviewer toggle. `fast` and `balanced` never invoke the reviewer; `strict` requires reviewer `go` before Task completion.
+- No independent reviewer toggle. `fast` and `balanced` never invoke the reviewer; `strict` requires reviewer `go` before Task completion. Native background reviewer launches stay pending until Runtime reads the bound child's successful terminal result; see the [completion protocol](docs/03-STATE-MACHINE.md).
 - Task policy is frozen when the Task starts; changing Session mode affects new work only.
 - No Goal runtime, Run state machine, event-sourced operation ledger, SQLite projection, standalone Evidence model, default MCPs or third-party workflow plugins.
 - No logs for file reads, searches, shell commands, ordinary retries or intermediate actions.

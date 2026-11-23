@@ -12,7 +12,7 @@ Value: one of `fast`, `balanced`, `strict`. Missing/invalid values mean `balance
 
 ## 2. Per-Session Task control pointer
 
-The plugin stores a minimal active Task ID keyed by OpenCode `sessionID`. This pointer is not a second Task record. A separate project-scoped integrity receipt stores owner, frozen policy, Task JSON digest, closed flag and pending reviewer call identity. It stores no duplicate business goal or verification content. The Task JSON remains the canonical source of `policy`, `status`, `phase`, verification, and review verdict.
+The plugin stores a minimal active Task ID keyed by OpenCode `sessionID`. This pointer is not a second Task record. A separate project-scoped integrity receipt stores owner, frozen policy, Task JSON digest, closed flag and pending reviewer call identity (including the bound child Session ID after a background launch). It stores no transcript, duplicate business goal, verdict payload or verification content. The Task JSON remains the canonical source of `policy`, `status`, `phase`, verification, and review verdict.
 
 The main Agent creates a fresh prepare record, then uses `vibe_task_control` for all registered lifecycle changes. Runtime owns subsequent writes (see state machine API). It is not called for trivial work without a Task and does not log intermediate actions.
 

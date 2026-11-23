@@ -17,7 +17,7 @@ Official API references checked while preparing this pack:
 
 1. Register the explicit `/fast`, `/balanced`, and `/strict` commands, persist the selected mode per OpenCode `sessionID`, and inject the authoritative mode policy into model context.
 2. Own registered Task transitions through `vibe_task_control`, with a per-Session pointer and project-scoped integrity receipt; Task JSON remains canonical.
-3. Deny reviewer admission without a current one-time permit, and accept verdicts only from the matching completed native foreground subagent hook. Admission is not completion.
+3. Deny reviewer admission without a current one-time permit, and accept verdicts only from the correlated native completion or the bound background child's host-owned successful terminal result. Admission and background launch are not completion (canonical protocol: `03-STATE-MACHINE.md`).
 
 It must not watch every file operation, write project logs, run tests, maintain a second Task state machine, call external services, or install dependencies.
 
@@ -76,4 +76,4 @@ Before release, verify in a clean OpenCode V2 environment:
 
 ## P0/P1 host validation boundary
 
-The adapter uses OpenCode v2.0.32 native `permission.evaluate` and `tool.execute.after` hooks. The SDK source contract was inspected ([native subagent](https://github.com/anomalyco/opencode/blob/v2.0.32/packages/core/src/tool/plugin/subagent.ts), [tool hooks](https://github.com/anomalyco/opencode/blob/v2.0.32/packages/plugin/src/promise/tool.ts)). Tests invoke the actual local adapter with a simulated host, not a running OpenCode provider. Previous host smoke results do not validate this revised implementation. Before production rollout, run the host smoke checklist in `evaluations/README.md` on the exact supported build.
+The adapter uses native `permission.evaluate`, `tool.execute.after` and parent `session.context` hooks. OpenCode 2.3.0 source inspected for this repair: [native subagent](https://github.com/anomalyco/opencode/blob/v2.3.0/packages/core/src/tool/plugin/subagent.ts) (always background, returns running), [Session schema](https://github.com/anomalyco/opencode/blob/v2.3.0/packages/schema/src/session.ts) (terminal outcome), [message schema](https://github.com/anomalyco/opencode/blob/v2.3.0/packages/schema/src/session-message.ts) (assistant/idle markers), and [context history](https://github.com/anomalyco/opencode/blob/v2.3.0/packages/core/src/session/history.ts). The existing synchronous v2.0.32 native completion contract remains covered. Tests drive the production adapter with simulated host APIs, not a provider-backed session. Source inspection and local green tests are not live smoke. Before rollout, run the host checklist in `evaluations/README.md` on the exact target build, including installing/reloading the revised plugin and Agent instructions.

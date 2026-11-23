@@ -17,7 +17,8 @@ async function harness(t: { after(fn: () => Promise<void>): void }) {
   await writeFile(resolve(root, "src.txt"), "A");
   const records = new Map<string, JsonValue>();
   const tools = new Map<string, ToolDefinition>(); const commands = new Map<string, CommandDefinition>();
-  const sessions = new Map<string, { directory: string; parentID?: string; agent?: string }>([["main", { directory: root }], ["other", { directory: root }], ["review", { directory: root, parentID: "main", agent: "vibe-reviewer" }], ["wrong", { directory: root, parentID: "other", agent: "vibe-reviewer" }]]);
+  const sessions = new Map<string, { directory: string; parentID?: string; agent?: string; outcome?: string }>([["main", { directory: root }], ["other", { directory: root }], ["review", { directory: root, parentID: "main", agent: "vibe-reviewer" }], ["wrong", { directory: root, parentID: "other", agent: "vibe-reviewer" }]]);
+  const transcripts = new Map<string, unknown[]>();
   let after!: (event: ToolAfterEvent) => Promise<void>;
   let callNumber=0;
   let permission!: (event: PermissionEvent) => Promise<void>;
@@ -27,7 +28,7 @@ async function harness(t: { after(fn: () => Promise<void>): void }) {
     storage: { get: async k => structuredClone(records.get(k)), set: async (k,v) => { records.set(k, structuredClone(v)); }, remove: async k => { records.delete(k); } },
     command: { transform: async fn => fn({ add: d => { commands.set(d.name,d); } }) },
     tool: { transform: async fn => fn({ add: d => { tools.set(d.name,d); } }), hook: async (_,fn) => { after=fn; } },
-    session: { get: async ({sessionID}) => sessions.get(sessionID), prompt: async p => { queued = p; }, hook: async (_, fn) => { contextHook = fn; } },
+    session: { get: async ({sessionID}) => sessions.get(sessionID), context: async ({sessionID}) => structuredClone(transcripts.get(sessionID) ?? []), prompt: async p => { queued = p; }, hook: async (_, fn) => { contextHook = fn; } },
     permission: { hook: async (_, fn) => { permission = fn; } },
   };
   await setup(ctx);
@@ -42,7 +43,16 @@ async function harness(t: { after(fn: () => Promise<void>): void }) {
   const ready = async () => { await fresh(); assert.match(await ctl("start"),/started/); assert.match(await step("begin_implementation",{risk:"strict"}),/implement/); assert.match(await step("begin_verification",{artifacts:["src.txt"]}),/verify/); assert.match(await step("verification_passed",{summary:"OK",checks:["test: passed"]}),/review/); };
   const authorize = async () => { const result=await ctl("authorize_review"); assert.match(result,/permit issued/); };
   const complete = async (id: string, session = "review", extra = {}, eventExtra = {}) => after({tool:"subagent",sessionID:"main",agent:"vibe-main",messageID:"msg",id,input:{agent:"vibe-reviewer",background:false},status:"completed",result:{output:{sessionID:session,status:"completed",output:JSON.stringify({verdict:"go",findings:[],requiresUserDecision:false,...extra})}},...eventExtra});
-  return {base,root,ctx,records,tools,commands,sessions,call,ctl,step,read,write,fresh,permit,ready,authorize,complete,queued:()=>queued, context:async(sessionID:string)=>{const e={sessionID,system:[] as {type:"text";text:string}[]};await contextHook(e);return e.system[0]?.text;}};
+  const launch = async (id: string, session = "review", input: Record<string, unknown> = {agent:"vibe-reviewer"}, eventExtra = {}) => after({tool:"subagent",sessionID:"main",agent:"vibe-main",messageID:"msg",id,input,status:"completed",result:{output:{sessionID:session,status:"running",output:"Child is working"}},...eventExtra});
+  const finished = (session = "review", extra = {}) => {
+    sessions.set(session, {...sessions.get(session)!, outcome:"succeeded"});
+    transcripts.set(session, [
+      {type:"user", id:"msg_prompt", text:"Review the Task"},
+      {type:"assistant", id:"msg_result", agent:"vibe-reviewer", finish:"stop", time:{created:1,completed:2}, content:[{type:"text",text:JSON.stringify({verdict:"go",findings:[],requiresUserDecision:false,...extra})}]},
+      {type:"idle", id:"msg_idle", outcome:"succeeded"},
+    ]);
+  };
+  return {base,root,ctx,records,tools,commands,sessions,transcripts,call,ctl,step,read,write,fresh,permit,ready,authorize,complete,launch,finished,queued:()=>queued, context:async(sessionID:string)=>{const e={sessionID,system:[] as {type:"text";text:string}[]};await contextHook(e);return e.system[0]?.text;}};
 }
 
 test("production setup: explicit mode command queues and consumes a session token", async t => {
@@ -135,4 +145,125 @@ test("external Git worktree shares canonical memory, but evidence binds to its a
   await writeFile(resolve(worktree,"new.txt"),"new untracked input");
   assert.match(await h.step("verification_passed",{summary:"OK",checks:["test"]}),/changed/);
   assert.equal(await readFile(resolve(h.root,"src.txt"),"utf8"),"A");
+});
+
+test("native background launch stays pending until successful child completion at parent context", async t => {
+  const h = await harness(t); await h.ready(); await h.authorize(); const permit = await h.permit();
+  await h.launch(permit.id);
+  assert.equal((await h.read()).review?.verdict, "pending");
+  await h.complete(permit.id); // A second tool payload cannot forward a verdict for a bound background child.
+  assert.equal((await h.read()).review?.verdict, "pending");
+  await h.context("main"); assert.equal((await h.read()).review?.verdict, "pending");
+  assert.match(await h.ctl("close"), /Rejected/);
+  h.finished();
+  await h.context("other"); assert.equal((await h.read()).review?.verdict, "pending");
+  await h.context("main");
+  assert.equal((await h.read()).review?.verdict, "go");
+  await h.context("main"); assert.match(await h.ctl("close"), /closed/);
+});
+
+test("only the admitted native call may bind a fresh background child", async t => {
+  const h = await harness(t); await h.ready(); await h.authorize(); const permit = await h.permit();
+  h.finished();
+  await h.launch("unrelated"); await h.context("main");
+  assert.equal((await h.read()).review?.verdict, "pending");
+  await h.launch(permit.id, "wrong"); await h.context("main");
+  await h.launch(permit.id, "review", {agent:"vibe-reviewer",sessionID:"review"});
+  await h.launch(permit.id, "review", {agent:"other"});
+  await h.launch(permit.id, "review", {agent:"vibe-reviewer"}, {status:"error"});
+  await h.context("main"); assert.equal((await h.read()).review?.verdict, "pending");
+  await h.launch(permit.id); await h.context("main");
+  assert.equal((await h.read()).review?.verdict, "go");
+});
+
+test("background review rejects failed, incomplete, compacted, reused and malformed child transcripts", async t => {
+  const h = await harness(t); await h.ready(); await h.authorize(); const permit = await h.permit();
+  await h.launch(permit.id);
+  h.finished(); const valid = structuredClone(h.transcripts.get("review")!);
+  const assistant = valid[1] as Record<string, unknown>;
+  const cases: unknown[][] = [
+    valid.slice(0, -1),
+    [...valid.slice(0, -1), {type:"idle",outcome:"failed"}],
+    [valid[0], {...assistant, time:{created:1}}, valid[2]],
+    [valid[0], {...assistant, error:{message:"failed"}}, valid[2]],
+    [valid[0], {...assistant, agent:"vibe-main"}, valid[2]],
+    [valid[0], {...assistant, finish:"length"}, valid[2]],
+    [valid[0], {...assistant, content:[{type:"text",text:"not JSON"}]}, valid[2]],
+    [valid[0], {...assistant, content:[{type:"text",text:JSON.stringify({verdict:"no-go",findings:[],requiresUserDecision:false})}]}, valid[2]],
+    [valid[0], {...assistant, content:[{type:"text",text:JSON.stringify({verdict:"go",findings:[]})}]}, valid[2]],
+    [{type:"compaction",status:"completed"}, ...valid],
+    [...valid, {type:"user",text:"replace verdict"}, valid[1], valid[2]],
+    [valid[0], {...assistant, content:[{type:"reasoning",text:'{"verdict":"go"}'}]}, valid[2]],
+  ];
+  for (const messages of cases) {
+    h.transcripts.set("review", messages); await h.context("main");
+    assert.equal((await h.read()).review?.verdict, "pending");
+  }
+  h.transcripts.set("review", valid); h.sessions.get("review")!.outcome = "interrupted";
+  await h.context("main"); assert.equal((await h.read()).review?.verdict, "pending");
+  h.sessions.get("review")!.outcome = "succeeded";
+  await h.context("main"); assert.equal((await h.read()).review?.verdict, "go");
+});
+
+test("background binding survives plugin reload, while reset and stale evidence cannot replay", async t => {
+  const h = await harness(t); await h.ready(); await h.authorize(); const first = await h.permit();
+  await h.launch(first.id);
+  await setup(h.ctx); // Same durable storage, no in-memory child index.
+  h.finished(); await writeFile(resolve(h.root,"src.txt"),"changed");
+  await h.context("main"); assert.equal((await h.read()).review?.verdict, "pending");
+  await h.step("invalidate_verification"); await h.step("begin_verification",{artifacts:["src.txt"]});
+  await h.step("verification_passed",{summary:"Rechecked",checks:["test passed"]});
+  await h.authorize(); const second = await h.permit(); await h.launch(second.id);
+  assert.match(await h.ctl("reset_review"), /invalidated/);
+  await h.context("main"); assert.equal((await h.read()).review?.verdict, "pending");
+  await h.authorize(); const third = await h.permit();
+  await h.launch(first.id); await h.context("main"); assert.equal((await h.read()).review?.verdict,"pending");
+  await h.launch(third.id); await setup(h.ctx); await h.context("main");
+  assert.equal((await h.read()).review?.verdict, "go");
+});
+
+test("background review retains bounded repairs and frozen strict policy", async t => {
+  const h = await harness(t); await h.ready(); h.records.set(modeStorageKey("main"),"balanced");
+  const finding = {severity:"major",requirement:"A",location:"src.txt",problem:"Wrong",requiredChange:"Fix"};
+  for (let round = 0; round < 3; round++) {
+    const child = `review-${round}`;
+    h.sessions.set(child, {directory:h.root,parentID:"main",agent:"vibe-reviewer"});
+    await h.authorize(); const call = await h.permit(); await h.launch(call.id,child);
+    h.finished(child,{verdict:"conditional",findings:[finding]}); await h.context("main");
+    const task = await h.read(); assert.equal(task.policy,"strict");
+    if (round === 2) { assert.equal(task.status,"blocked"); break; }
+    assert.equal(task.phase,"implement"); assert.equal(task.review?.repairRounds,round+1);
+    await h.step("begin_verification",{artifacts:["src.txt"]});
+    await h.step("verification_passed",{summary:"Rechecked",checks:["test passed"]});
+  }
+});
+
+test("background review invalidates on pause and ownership transfer; child identity is rechecked", async t => {
+  const h = await harness(t); await h.ready(); await h.authorize(); const call = await h.permit();
+  await h.launch(call.id); h.finished();
+  const context = h.ctx.session.context;
+  h.ctx.session.context = async input => {
+    const messages = await context(input);
+    h.sessions.get("review")!.agent = "other";
+    return messages;
+  };
+  await h.context("main"); assert.equal((await h.read()).review?.verdict,"pending");
+  h.ctx.session.context = context; h.sessions.get("review")!.agent = "vibe-reviewer";
+  await h.step("block",{reason:"Interrupted review"}); await h.ctl("pause");
+  await h.context("main"); assert.equal((await h.read()).review?.verdict,"pending");
+  assert.match(await h.ctl("resume_blocked",undefined,"other"),/resumed/);
+  await h.context("other"); await h.context("main");
+  assert.equal((await h.read()).review?.verdict,"pending");
+  assert.equal((await h.permit("main")).effect,"deny");
+});
+
+test("a background reviewer requiring a user decision blocks immediately", async t => {
+  const h = await harness(t); await h.ready(); await h.authorize(); const call = await h.permit();
+  await h.launch(call.id);
+  h.finished("review", {verdict:"no-go",requiresUserDecision:true,findings:[{
+    severity:"major",requirement:"A",location:"src.txt",problem:"Decision required",requiredChange:"User must choose",
+  }]});
+  await h.context("main");
+  const task = await h.read(); assert.equal(task.status,"blocked");
+  assert.equal(task.review?.repairRounds,0); assert.match(await h.ctl("close"),/Rejected/);
 });

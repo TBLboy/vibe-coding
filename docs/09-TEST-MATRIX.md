@@ -150,6 +150,18 @@ Do not call the package release-ready until:
 
 Production adapter simulation tests now drive registered tools and permission/completion hooks, with ownership, policy freeze, stale evidence and reviewer replay regressions. Installer/archive tests use temporary profiles and local Git remotes. See `evaluations/README.md` for actual host and L3/L4 model evaluation gates.
 
+### Native background review repair (OpenCode 2.3.0 contract)
+
+`tests/runtime-integration.test.ts` additionally drives real adapter wiring for
+`running` launch → child terminal result → natural parent context reconciliation.
+It covers pending-before-completion, exact call/child binding, no parent-payload
+verdict forwarding, failed/incomplete/malformed/compacted/reused child rejection,
+identity rechecks, pause/ownership transfer, plugin reload recovery, stale evidence,
+reset/replay rejection, frozen strict policy and the two-repair cap. Existing
+synchronous native completion and fast/balanced denial tests remain in place.
+These are host simulations; live installed-plugin smoke on the target build
+remains a separate gate, not implied by a green local suite.
+
 ## P2 — engineering capability evaluation
 
 The existing L1/L2 suite remains unchanged in scope. The installer regression also checks that the three new Skill references are copied byte-for-byte. `evaluations/test_p2_fixtures.py` exercises all six materialized L4 scenarios, fresh Git baselines, the dirty user-edit setup, seeded production bypass and destination rejection. `evaluations/cases.json` contains the six new criteria sets; see `evaluations/README.md` for preparation and independent evaluation. Local fixture checks are not L4 model execution. Real host and model acceptance remain separate release gates.

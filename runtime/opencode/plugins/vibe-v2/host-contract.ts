@@ -7,6 +7,7 @@ export interface HostContext {
   tool: { transform(cb: (editor: { add(definition: ToolDefinition): void }) => void): Promise<unknown>; hook(name: "execute.after", cb: (event: ToolAfterEvent) => Promise<void>): Promise<unknown> };
   session: {
     get(input: { sessionID: string }): Promise<unknown>;
+    context(input: { sessionID: string }): Promise<readonly unknown[]>;
     prompt(input: CommandPrompt & { sessionID: string; text: string; delivery: "queue" }): Promise<unknown>;
     hook(name: "context", cb: (event: { sessionID: string; system: { type: "text"; text: string }[] }) => Promise<void>): Promise<unknown>;
   };

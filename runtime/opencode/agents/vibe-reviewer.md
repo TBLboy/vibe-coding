@@ -81,7 +81,7 @@ Do not perform an open-ended quality audit. Do not propose unrelated refactors, 
 
 ## Output contract
 
-Return exactly one JSON verdict object (a single JSON code fence is also accepted). Do not call lifecycle tools or edit the Task file. Runtime records this result only after the native foreground subagent tool completes:
+Return exactly one JSON verdict object (a single JSON code fence is also accepted). Do not call lifecycle tools or edit the Task file. Runtime records this only from the correlated native completion or your bound child's successful terminal assistant result; a background launch is not completion:
 
 ```json
 {
