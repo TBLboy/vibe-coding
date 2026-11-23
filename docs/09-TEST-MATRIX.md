@@ -109,6 +109,19 @@ These are required before declaring the framework installable; pure core tests d
 
 Historical smoke evidence for the pre-repair implementation (2026-10-19; does not validate the P0/P1 changes): in an OpenCode 2.0.29 isolated profile, the local plugin directory loads as `vibe-coding-v2` and `/fast`, `/balanced`, and `/strict` register. In the current provider-backed OpenCode 2.0.32 control layer, a bare `/fast` consumed its one-time token and produced the required confirmation only. A `/strict <task>` smoke completed a persisted strict Task through verification, one-time review authorization, read-only `vibe-reviewer` invocation, reviewer `go`, and Task close. These are targeted compatibility observations, not a general claim for every OpenCode V2 build.
 
+Current local release smoke (2026-11-23) uses the installed OpenCode `v2.3.0`
+binary and a temporary installer profile. A real `opencode run --server` startup
+loaded the staged `vibe-coding-v2` plugin and emitted command-registration events;
+`opencode reload` succeeded and caused a second plugin load. Provider-backed model
+execution was attempted but unavailable in this environment (one model returned
+no-route and another returned a region `403`), so this is not a model/tool-trace or
+live-agent acceptance claim. Eight independently launched client processes against
+the real file-backed team server produced one successful mirror sync and seven
+fail-closed lock-busy results; the manifest cursor remained valid, no lock/guard
+residue or credential leakage was observed. A generated self-signed local HTTPS
+endpoint served successfully with private key mode `0600`; this validates local TLS
+plumbing only, not production certificates, proxy policy or deployment.
+
 | Case | Expected result |
 |---|---|
 | Plugin startup | No plugin/type/API errors |
