@@ -1,0 +1,146 @@
+{
+  "format": 1,
+  "normalization": "UTF-8 text with CRLF normalized to LF",
+  "sources": [
+    {
+      "id": "interface-design",
+      "repository": "https://github.com/Dammyjay93/interface-design",
+      "commit": "2f9be3206855bcb2d1d0af262c8bae25cba6658d",
+      "license": "MIT",
+      "files": [
+        {
+          "local": "sources/interface-design/upstream.md",
+          "upstream": ".claude/skills/interface-design/SKILL.md",
+          "sha256": "720b31a31276e899fbe3006a33cbfeaceb77a73ba4c27b80d29afd38c8b7b208"
+        },
+        {
+          "local": "sources/interface-design/LICENSE",
+          "upstream": "LICENSE",
+          "sha256": "54c405ef24e71634b73c994133d028e7a96d1906f42615366296d6583dcaba8f"
+        }
+      ]
+    },
+    {
+      "id": "impeccable",
+      "repository": "https://github.com/pbakaus/impeccable",
+      "commit": "b49177d32788f2dc585c42831d845dacf1ebed2c",
+      "license": "Apache-2.0",
+      "files": [
+        {
+          "local": "sources/impeccable/upstream.md",
+          "upstream": ".agent/skills/impeccable/SKILL.md",
+          "sha256": "cea07fdd97436908d67967c94607ec3af8d54fad2cdbe22820ef09e145416b43"
+        },
+        {
+          "local": "sources/impeccable/LICENSE",
+          "upstream": "LICENSE",
+          "sha256": "02bb8c3b4e70190e3986c0404ad2fd8d639b4f534252d82379cc1b502b6d1812"
+        },
+        {
+          "local": "sources/impeccable/NOTICE.md",
+          "upstream": "NOTICE.md",
+          "sha256": "01bf53e5d24d64e19e9e1c33b24c37cef0d314323df7bf678c6ba22d4528a115"
+        },
+        {
+          "local": "sources/impeccable/reference/mode-operate.md",
+          "upstream": ".agent/skills/impeccable/reference/mode-operate.md",
+          "sha256": "7a52dd7a94ee75f6ae89542c86a1b6e1d306812b16e0d9dbf12d4acad44d148b"
+        },
+        {
+          "local": "sources/impeccable/reference/mode-read.md",
+          "upstream": ".agent/skills/impeccable/reference/mode-read.md",
+          "sha256": "a569989e6a3d6453b4c45e9474e162a15cc54e11732ac6baa7990a6e7cccc0b5"
+        },
+        {
+          "local": "sources/impeccable/reference/critique.md",
+          "upstream": ".agent/skills/impeccable/reference/critique.md",
+          "sha256": "fe32f927dcd3e1bff056b8ff5e37feeec1ae0a67983f4ed9864dfb24cdde4cd8"
+        },
+        {
+          "local": "sources/impeccable/reference/audit.md",
+          "upstream": ".agent/skills/impeccable/reference/audit.md",
+          "sha256": "8cdef28e38153dddf0b296e6f95b5f0f3b6f41478f663caf4ef61ea167f4942b"
+        },
+        {
+          "local": "sources/impeccable/reference/craft-floor.md",
+          "upstream": ".agent/skills/impeccable/reference/craft-floor.md",
+          "sha256": "17ed948ed478a357192c535cd8fcda59494baf84a200ccf7f6c3d6ad1d66ef80"
+        }
+      ]
+    },
+    {
+      "id": "frontend-design",
+      "repository": "https://github.com/anthropics/skills",
+      "commit": "e4bb5d960d87126ff3b3a8af1a104b7db67560ba",
+      "license": "Apache-2.0",
+      "files": [
+        {
+          "local": "sources/frontend-design/upstream.md",
+          "upstream": "skills/frontend-design/SKILL.md",
+          "sha256": "d91970639e9f5c37682ac7ab60094d35f1c7c1f38d731bd56396563aee10c1d3"
+        },
+        {
+          "local": "sources/frontend-design/LICENSE.txt",
+          "upstream": "skills/frontend-design/LICENSE.txt",
+          "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594"
+        }
+      ]
+    },
+    {
+      "id": "emil",
+      "repository": "https://github.com/emilkowalski/skills",
+      "commit": "64eb3deb9a5fbfa041faf783e0bc3fd635872e9c",
+      "license": "MIT",
+      "files": [
+        {
+          "local": "sources/emil/LICENSE",
+          "upstream": "LICENSE",
+          "sha256": "4ff5bdb7887ec1435c9cab0e8d1a7caee704d894d65c2a008ccc68b1cc2f260b"
+        },
+        {
+          "local": "sources/emil/emil-design-eng.md",
+          "upstream": "skills/emil-design-eng/SKILL.md",
+          "sha256": "cdbfe467e6c9a4940c3a19e795cecf1ba659378d7412e06c245c6ae49da47da6"
+        },
+        {
+          "local": "sources/emil/break-ui.md",
+          "upstream": "skills/break-ui/SKILL.md",
+          "sha256": "fb126d176f3b6bf7dfe71f2ae6620ab3dd81e6282c672a1801720055addfce18"
+        },
+        {
+          "local": "sources/emil/mobile-native.md",
+          "upstream": "skills/mobile-native/SKILL.md",
+          "sha256": "705e267bc47ea61e4c6f94d121efeebdb994055f482673b8a72f4a0dd62f1968"
+        }
+      ]
+    },
+    {
+      "id": "ui-ux-pro-max",
+      "repository": "https://github.com/nextlevelbuilder/ui-ux-pro-max-skill",
+      "commit": "f2f7266b07805025421611656045e9b44b41e2eb",
+      "license": "MIT",
+      "files": [
+        {
+          "local": "sources/ui-ux-pro-max/upstream.md",
+          "upstream": ".claude/skills/ui-ux-pro-max/SKILL.md",
+          "sha256": "d99f9475eaff0522549bc71843b6b2a8563253329d99ad7c0236275a039c2659"
+        },
+        {
+          "local": "sources/ui-ux-pro-max/LICENSE",
+          "upstream": "LICENSE",
+          "sha256": "738f69dfa83db5c347c678fb9d90e560877059f0de93a327c39001bff92dc014"
+        },
+        {
+          "local": "sources/ui-ux-pro-max/quick-reference.md",
+          "upstream": ".claude/skills/ui-ux-pro-max/references/quick-reference.md",
+          "sha256": "ede37ffbdd543eb56c4ca328155d395fef979b3bf3e9c25581123c5cb46fdb65"
+        },
+        {
+          "local": "sources/ui-ux-pro-max/pro-rules.md",
+          "upstream": ".claude/skills/ui-ux-pro-max/references/pro-rules.md",
+          "sha256": "d28442d61c310b49c054a4ea736f89fb3008beebdbbc38c4b3a540b8f7fadf23"
+        }
+      ]
+    }
+  ]
+}

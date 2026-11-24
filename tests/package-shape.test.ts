@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFileSync, existsSync } from "node:fs";
 import { readdirSync } from "node:fs";
 import { resolve } from "node:path";
@@ -82,7 +83,7 @@ const V2_SKILLS = [
   "b-multi-role-ux-audit", "b-opencode-model-config", "b-plan-stress-test",
   "b-project-structure-survey",
   "b-scenario-product-walkthrough", "b-skill-authoring", "b-source-code-tutoring",
-  "b-web-research-tooling", "b-branch-engineering-review",
+  "b-web-research-tooling", "b-branch-engineering-review", "b-ui-design",
 ];
 
 test("managed capability Skills are V2-compatible and routed by the main Agent", () => {
@@ -113,6 +114,60 @@ test("managed capability Skills are V2-compatible and routed by the main Agent",
   assert.ok(existsSync(resolve(root, "skills/b-source-code-tutoring/references/teaching-template.md")));
   assert.ok(existsSync(resolve(root, "skills/a-project-init/templates/general-rules.md")));
   assert.doesNotMatch(main, /old Project Log|\.project-log|Goal\/Run\/Evidence\/ledger\/SQLite/, "routing");
+});
+
+test("UI design routes are self-contained with one discoverable Skill and no executable assets", () => {
+  const base = "skills/b-ui-design";
+  const walk = (directory: string): string[] => readdirSync(resolve(root, directory), { withFileTypes: true })
+    .flatMap((entry) => entry.isDirectory() ? walk(`${directory}/${entry.name}`) : [`${directory}/${entry.name}`]);
+  const files = walk(base);
+  assert.deepEqual(files.filter((file) => file.endsWith("/SKILL.md")), [`${base}/SKILL.md`]);
+  assert.ok(files.every((file) => /\.(md|json|txt)$|\/LICENSE$/.test(file)), "text-only bundle");
+  const router = readNormalized(`${base}/SKILL.md`);
+  const guides = ["product-ui", "marketing-ui", "reading-ui", "critique", "interaction", "mobile-web", "resilience", "scenario-reference"];
+  for (const guide of guides) assert.ok(router.includes(`guides/${guide}.md`), guide);
+  // Active routes never direct the Agent into unresolved upstream workflows.
+  assert.doesNotMatch(router, /\]\(sources\//);
+  assert.doesNotMatch(router, /current project is a native HTML|hooks:|CLAUDE_PLUGIN_ROOT/);
+  for (const file of [`${base}/SKILL.md`, ...guides.map((id) => `${base}/guides/${id}.md`)]) {
+    const text = readNormalized(file);
+    for (const [, target] of text.matchAll(/\]\(([^)#]+)(?:#[^)]*)?\)/g)) {
+      assert.doesNotMatch(target, /^https?:/, `${file}: active methods work offline`);
+      assert.ok(existsSync(resolve(root, file, "..", target)), `${file}: ${target}`);
+    }
+    assert.doesNotMatch(text, /hooks:|\.interface-design\/|\.impeccable\/|CLAUDE_PLUGIN_ROOT|npx skills add/);
+  }
+  assert.match(readNormalized(`${base}/guides/scenario-reference.md`), /not.*searchable CSV datasets/);
+  assert.match(readNormalized(`${base}/EXAMPLES.md`), /manual selection oracles/);
+});
+
+test("UI design provenance pins every upstream snapshot, license and notice by digest", () => {
+  const base = "skills/b-ui-design";
+  const lock = JSON.parse(readNormalized(`${base}/sources.lock.json`));
+  assert.equal(lock.format, 1);
+  assert.deepEqual(lock.sources.map((s: { id: string }) => s.id).sort(),
+    ["emil", "frontend-design", "impeccable", "interface-design", "ui-ux-pro-max"]);
+  const recorded = new Set<string>();
+  for (const source of lock.sources) {
+    assert.match(source.commit, /^[a-f0-9]{40}$/);
+    assert.match(source.repository, /^https:\/\/github\.com\/[\w-]+\/[\w-]+$/);
+    assert.ok(["MIT", "Apache-2.0"].includes(source.license));
+    assert.ok(source.files.some((f: { local: string }) => /\/LICENSE(?:\.txt)?$/.test(f.local)));
+    for (const entry of source.files) {
+      assert.ok(entry.local.startsWith(`sources/${source.id}/`));
+      assert.ok(!entry.local.includes("..") && !entry.upstream.includes(".."));
+      assert.ok(!recorded.has(entry.local), entry.local);
+      recorded.add(entry.local);
+      assert.equal(createHash("sha256").update(readNormalized(`${base}/${entry.local}`)).digest("hex"), entry.sha256, entry.local);
+    }
+  }
+  const walk = (dir: string): string[] => readdirSync(resolve(root, `${base}/${dir}`), { withFileTypes: true })
+    .flatMap((entry) => entry.isDirectory() ? walk(`${dir}/${entry.name}`) : [`${dir}/${entry.name}`]);
+  assert.deepEqual([...recorded].sort(), walk("sources").sort(), "all snapshots have provenance");
+  assert.ok(recorded.has("sources/impeccable/NOTICE.md"));
+  const sources = readNormalized(`${base}/SOURCES.md`);
+  assert.match(sources, /mixed-license bundle/);
+  assert.match(sources, /changed adaptations/);
 });
 
 test("every routed Skill is triggerable in the user's language, not only in English", () => {
