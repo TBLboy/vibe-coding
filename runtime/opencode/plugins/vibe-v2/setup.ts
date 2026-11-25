@@ -19,7 +19,7 @@ import { statSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { shouldEnableTeamModules } from "./team/gate.ts";
 
-export async function setup(ctx: HostContext) {
+export async function setup(ctx: HostContext): Promise<(() => void) | undefined> {
     const hasMemoryDirectory = (candidate: string): boolean => {
       try {
         return statSync(resolve(candidate, ".vibe")).isDirectory();
@@ -165,7 +165,9 @@ export async function setup(ctx: HostContext) {
       if(canonical&&hasMemoryDirectory(canonical))root=await realpath(canonical);
       if(await shouldEnableTeamModules(root)) {
         const {setupTeam}=await import("./team/setup-team.ts");
-        await setupTeam(ctx,root,memoryRootFor);
+        const stopTeam=await setupTeam(ctx,root,memoryRootFor);
+        // Registered only for a bound project: the timer stops if the plugin is reloaded.
+        if(typeof stopTeam==="function") return () => { stopTeam(); };
       }
     }
 }

@@ -81,6 +81,10 @@ Branch scope (`feat/team-workspace-plugin`): this branch runs the plugin tests (
   revocation and cross-workspace preservation; current presence/five-minute boundary,
   latest task, immutable-version authors and 50-entry metadata cap; no-JS HTML form,
   token auth and XSS escaping; v2 additive migration and independent WAL connections.
+- `tests/team-periodic-sync.test.ts`: fixed 10s default and `VIBE_TEAM_SYNC_INTERVAL_MS`
+  override, `0` disables, repeated ticks, serialization under a slow sync, and
+  failure isolation (a failing sync or a throwing `onError` does not stop later
+  ticks).
 - `tests/team-plugin-sync.test.ts`: real existing setup with fake HTTP/temp filesystem
   and child Git repos; unbound registry equivalence/no I/O, canonical binding and
   authentication rejection and binding preservation, connect despite missing/extra

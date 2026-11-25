@@ -42,7 +42,15 @@ Equivalent private ACLs must be enforced on Windows.
 Each primary, matching-project context turn runs one cooperative 1500ms sync,
 then adds a <=2000-character read-only data summary. Reviewer/child Sessions and
 unrelated project Sessions do not sync; workspace tool executors enforce the same
-root/primary-Agent checks. No `setInterval`, event stream or long connection.
+root/primary-Agent checks. No event stream or long connection.
+
+A bound project also runs a **background sync timer**, because otherwise local
+edits would only reach the server when a turn starts. Interval defaults to 10
+seconds; `VIBE_TEAM_SYNC_INTERVAL_MS` overrides it and `0` disables it. Runs are
+serialized, so a slow sync never overlaps the next tick and a concurrent
+turn-triggered sync surfaces only as a busy skip. The timer is unref'd so it never
+keeps the host process alive, and it is cleared when the plugin is reloaded.
+Background sync stops when OpenCode exits; it is not a separate daemon.
 
 Tools: `workspace_connect` (reconnect an already-bound workspace),
 `workspace_status`, `workspace_sync`, `workspace_record_progress`,
