@@ -110,7 +110,10 @@ installer checks are in `tests/team-e2e.test.ts` on the combined baseline branch
 `feat/team-workspace`; this branch carries no plugin code. These local checks do not
 claim a live provider-backed OpenCode SDK activation, TLS deployment, or production audit.
 
-Local verified-TLS and process-write acceptance can be reproduced with
+Local verified-TLS and process-write acceptance lives on the combined baseline branch
+`feat/team-workspace`; `tests/team-tls-process.test.ts` and its worker
+`tests/helpers/team-acceptance-worker.ts` are not present on this branch. On that
+branch it is reproduced with
 `node --experimental-strip-types --test tests/team-tls-process.test.ts` (OpenSSL
 required). It creates an ephemeral CA and test-only HTTPS proxy in front of the real
 HTTP service, launches actual plugin clients with child-scoped CA trust, and checks
