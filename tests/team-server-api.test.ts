@@ -61,6 +61,25 @@ test("schema upgrades add identity data without changing existing document histo
   } finally {db.close();}
 });
 
+test("v4 keeps existing session tokens and allows permanent ones", () => {
+  const db = new DatabaseSync(":memory:");
+  try {
+    MIGRATIONS[0].apply(db); MIGRATIONS[1].apply(db);
+    db.exec(`INSERT INTO schema_meta VALUES (1,2); INSERT INTO org VALUES ('org','Test','now');
+      INSERT INTO account (id,org_id,email,password_hash,display_name,created_at) VALUES ('acc','org','a@example.test','h','A','now');
+      INSERT INTO session_token (token_hash,account_id,created_at,expires_at) VALUES ('legacyhash','acc',100,200);`);
+    applyMigrations(db);
+    const migrated = db.prepare("SELECT * FROM session_token").get() as any;
+    assert.equal(migrated.token_hash,"legacyhash");
+    assert.equal(migrated.name,"Login token");
+    assert.equal(migrated.expires_at,200);
+    assert.equal(migrated.last_used_at,null);
+    db.exec(`INSERT INTO session_token (id,token_hash,account_id,name,created_at,expires_at) VALUES ('tok_p','perm','acc','Permanent',300,NULL)`);
+    assert.equal((db.prepare("SELECT expires_at FROM session_token WHERE id='tok_p'").get() as any).expires_at,null);
+    assert.throws(()=>db.exec(`INSERT INTO session_token (id,token_hash,account_id,name,created_at,expires_at) VALUES ('tok_x','x','acc','Bad',300,200)`));
+  } finally {db.close();}
+});
+
 test("HTTP login/workspace/connect scopes credentials and persists hashes only", async t => {
   const h = await harness(t), session = await h.login();
   assert.equal((await h.req("/api/workspaces")).status,401);
@@ -152,7 +171,10 @@ test("documents enforce current namespace/owner permissions and If-Match without
 });
 
 test("credential scope, disabled accounts, TTL boundaries, unknown membership and org isolation", async t => {
-  const h=await harness(t), session=await h.login(), w=await h.workspace(session), other=await h.workspace(session,"Other");
+  const h=await harness(t), login=await h.login();
+  const longLived=await h.req("/api/tokens","POST",login,{name:"Test session",expiresIn:"forever"});
+  const session=longLived.body.secret as string;
+  const w=await h.workspace(session), other=await h.workspace(session,"Other");
   assert.equal((await h.req(`/api/workspaces/${other.id}/changes?since=0`,"GET",w.token)).status,403);
   await createAccount(h.store,{orgId:"org_other",email:"outsider@example.test",displayName:"Outside",password:PASSWORD});
   assert.equal((await h.req("/api/auth/login","POST",undefined,{email:"outsider@example.test",password:PASSWORD})).status,401);
@@ -161,7 +183,69 @@ test("credential scope, disabled accounts, TTL boundaries, unknown membership an
   h.store.db.prepare("UPDATE account SET disabled_at='disabled' WHERE id=?").run(h.owner.id);
   assert.equal((await h.req(`/api/workspaces/${w.id}`,"GET",reconnected.body.workspaceToken)).status,401);
   h.store.db.prepare("UPDATE account SET disabled_at=NULL WHERE id=?").run(h.owner.id);
-  h.advance(SESSION_TTL_MS-WORKSPACE_TTL_MS); assert.equal((await h.req("/api/workspaces","GET",session)).status,401);
+  // A finite identity token still expires; revoked membership stops reconnecting.
+  const shortLived=await h.req("/api/tokens","POST",session,{name:"Short",expiresIn:"day"});
+  assert.equal((await h.req("/api/workspaces","GET",shortLived.body.secret)).status,200);
+  h.advance(24*60*60*1000+1);
+  assert.equal((await h.req("/api/workspaces","GET",shortLived.body.secret)).status,401);
+  assert.equal((await h.req("/api/workspaces","GET",session)).status,200);
+});
+
+test("identity tokens are self-managed: create with lifetime, list, extend and revoke", async t => {
+  const h=await harness(t), session=await h.login();
+  const list=await h.req("/api/tokens","GET",session);
+  assert.equal(list.status,200);
+  assert.equal(list.body.tokens.length,1);
+  assert.equal(list.body.tokens[0].current,true);
+  assert.equal(list.body.tokens[0].name,"Login token");
+  assert.equal(list.body.tokens[0].lastUsedAt!==null,true);
+  assert.equal(JSON.stringify(list.body).includes(session),false,"plaintext must never be listed");
+
+  const day=await h.req("/api/tokens","POST",session,{name:"Server script",expiresIn:"day"});
+  assert.equal(day.status,201); assert.match(day.body.secret,/^[A-Za-z0-9_-]{43}$/u);
+  const week=await h.req("/api/tokens","POST",session,{name:"Laptop",expiresIn:"week"});
+  const month=await h.req("/api/tokens","POST",session,{name:"Tablet",expiresIn:"month"});
+  const forever=await h.req("/api/tokens","POST",session,{name:"Desktop",expiresIn:"forever"});
+  assert.equal(forever.status,201); assert.equal(forever.body.token.expiresAt,null);
+  assert.equal((await h.req("/api/tokens","POST",session,{name:"Bad",expiresIn:"year"})).status,422);
+  assert.equal((await h.req("/api/tokens","POST",session,{name:"",expiresIn:"day"})).status,422);
+
+  // A created token is a working credential, not a display record.
+  assert.equal((await h.req("/api/workspaces","GET",day.body.secret)).status,200);
+  assert.equal((await h.req("/api/workspaces","GET",forever.body.secret)).status,200);
+  assert.equal(month.status,201);
+
+  const after=await h.req("/api/tokens","GET",session);
+  assert.equal(after.body.tokens.length,5);
+  assert.equal(after.body.tokens.filter((x:any)=>x.current).length,1);
+  for(const token of after.body.tokens) assert.equal(typeof token.createdAt,"string");
+
+  // A day token expires on its own; permanent tokens do not.
+  h.advance(24*60*60*1000+1);
+  assert.equal((await h.req("/api/workspaces","GET",day.body.secret)).status,401);
+  assert.equal((await h.req("/api/workspaces","GET",forever.body.secret)).status,200);
+
+  // Extend only moves forward and skips permanent tokens.
+  const weekId=week.body.token.id;
+  const extended=await h.req(`/api/tokens/${weekId}/extend`,"POST",session,{expiresIn:"week"});
+  assert.equal(extended.status,200);
+  assert.ok(Date.parse(extended.body.token.expiresAt)>Date.parse(week.body.token.expiresAt));
+  assert.equal((await h.req(`/api/tokens/${forever.body.token.id}/extend`,"POST",session,{expiresIn:"week"})).status,422);
+
+  // Revocation is immediate and idempotent-safe; other accounts cannot touch it.
+  assert.equal((await h.req(`/api/tokens/${weekId}`,"DELETE",session)).status,200);
+  assert.equal((await h.req("/api/workspaces","GET",week.body.secret)).status,401);
+  assert.equal((await h.req(`/api/tokens/${weekId}`,"DELETE",session)).status,404);
+  assert.equal((await h.req(`/api/tokens/${weekId}/extend`,"POST",session,{expiresIn:"day"})).status,404);
+  const other=await h.login("alice@example.test");
+  assert.equal((await h.req(`/api/tokens/${forever.body.token.id}`,"DELETE",other)).status,404);
+  const aliceList=await h.req("/api/tokens","GET",other);
+  assert.equal(aliceList.body.tokens.every((x:any)=>x.name!=="Desktop"),true);
+  // Revoking the credential in use is allowed and takes effect on the next request.
+  assert.equal((await h.req("/api/tokens","GET",other)).status,200);
+  const selfId=aliceList.body.tokens[0].id;
+  assert.equal((await h.req(`/api/tokens/${selfId}`,"DELETE",other)).status,200);
+  assert.equal((await h.req("/api/tokens","GET",other)).status,401);
 });
 
 test("workspace-bound idempotency is atomic, account scoped and never stores plaintext keys", async t => {

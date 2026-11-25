@@ -38,8 +38,18 @@ files; a live WAL database is not safely backed up by copying the main file alon
 
 ## API boundaries
 
-- Account session: `POST /api/auth/login`, `GET/POST /api/workspaces`,
-  `POST /api/connect`, membership requests and invitation acceptance.
+- Account session: `POST /api/auth/login`, `GET/POST /api/tokens`,
+  `DELETE /api/tokens/{id}`, `POST /api/tokens/{id}/extend`,
+  `GET/POST /api/workspaces`, `POST /api/connect`, membership requests and
+  invitation acceptance.
+- Identity tokens are self-managed. Login issues a 7-day `Login token`; any valid
+  token can list, create, extend or revoke the account's own tokens with no extra
+  password. `POST /api/tokens` takes `{name,expiresIn}` where `expiresIn` is one of
+  `day`, `week`, `month` or `forever`, and returns the plaintext secret once only.
+  Listing never returns a secret and marks the calling token `current`.
+  `extend` takes `{expiresIn:day|week|month}` and only moves the expiry forward;
+  permanent tokens have no expiry to extend. Revocation is immediate; revoking the
+  token in use takes effect on the next request. Names are required (<=100 chars).
 - Connect replies also include the authenticated `accountId` for local plugin
   namespace selection; caller-provided identity is never trusted.
 - Workspace token: metadata/members, owner invitations/approvals/removal/key
@@ -57,7 +67,7 @@ files; a live WAL database is not safely backed up by copying the main file alon
   with no sequence gaps. Requests <=2 MiB, documents <=1 MiB, feeds <=8 MiB.
 - Key rotation blocks future connections using the previous key; an already
   issued workspace token retains its own TTL. Removal revokes that member's
-  workspace tokens; rejoining does not revive them. Session TTL is 30 days,
+  workspace tokens; rejoining does not revive them. Session TTL is 7 days,
   workspace token TTL 7 days; passwords use scrypt.
 - Login throttling uses normalized email and direct socket IP: five failures per
   15-minute window; pending password checks reserve those slots too. Forwarded IP

@@ -1,6 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
 
-export const CURRENT_SCHEMA_VERSION = 3;
+export const CURRENT_SCHEMA_VERSION = 4;
 
 export interface Migration {
   version: number;
@@ -167,6 +167,24 @@ export const MIGRATIONS: readonly Migration[] = [
           PRIMARY KEY (workspace_id, account_id),
           FOREIGN KEY (workspace_id, account_id) REFERENCES membership(workspace_id, account_id) ON DELETE CASCADE
         );
+      `);
+    },
+  },
+  {
+    version: 4,
+    apply(db) {
+      db.exec(`
+        CREATE TABLE session_token_v4 (
+          id TEXT PRIMARY KEY, token_hash TEXT NOT NULL UNIQUE, account_id TEXT NOT NULL REFERENCES account(id),
+          name TEXT NOT NULL, created_at INTEGER NOT NULL, expires_at INTEGER,
+          last_used_at INTEGER, revoked_at INTEGER,
+          CHECK (expires_at IS NULL OR expires_at > created_at)
+        );
+        INSERT INTO session_token_v4 (id,token_hash,account_id,name,created_at,expires_at,revoked_at)
+          SELECT 'tok_' || token_hash,token_hash,account_id,'Login token',created_at,expires_at,revoked_at FROM session_token;
+        DROP TABLE session_token;
+        ALTER TABLE session_token_v4 RENAME TO session_token;
+        CREATE INDEX IF NOT EXISTS session_token_account_idx ON session_token(account_id, revoked_at);
       `);
     },
   },

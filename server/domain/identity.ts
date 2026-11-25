@@ -1,9 +1,77 @@
 import { randomBytes, randomUUID, createHash, scrypt, timingSafeEqual } from "node:crypto";
 import type { TeamDatabase } from "../store/sqlite.ts";
-import { invalid, unauthenticated, text } from "../http/errors.ts";
+import { invalid, notFound, unauthenticated, text } from "../http/errors.ts";
 
-export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+export const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 export const WORKSPACE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+/** Offered lifetimes for a self-managed identity token; null is permanent. */
+export const TOKEN_LIFETIMES = {day:24*60*60*1000,week:7*24*60*60*1000,month:30*24*60*60*1000,forever:null} as const;
+export type TokenLifetime = keyof typeof TOKEN_LIFETIMES;
+export interface IdentityToken {
+  id: string; name: string; createdAt: string; expiresAt: string | null;
+  lastUsedAt: string | null; current: boolean;
+}
+export interface TokenRow {
+  id: string; token_hash: string; account_id: string; name: string;
+  created_at: number; expires_at: number | null; last_used_at: number | null; revoked_at: number | null;
+}
+const iso = (value: number | null): string | null => value === null ? null : new Date(value).toISOString();
+
+function lifetime(value: unknown): number | null {
+  if (typeof value !== "string" || !Object.hasOwn(TOKEN_LIFETIMES, value)) {
+    invalid("expiresIn must be one of: day, week, month, forever");
+  }
+  return TOKEN_LIFETIMES[value as TokenLifetime];
+}
+
+function issueIdentityToken(store: TeamDatabase, accountId: string, name: string, lifetimeMs: number | null, now: number): {token: IdentityToken; secret: string} {
+  const secret = issueSecret(), id = `tok_${randomUUID()}`;
+  const expiresAt = lifetimeMs === null ? null : now + lifetimeMs;
+  store.db.prepare("INSERT INTO session_token (id,token_hash,account_id,name,created_at,expires_at) VALUES (?,?,?,?,?,?)")
+    .run(id, hashToken(secret), accountId, name, now, expiresAt);
+  return {token: {id, name, createdAt: iso(now)!, expiresAt: iso(expiresAt), lastUsedAt: null, current: false}, secret};
+}
+
+/** A user-managed identity token. The plaintext secret is returned only once. */
+export function createIdentityToken(store: TeamDatabase, account: Account, body: Record<string, unknown>, now: number): {token: IdentityToken; secret: string} {
+  const name = text(body.name, "name", 100), lifetimeMs = lifetime(body.expiresIn);
+  return issueIdentityToken(store, account.id, name, lifetimeMs, now);
+}
+
+export function listIdentityTokens(store: TeamDatabase, account: Account, currentTokenHash: string, now: number): IdentityToken[] {
+  const rows = store.db.prepare(`SELECT * FROM session_token WHERE account_id=? AND revoked_at IS NULL
+    AND (expires_at IS NULL OR expires_at>?) ORDER BY created_at DESC, id`).all(account.id, now) as unknown as TokenRow[];
+  return rows.map(row => ({
+    id: row.id, name: row.name, createdAt: iso(row.created_at)!, expiresAt: iso(row.expires_at),
+    lastUsedAt: iso(row.last_used_at), current: row.token_hash === currentTokenHash,
+  }));
+}
+
+export function revokeIdentityToken(store: TeamDatabase, account: Account, id: string, now: number): {status: "revoked"} {
+  const result = store.db.prepare("UPDATE session_token SET revoked_at=? WHERE id=? AND account_id=? AND revoked_at IS NULL")
+    .run(now, id, account.id);
+  if (result.changes === 0) notFound();
+  return {status: "revoked"};
+}
+
+/** Extend only forward. A permanent token has no expiry to extend. */
+export function extendIdentityToken(store: TeamDatabase, account: Account, id: string, body: Record<string, unknown>, now: number): IdentityToken {
+  const lifetimeMs = lifetime(body.expiresIn);
+  if (lifetimeMs === null) invalid("Use expiresIn day, week or month to extend; permanent tokens have no expiry");
+  const row = store.db.prepare("SELECT * FROM session_token WHERE id=? AND account_id=? AND revoked_at IS NULL")
+    .get(id, account.id) as unknown as TokenRow | undefined;
+  if (!row) notFound();
+  if (row.expires_at === null) invalid("Permanent tokens have no expiry to extend");
+  const extended = Math.max(row.expires_at, now) + lifetimeMs;
+  store.db.prepare("UPDATE session_token SET expires_at=? WHERE id=?").run(extended, id);
+  return {id: row.id, name: row.name, createdAt: iso(row.created_at)!, expiresAt: iso(extended), lastUsedAt: iso(row.last_used_at), current: false};
+}
+
+export function touchIdentityToken(store: TeamDatabase, tokenHash: string, now: number): void {
+  store.db.prepare("UPDATE session_token SET last_used_at=? WHERE token_hash=? AND (last_used_at IS NULL OR last_used_at<?)")
+    .run(now, tokenHash, now - 60_000);
+}
+
 export interface Account { id: string; orgId: string; email: string; displayName: string }
 interface AccountRow { id: string; org_id: string; email: string; display_name: string; password_hash: string; disabled_at: string | null }
 export const issueSecret = (bytes = 32): string => randomBytes(bytes).toString("base64url");
@@ -87,16 +155,18 @@ export async function login(store:TeamDatabase, orgId:string, input:Record<strin
     .get(row.id,orgId,row.password_hash) as unknown as AccountRow|undefined;
   if(!current) unauthenticated();
   const sessionToken=issueSecret();
-  store.db.prepare("INSERT INTO session_token (token_hash,account_id,created_at,expires_at) VALUES (?,?,?,?)")
-    .run(hashToken(sessionToken),row.id,now,now+SESSION_TTL_MS);
+  store.db.prepare("INSERT INTO session_token (id,token_hash,account_id,name,created_at,expires_at) VALUES (?,?,?,?,?,?)")
+    .run(`tok_${randomUUID()}`,hashToken(sessionToken),row.id,"Login token",now,now+SESSION_TTL_MS);
   return {sessionToken,account:publicAccount(current)};
 }
 
 export function authenticateSession(store:TeamDatabase, orgId:string, token:string, now:number): Account {
   if(!/^[A-Za-z0-9_-]{43}$/u.test(token)) unauthenticated();
+  const hash = hashToken(token);
   const row=store.db.prepare(`SELECT a.* FROM session_token t JOIN account a ON a.id=t.account_id
-    WHERE t.token_hash=? AND t.revoked_at IS NULL AND t.expires_at>? AND a.org_id=? AND a.disabled_at IS NULL`)
-    .get(hashToken(token),now,orgId) as unknown as AccountRow|undefined;
+    WHERE t.token_hash=? AND t.revoked_at IS NULL AND (t.expires_at IS NULL OR t.expires_at>?) AND a.org_id=? AND a.disabled_at IS NULL`)
+    .get(hash,now,orgId) as unknown as AccountRow|undefined;
   if (!row) unauthenticated();
+  touchIdentityToken(store, hash, now);
   return publicAccount(row);
 }

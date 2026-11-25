@@ -3,7 +3,7 @@ import type { TeamDatabase } from "../store/sqlite.ts";
 import { CURRENT_SCHEMA_VERSION } from "../store/schema.ts";
 import { assertId } from "../../shared/team-contracts/binding.ts";
 import { layerOf, validateServerPath } from "../../shared/team-contracts/layout.ts";
-import { login, LoginLimiter, normalizeEmail, authenticateSession } from "../domain/identity.ts";
+import { login, LoginLimiter, normalizeEmail, authenticateSession, hashToken, createIdentityToken, listIdentityTokens, revokeIdentityToken, extendIdentityToken } from "../domain/identity.ts";
 import { authenticateWorkspace, connectWorkspace, requireOwner, rotateTaskKey, type WorkspaceAuth } from "../domain/access.ts";
 import { createWorkspace, listWorkspaces, workspaceInfo } from "../domain/workspace.ts";
 import { acceptInvitation, decideMembership, inviteMember, listMembers, removeMember, requestMembership } from "../domain/membership.ts";
@@ -139,6 +139,18 @@ export function createTeamServer(store:TeamDatabase, options:ServerOptions): Ser
           touchPresence(store,auth.workspaceId,auth.accountId,now);
           return {status:200,body:{workspaceToken:auth.workspaceToken,accountId:auth.accountId,workspace:workspaceInfo(store,orgId,auth.workspaceId),role:auth.role}};
         });
+      } else if(rawPath==="/api/tokens" && method==="GET") {
+        route="tokens.list"; const account=session();
+        reply={status:200,body:{tokens:listIdentityTokens(store,account,hashToken(bearer(req)),now)}};
+      } else if(rawPath==="/api/tokens" && method==="POST") {
+        route="tokens.create"; const account=session();
+        reply={status:201,body:createIdentityToken(store,account,body,now),oneTime:true};
+      } else if(/^\/api\/tokens\/[^/]+$/u.test(rawPath) && method==="DELETE") {
+        route="tokens.revoke"; const account=session(), id=identifier(rawPath.split("/")[3]);
+        reply={status:200,body:revokeIdentityToken(store,account,id,now)};
+      } else if(/^\/api\/tokens\/[^/]+\/extend$/u.test(rawPath) && method==="POST") {
+        route="tokens.extend"; const account=session(), id=identifier(rawPath.split("/")[3]);
+        reply={status:200,body:{token:extendIdentityToken(store,account,id,body,now)}};
       } else if(rawPath==="/api/workspaces" && method==="POST") {
         route="workspaces.create"; const account=session();
         if(req.headers["idempotency-key"]!==undefined) invalid("Workspace creation is not workspace-scoped; Idempotency-Key is unsupported");
