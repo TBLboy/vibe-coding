@@ -24,10 +24,10 @@ node --experimental-strip-types runtime/opencode/plugins/vibe-v2/team/connect.ts
 For the installed pack, use the same path under `~/.config/opencode/` instead.
 The connector resolves the canonical Git memory root / nearest existing ancestor
 owning `.vibe/`, never creates another log root in a code subdirectory, and checks
-the registered repository URL+branch in immediate child repositories. It never
-clones or changes Git state. An intentional mismatch can be accepted only with
-the explicit trailing `--force` flag. Existing workspace/server/account bindings
-cannot be silently switched, even with force. Then use `/reload` to load tools;
+the existing workspace/server/account binding before updating credentials.
+Repository URLs and current branches do not affect connection or reconnect;
+there is no bypass flag or second confirmation. It never clones or changes Git
+state. Then use `/reload` to load tools;
 no global bootstrap tool is registered for unbound single-user projects.
 
 The server's connect reply supplies the authenticated `accountId`; caller text
@@ -47,9 +47,9 @@ root/primary-Agent checks. No `setInterval`, event stream or long connection.
 Tools: `workspace_connect` (reconnect an already-bound workspace),
 `workspace_status`, `workspace_sync`, `workspace_record_progress`,
 `workspace_task_declare`, `workspace_task_claim`, `workspace_task_update`, and
-`workspace_query_spec`. Reconnect reads fresh session token+key only from fixed
-`TEAM_SESSION_TOKEN` / `TEAM_TASK_KEY` process environment variables; its schema
-accepts no raw credential fields, since native tool inputs can become Session
+`workspace_query_spec`. Reconnect takes no arguments and reads fresh session token
+and key only from fixed `TEAM_SESSION_TOKEN` / `TEAM_TASK_KEY` process environment
+variables. Credentials never enter the native tool inputs that can become Session
 history. If those variables are not available in the host, use the explicit local
 connector again for the same root/binding; the next sync reads refreshed private
 credentials. Do not paste secrets into prompts/tools or change unrelated host

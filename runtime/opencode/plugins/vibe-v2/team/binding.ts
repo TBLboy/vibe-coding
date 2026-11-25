@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { readdir, realpath, stat } from "node:fs/promises";
+import { realpath, stat } from "node:fs/promises";
 import { statSync } from "node:fs";
 import { resolve } from "node:path";
 import { promisify } from "node:util";
@@ -21,24 +21,7 @@ export async function loadCredentials(root:string):Promise<Credentials> {
   if(JSON.stringify(binding)!==JSON.stringify(validated)||typeof raw.workspaceToken!=="string"||!/^[A-Za-z0-9_-]{43}$/u.test(raw.workspaceToken))throw new TeamError("credentials_invalid");
   return {...binding,workspaceToken:raw.workspaceToken};
 }
-function repoUrl(url:string):string{return url.replace(/^([^@/]+)@([^:]+):/u,"ssh://$1@$2/").replace(/\/?\.git\/?$/u,"").replace(/\/$/u,"");}
-async function verifyRepositories(root:string,repos:unknown):Promise<void> {
-  if(!Array.isArray(repos))throw new TeamError("invalid_response");
-  const found:{url:string;branch:string}[]=[];
-  for(const child of await readdir(root,{withFileTypes:true})) {
-    if(!child.isDirectory()||child.name.startsWith("."))continue;
-    const cwd=resolve(root,child.name);
-    try {
-      const top=(await exec("git",["-C",cwd,"rev-parse","--show-toplevel"],{timeout:1000,windowsHide:true})).stdout.trim();
-      if(await realpath(top)!==await realpath(cwd))continue;
-      const url=(await exec("git",["-C",cwd,"remote","get-url","origin"],{timeout:1000,windowsHide:true})).stdout.trim();
-      const branch=(await exec("git",["-C",cwd,"symbolic-ref","--short","HEAD"],{timeout:1000,windowsHide:true})).stdout.trim();found.push({url:repoUrl(url),branch});
-    } catch { /* non-repositories do not satisfy a registered repository */ }
-  }
-  for(const value of repos){const repo=object(value);if(typeof repo.url!=="string"||typeof repo.branch!=="string")throw new TeamError("invalid_response");
-    if(!found.some(r=>r.url===repoUrl(repo.url)&&r.branch===repo.branch))throw new TeamError("repository_mismatch: clone the registered repository/branch or explicitly force");}
-}
-export async function connectDirectory(root:string,input:{serverUrl:string;sessionToken:string;key:string;force?:boolean},signal?:AbortSignal) {
+export async function connectDirectory(root:string,input:{serverUrl:string;sessionToken:string;key:string},signal?:AbortSignal) {
   root=await realpath(root);
   const hasMemory=(path:string)=>{try{return statSync(resolve(path,".vibe")).isDirectory();}catch{return false;}};
   let canonical:string|null=null;
@@ -57,7 +40,6 @@ export async function connectDirectory(root:string,input:{serverUrl:string;sessi
     if(existing&&existing.accountId!==binding.accountId)throw new TeamError("directory already bound to another account");
     if(typeof result.workspaceToken!=="string"||!/^[A-Za-z0-9_-]{43}$/u.test(result.workspaceToken))throw new TeamError("invalid_response");
     if(!["owner","member"].includes(result.role))throw new TeamError("invalid_response");
-    if(input.force!==true)await verifyRepositories(root,workspace.repos);
     const files=new SafeFiles(root);
     if(!existing){
       if(await files.read(".vibe/.sync/manifest.json"))throw new TeamError("orphaned_sync_state: retain files and inspect before binding");

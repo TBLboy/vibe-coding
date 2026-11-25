@@ -20,8 +20,8 @@ import { SafeFiles, withProjectLock } from "../runtime/opencode/plugins/vibe-v2/
 async function fixture(t:{after(fn:()=>Promise<void>):void}) {
   const root=await mkdtemp(join(tmpdir(),"team-mirror-"));
   const token="a".repeat(43), documents=new Map<string,any>(), changes:any[]=[], calls:{method:string;path:string;body:any}[]=[];
-  const meta={id:"ws_test",ownerAccountId:"owner",name:"Test team",repos:[] as {url:string;branch:string}[]};
-  let denied=0, slow=false, malformed=false;
+  const meta={id:"ws_test",ownerAccountId:"owner",name:"Test team",repos:[{url:"https://example.test/repo.git",branch:"main"}]};
+  let accountId="alice", denied=0, slow=false, malformed=false;
   const put=(path:string,content:string|null)=>{
     const version=(documents.get(path)?.version??0)+1,hash=content===null?null:hashContent(content);
     const doc={path,version,hash,content};documents.set(path,doc);
@@ -33,7 +33,7 @@ async function fixture(t:{after(fn:()=>Promise<void>):void}) {
     if(slow){setTimeout(()=>{if(!res.destroyed){res.writeHead(503);res.end("{}");}},150);return;}
     if(denied){res.writeHead(denied);res.end("{}");return;}
     const reply=(status:number,value:unknown)=>{res.writeHead(status,{"content-type":"application/json"});res.end(JSON.stringify(value));};
-    if(url.pathname==="/api/connect")return reply(200,{workspaceToken:token,accountId:"alice",workspace:meta,role:"member"});
+    if(url.pathname==="/api/connect")return reply(200,{workspaceToken:token,accountId,workspace:meta,role:"member"});
     if(req.headers.authorization!==`Bearer ${token}`)return reply(401,{});
     if(url.pathname==="/api/workspaces/ws_test")return reply(200,{workspace:meta,role:"member"});
     if(url.pathname.endsWith("/changes")) {
@@ -55,20 +55,25 @@ async function fixture(t:{after(fn:()=>Promise<void>):void}) {
   await new Promise<void>(resolve=>server.listen(0,"127.0.0.1",resolve));
   const serverUrl=`http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   t.after(async()=>{server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));await rm(root,{recursive:true,force:true});});
-  const connect=()=>connectDirectory(root,{serverUrl,sessionToken:"s".repeat(43),key:"k".repeat(32),force:true});
+  const input={serverUrl,sessionToken:"s".repeat(43),key:"k".repeat(32)};
+  const connect=()=>connectDirectory(root,input);
   const local=async(path:string,content:string)=>{await mkdir(join(root,path,".."),{recursive:true});await writeFile(join(root,path),content);};
   const manifest=async()=>JSON.parse(await readFile(join(root,".vibe/.sync/manifest.json"),"utf8"));
-  return {root,serverUrl,token,meta,documents,changes,calls,put,connect,local,manifest,
+  return {root,serverUrl,token,meta,documents,changes,calls,put,connect,input,local,manifest,setAccount:(id:string)=>{accountId=id;},
     denied:(value:number)=>{denied=value;},slow:(value:boolean)=>{slow=value;},malformed:(value:boolean)=>{malformed=value;}};
 }
 
 test("gate stays off until explicit successful connect; credentials are private and binding immutable",async t=>{
   const h=await fixture(t);assert.equal(await shouldEnableTeamModules(h.root),false);
+  h.denied(401);await assert.rejects(h.connect,/authentication_required/);assert.equal(await shouldEnableTeamModules(h.root),false);
+  h.denied(0);
   await h.connect();assert.equal(await shouldEnableTeamModules(h.root),true);
   const creds=await loadCredentials(h.root);assert.equal(creds.accountId,"alice");assert.equal(creds.workspaceToken,h.token);
   assert.equal((await stat(join(h.root,".vibe/.sync/credentials.json"))).mode&0o777,0o600);
   h.meta.id="ws_other";await assert.rejects(h.connect,/bound/);
-  assert.equal((await loadCredentials(h.root)).workspaceId,"ws_test");
+  h.meta.id="ws_test";h.setAccount("bob");await assert.rejects(h.connect,/already bound to another account/);
+  await assert.rejects(()=>connectDirectory(h.root,{...h.input,serverUrl:"http://127.0.0.1:1"}),/already bound to another server/);
+  assert.deepEqual(await loadCredentials(h.root),creds);
 });
 
 test("mirror pulls baseline preserving existing bytes; then pushes only authorized changes",async t=>{
@@ -188,17 +193,21 @@ test("stale dead-process locks recover under the acquisition guard, live or malf
   await rm(lock);await withProjectLock(h.root,async()=>{});
 });
 
-test("repository mismatch blocks connection unless explicitly forced, matching child origin and branch connects",async t=>{
-  const h=await fixture(t),input={serverUrl:h.serverUrl,sessionToken:"s".repeat(43),key:"k".repeat(32)};
-  h.meta.repos=[{url:"https://example.test/repo.git",branch:"main"}];
-  await assert.rejects(()=>connectDirectory(h.root,input),/repository_mismatch/);assert.equal(await shouldEnableTeamModules(h.root),false);
-  const dir=join(h.root,"code");await mkdir(dir);execFileSync("git",["init","-b","main",dir],{stdio:"ignore"});
-  execFileSync("git",["-C",dir,"remote","add","origin","https://example.test/repo.git"]);
-  await connectDirectory(h.root,input);assert.equal(await shouldEnableTeamModules(h.root),true);
-  h.meta.repos[0].branch="other";await assert.rejects(()=>connectDirectory(h.root,input),/repository_mismatch/);
-  await connectDirectory(h.root,{...input,force:true});
-  await connectDirectory(dir,{...input,force:true});
+test("binds despite missing repositories, differing branches and extra repositories; child reuses memory root",async t=>{
+  const h=await fixture(t);h.meta.repos.push({url:"https://example.test/missing.git",branch:"main"});
+  const repo=(name:string,url:string,branch:string)=>{
+    const dir=join(h.root,name);
+    execFileSync("git",["init","-b",branch,dir],{stdio:"ignore",windowsHide:true});
+    execFileSync("git",["-C",dir,"remote","add","origin",url],{windowsHide:true});
+    return dir;
+  };
+  const dir=repo("code",h.meta.repos[0].url,"feature/work"),extra=repo("unrelated","https://example.test/extra.git","main");
+  await h.connect();assert.equal(await shouldEnableTeamModules(h.root),true);
+  const creds=await loadCredentials(h.root);
+  assert.deepEqual(await connectDirectory(dir,h.input),{workspaceId:creds.workspaceId,accountId:creds.accountId,role:"member"});
   await assert.rejects(()=>stat(join(dir,".vibe")),/ENOENT/);
+  await assert.rejects(()=>stat(join(extra,".vibe")),/ENOENT/);
+  assert.equal(execFileSync("git",["-C",dir,"symbolic-ref","--short","HEAD"],{windowsHide:true}).toString().trim(),"feature/work");
 });
 
 test("the executable connector uses environment credentials without echoing or persisting account secrets",async t=>{
@@ -212,7 +221,7 @@ test("the executable connector uses environment credentials without echoing or p
 
 test("bound reconnect tool schema never accepts raw secrets; environment reauth returns only identity",async t=>{
   const h=await fixture(t);await h.connect();const bound=await host(h.root),tool=bound.tools.get("workspace_connect")!;
-  assert.deepEqual(Object.keys(tool.input.properties as object),["force"]);
+  assert.deepEqual(tool.input.properties,{});assert.equal(tool.input.additionalProperties,false);
   const oldSession=process.env.TEAM_SESSION_TOKEN,oldKey=process.env.TEAM_TASK_KEY;
   try {
     process.env.TEAM_SESSION_TOKEN="s".repeat(43);process.env.TEAM_TASK_KEY="k".repeat(32);

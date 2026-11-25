@@ -6,11 +6,11 @@ import { validateServerPath } from "../../../../core/team/layout.ts";
 
 export function workspaceTools(root:string,mirror:TeamMirror,allowed:(sessionID:string)=>Promise<boolean>):ToolDefinition[] {
   const specs:{name:string;properties:Record<string,unknown>;required?:string[];run:(input:Record<string,unknown>,signal?:AbortSignal)=>Promise<unknown>}[]=[
-    {name:"workspace_connect",properties:{force:{type:"boolean"}},run:async(i,s)=>{
+    {name:"workspace_connect",properties:{},run:async(_,s)=>{
       const binding=await loadBinding(root);if(!binding)throw new TeamError("binding_missing");
       const sessionToken=process.env.TEAM_SESSION_TOKEN,key=process.env.TEAM_TASK_KEY;
       if(!sessionToken||!key)throw new TeamError("credentials_environment_required: run the local connector outside the conversation; never paste secrets into tool input");
-      return connectDirectory(root,{serverUrl:binding.serverUrl,sessionToken,key,force:i.force===true},s);
+      return connectDirectory(root,{serverUrl:binding.serverUrl,sessionToken,key},s);
     }},
     {name:"workspace_status",properties:{},run:()=>mirror.inspect()},
     {name:"workspace_sync",properties:{},run:(_,s)=>mirror.sync(true,s)},

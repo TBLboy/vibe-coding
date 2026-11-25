@@ -199,7 +199,7 @@ test("index initialization failure rolls back the complete workspace creation tr
   assert.equal((await h.req(h.p,"GET",h.ownerToken)).body.workspace.seq,h.w.workspace.seq);
 });
 
-test("isolated installed connector/mirror/setup run against the real server without changing user config",{timeout:30000},async t=>{
+test("installed connector binds a directory without Git and syncs via the real server",{timeout:30000},async t=>{
   const h=await fixture(t),profile=join(h.base,"profile");await mkdir(profile);
   const original={model:"fixture-model",custom:{retain:true},permissions:[{action:"shell",resource:"*",effect:"ask"}]};
   await writeFile(join(profile,"opencode.json"),JSON.stringify(original),{mode:0o600});
@@ -210,7 +210,7 @@ test("isolated installed connector/mirror/setup run against the real server with
   await assert.rejects(()=>stat(join(profile,"server")),/ENOENT/);
   const modulePath=(name:string)=>pathToFileURL(join(profile,"runtime/opencode/plugins/vibe-v2",name)).href;
   const root=join(h.base,"installed-client");await mkdir(root);
-  const cli=await exec(process.execPath,["--experimental-strip-types",join(profile,"runtime/opencode/plugins/vibe-v2/team/connect.ts"),root,"--force"],{
+  const cli=await exec(process.execPath,["--experimental-strip-types",join(profile,"runtime/opencode/plugins/vibe-v2/team/connect.ts"),root],{
     env:{...process.env,TEAM_SERVER_URL:h.serverUrl,TEAM_SESSION_TOKEN:h.sessions[1],TEAM_TASK_KEY:h.w.taskKey},timeout:10000,windowsHide:true});assert.match(cli.stdout,/Connected/);
   const {TeamMirror:InstalledMirror}=await import(modulePath("team/mirror.ts"));const mirror=new InstalledMirror(root);assert.equal((await mirror.sync()).ok,true);
   const result=await mirror.recordProgress("progress","from installed modules");assert.equal(result.status,"synced");await h.sync(0);
