@@ -81,10 +81,13 @@ function derive(password: string, salt: Buffer): Promise<Buffer> {
   return new Promise((resolve,reject) => scrypt(password,salt,32,{N:32768,r:8,p:1,maxmem:64*1024*1024},(error,key)=>error?reject(error):resolve(key)));
 }
 function validPassword(password: unknown): password is string {
-  return typeof password === "string" && password.length >= 8 && Buffer.byteLength(password) <= 1024;
+  return typeof password === "string" && password.length >= 6 && Buffer.byteLength(password) <= 1024;
 }
+
+/** Minimum password length. Lowered to 6 by owner decision for a private single-user deployment. */
+export const MIN_PASSWORD_LENGTH = 6;
 export async function hashPassword(password: string): Promise<string> {
-  if (!validPassword(password)) invalid("Invalid password: use at least 8 characters and at most 1024 UTF-8 bytes");
+  if (!validPassword(password)) invalid("Invalid password: use at least 6 characters and at most 1024 UTF-8 bytes");
   const salt=randomBytes(16), key=await derive(password,salt);
   return `scrypt$32768$8$1$${salt.toString("base64url")}$${key.toString("base64url")}`;
 }

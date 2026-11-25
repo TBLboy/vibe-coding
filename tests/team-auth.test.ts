@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createHash, scryptSync } from "node:crypto";
-import { hashPassword, verifyPassword, hashToken, issueSecret, LoginLimiter, SESSION_TTL_MS, WORKSPACE_TTL_MS, TOKEN_LIFETIMES } from "../server/domain/identity.ts";
+import { hashPassword, verifyPassword, hashToken, issueSecret, LoginLimiter, SESSION_TTL_MS, WORKSPACE_TTL_MS, TOKEN_LIFETIMES, MIN_PASSWORD_LENGTH } from "../server/domain/identity.ts";
 
 test("scrypt hashes use approved parameters, fresh salt and timing-safe verification", async () => {
   const password = "correct horse workspace";
@@ -29,6 +29,14 @@ test("token/key entropy, digest and approved TTL constants", () => {
   assert.equal(SESSION_TTL_MS,7*24*60*60*1000);
   assert.equal(WORKSPACE_TTL_MS,7*24*60*60*1000);
   assert.deepEqual(TOKEN_LIFETIMES,{day:24*60*60*1000,week:7*24*60*60*1000,month:30*24*60*60*1000,forever:null});
+});
+
+test("password length floor is 6 and hashes round-trip", async () => {
+  assert.equal(MIN_PASSWORD_LENGTH,6);
+  await assert.rejects(()=>hashPassword("12345"),/at least 6/);
+  const encoded=await hashPassword("123456");
+  assert.equal(await verifyPassword("123456",encoded),true);
+  assert.equal(await verifyPassword("123457",encoded),false);
 });
 
 test("login admission reserves concurrent slots and a success cannot erase other pending work", () => {

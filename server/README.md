@@ -85,7 +85,8 @@ files; a live WAL database is not safely backed up by copying the main file alon
 - Key rotation blocks future connections using the previous key; an already
   issued workspace token retains its own TTL. Removal revokes that member's
   workspace tokens; rejoining does not revive them. Session TTL is 7 days,
-  workspace token TTL 7 days; passwords use scrypt.
+  workspace token TTL 7 days; passwords use scrypt with a 6-character minimum
+  (lowered from 8 by owner decision for a private single-user deployment).
 - Login throttling uses normalized email and direct socket IP: five failures per
   15-minute window; pending password checks reserve those slots too. Forwarded IP
   headers are not trusted. Successful login does not erase other in-flight checks.
