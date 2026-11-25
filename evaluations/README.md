@@ -13,6 +13,42 @@ Use the exact target OpenCode build in an isolated profile with real provider ac
 
 L1 structure + L2 production adapter simulation run via `npm run verify`. L3/L4 real-model execution and actual host smoke are deliberately separate gates; no model score is manufactured by the unit tests.
 
+### Bounded provider-backed command/team-tool smoke
+
+`python3 evaluations/run_provider_host_smoke.py` is an explicit, paid-provider
+opt-in check, not part of `npm run verify`. It resolves the **existing host default
+route** through supported APIs and reuses its package/settings in a temporary
+owner-only profile. This fixture supports the observed API-key-backed built-in
+Anthropic adapter shape and an HTTPS `/v1` endpoint; unsupported settings or URLs
+with embedded credentials are rejected rather than copied. Discovery runs with
+the caller's existing authorization; subsequent children use a small allowlisted
+environment and temporary home. Only the isolated host receives the resolved key,
+in `VIBE_SMOKE_ROUTE_KEY`; the installer, workbench, and API clients do not
+inherit exported aliases of that key. No global settings are edited.
+Do not dump raw model/provider APIs: their metadata can include resolved keys.
+
+It stages the current plugin/Agents, starts an isolated OpenCode server/database,
+executes a real native `/fast`, binds a real temporary workbench, reloads, then runs
+`/balanced` with model-driven spec-query/progress/status tools. Assertions inspect
+native host transcripts (including Code Mode's completed `execute` plus host-owned
+`metadata.toolCalls`), a hidden spec marker, the real server's progress version/hash,
+and local bytes. A test-only observer **reads**, but does not change, outgoing
+context mode/team flags and actual results from `execute.after`: progress must be
+`synced`; every status call must return `ok: true` with no error. This works even
+if Code Mode omits a tool's intermediate return. No production code is changed.
+Test processes and temporary files are cleaned up on normal exit or POSIX
+`SIGTERM`/`SIGINT`; `SIGKILL` cannot be handled. Only an allowlisted summary is
+printed. Local regressions cover error payloads, inherited key aliases, and
+termination with real synthetic child processes. Run them with
+`python3 -m unittest evaluations.test_provider_host_smoke` (Node, no provider calls).
+
+This bounds a positive provider-backed fast/balanced and team-tool path. It does
+not replace the complete checklist above: strict reviewer lifecycle, negative
+permission cases, restart/compaction, all models, and L3/L4 scoring are not implied.
+If no authorized default route is available, it fails rather than substituting a
+catalogue-only or free-model route. Provide access through normal secure host
+configuration, never by pasting a key into a prompt.
+
 ## P2 reproducible fixtures
 
 Six added L4 cases use three miniature Python projects in `fixtures/`. They require Python 3 and Git only. No network, model or host is needed to prepare them. From the framework checkout:

@@ -108,3 +108,11 @@ files, directory collisions, and unmanaged copies.
 Real two-client, ten-account, restart/offline, pagination, rollback and isolated
 installer checks are in `tests/team-e2e.test.ts`. These local checks do not claim a
 live provider-backed OpenCode SDK activation, TLS deployment, or production audit.
+
+Local verified-TLS and process-write acceptance can be reproduced with
+`node --experimental-strip-types --test tests/team-tls-process.test.ts` (OpenSSL
+required). It creates an ephemeral CA and test-only HTTPS proxy in front of the real
+HTTP service, launches actual plugin clients with child-scoped CA trust, and checks
+bad-chain/hostname rejection, authentication, sync and four-process convergence.
+It never disables certificate validation or installs a system CA. The proxy is a
+test fixture, not a shipped production TLS/deployment configuration.

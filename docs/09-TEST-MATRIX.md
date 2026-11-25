@@ -81,12 +81,13 @@ Run `npm run test:core`.
   token auth and XSS escaping; v2 additive migration and independent WAL connections.
 - `tests/team-plugin-sync.test.ts`: real existing setup with fake HTTP/temp filesystem
   and child Git repos; unbound registry equivalence/no I/O, canonical binding and
-  repo/branch enforcement, primary/root/reviewer isolation, safe push/pull/restore,
+  authentication rejection and binding preservation, connect despite missing/extra
+  repositories and differing branches, primary/root/reviewer isolation, safe push/pull/restore,
   409 preservation/lost-response acknowledgment, old-version/deletion replay,
   unmanaged/conflict-copy retention, prototype-like path keys, corrupt/gapped/hash
   failure, atomic manifest recovery, symlink/case/stale-snapshot guards, live/stale
   lock behavior, budgets/backoff/auth/redirect/response limits and progress/tools/
-  bounded context without activity reads; executable CLI and no-raw-secret reconnect
+  bounded context without activity reads; executable CLI and parameterless reconnect
   schema/environment path. `team-manifest` retains own special keys.
 - T6 review regressions: initial pull/replacement at214/215/255-byte ASCII and
   255-byte multibyte basenames, byte-exact binary conflict preservation and temp
@@ -99,9 +100,22 @@ Run `npm run test:core`.
   authoritative index plus five-layer initialization, file/symlink collision safety,
   Q1/Q3 projection and shared-write rejection, ten-account Q2 convergence, task/board
   removal, restart/offline recovery, 205-document pagination/checkpoint convergence,
-  atomic index-bootstrap rollback, and isolated installer/actual module wiring. This
+  atomic index-bootstrap rollback, and isolated installer/actual module wiring,
+  including connecting without a Git checkout. This
   validates the product slice locally; it is not a live provider-backed OpenCode SDK
   or production deployment smoke.
+- `tests/team-tls-process.test.ts` plus `tests/helpers/team-acceptance-worker.ts`:
+  temporary OpenSSL CA/leaves and a test-only TLS proxy front the real file-backed
+  workbench. Separate Node processes use the actual plugin client/connector/mirror,
+  with `NODE_EXTRA_CA_CERTS` scoped to each child and normal certificate validation.
+  Tests assert HTTPS login/connect/pull/push, invalid task-key/workspace-token401,
+  untrusted-chain and trusted-chain hostname rejection (independent TLS error oracle
+  plus zero HTTP at proxy/backend), no failed binding/write, and private credentials.
+  Four independent identities/roots then append three rounds over verified TLS:
+  exactly12 writes, four version3 progress files, contiguous13-event history including
+  index, monotonic/final-head cursors, byte/hash/version agreement at every mirror,
+  no409/lock residue/output secrets. OpenSSL must be available; absence is a failure,
+  not a skipped pass. This is finite concurrency acceptance, not a stress benchmark.
 
 ## B. OpenCode live smoke tests
 
@@ -121,6 +135,33 @@ fail-closed lock-busy results; the manifest cursor remained valid, no lock/guard
 residue or credential leakage was observed. A generated self-signed local HTTPS
 endpoint served successfully with private key mode `0600`; this validates local TLS
 plumbing only, not production certificates, proxy policy or deployment.
+
+The subsequent automated CA/proxy tests above supersede that stand-alone HTTPS
+probe **for the local workbench/plugin transport claim**: certificate validation is
+not disabled, system trust is not changed, and actual authenticated sync traffic
+crosses TLS. They also extend process coverage from lock contention to real writes
+and convergence. They do not change the provider no-route/region403 limitation,
+validate a production proxy configuration, or establish Windows ACL compliance.
+
+Provider-backed follow-up: `evaluations/run_provider_host_smoke.py` provides a
+bounded **real-model** acceptance, distinct from the earlier failed isolated
+profile probes. The current authorized default route (`llmcenter/claude-sonnet-5-5`
+on OpenCode2.3.0) successfully executes native `/fast` and `/balanced` plus
+`workspace_query_spec`, `workspace_record_progress`, `workspace_status`. It checks
+host-owned completed tool traces (including Code Mode nesting), a hidden spec
+challenge, server version/local-file hash agreement and observed authoritative
+mode/team context. A read-only actual-tool hook additionally verifies progress
+returned `synced` and status returned `ok: true` with no error, independently of
+the model's Code Mode return formatting.
+The fixture uses the current staged plugin and a separate
+temporary configuration/database, reusing existing authorization via environment
+substitution without changing global configuration. It does not establish all
+provider routes or the full strict/negative/restart/compaction release checklist.
+Offline harness tests check route-field selection, rejection of unsupported
+settings/packages and credential-bearing URLs, and failure of completed status
+calls with error payloads. A synthetic subprocess flow exercises aliased key
+isolation across discovery/host/installer/client/workbench and SIGTERM cleanup
+during the model wait. Do not print raw provider-routing responses.
 
 | Case | Expected result |
 |---|---|
