@@ -103,6 +103,41 @@ Run `npm run test:core`.
   validates the product slice locally; it is not a live provider-backed OpenCode SDK
   or production deployment smoke.
 
+### Mock Web overview (separate prototype)
+
+- `tests/web-overview-view.test.ts`: actual overview renderer with a minimal DOM
+  contract double checks content order, four status groups, retained metadata,
+  read-only task rows, safe change links, default-five disclosure/expansion and
+  empty/read-failure/retry states. A syntax regression checks every Web script.
+- `tests/web-mock-api.test.ts` and `tests/web-prototype-shell.test.ts` retain mock
+  flows, role limits, inert text, routes, local-only resources and static server checks.
+- Browser acceptance for this layout change checks real 1280px/390px/320px geometry,
+  long/unequal/empty fixtures through the view's data interface, keyboard disclosure
+  and log navigation. DOM doubles do not establish layout or visual quality;
+  phone hardware, assistive technology and cross-browser acceptance are separate.
+
+### Mock engineering-log explorer
+
+- `tests/web-log-explorer.test.ts` checks path-derived nested folders, exact file
+  basenames, repeated member filenames, special Map keys, CJK names, empty folders
+  and source immutability. All Web scripts are syntax-checked by the overview suite.
+- Scoped browser acceptance checks icon-free text directory, native folder keyboard
+  disclosure, selected ancestor reveal, retained unrelated folder state, log URL/back
+  navigation, narrow disclosure/focus, inert content, empty/missing/read retry states
+  and rapid read replacement. These checks do not claim a full ARIA tree widget,
+  screen-reader certification or cross-browser acceptance.
+
+### Mock members and access
+
+- `tests/web-members-view.test.ts` drives the real renderer with a minimal DOM
+  double: two-surface order, combined identity/email, role/activity, owner-only
+  requests/invitation controls, member results without private collections,
+  placeholder-only three-step guide, repository disclosure, empty/read-retry states.
+- Scoped browser checks cover desktop/narrow/long identity layouts, real mock API
+  invitation/approval/rejection and failure recovery, input/focus restoration,
+  shared guide modal, keyboard disclosure and honest copy feedback. DOM doubles
+  do not prove visual quality; no real backend, devices or assistive-tech certification.
+
 ## B. OpenCode live smoke tests
 
 These are required before declaring the framework installable; pure core tests do not cover them.

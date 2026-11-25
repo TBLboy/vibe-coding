@@ -2,6 +2,7 @@ node_modules/
 coverage/
 dist/
 *.log
+.playwright-mcp/
 .DS_Store
 Thumbs.db
 __pycache__/
