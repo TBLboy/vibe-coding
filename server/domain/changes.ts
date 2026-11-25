@@ -1,6 +1,6 @@
 import { Buffer } from "node:buffer";
 import { DatabaseSync } from "node:sqlite";
-import { validateChanges, type Change } from "../../runtime/core/team/change-feed.ts";
+import { validateChanges, type Change } from "../../shared/team-contracts/change-feed.ts";
 import { type TeamDatabase } from "../store/sqlite.ts";
 
 export interface ChangeWithContent extends Change {

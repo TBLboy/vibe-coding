@@ -106,8 +106,9 @@ after successful metadata/authentication validation and preserves pre-existing
 files, directory collisions, and unmanaged copies.
 
 Real two-client, ten-account, restart/offline, pagination, rollback and isolated
-installer checks are in `tests/team-e2e.test.ts`. These local checks do not claim a
-live provider-backed OpenCode SDK activation, TLS deployment, or production audit.
+installer checks are in `tests/team-e2e.test.ts` on the combined baseline branch
+`feat/team-workspace`; this branch carries no plugin code. These local checks do not
+claim a live provider-backed OpenCode SDK activation, TLS deployment, or production audit.
 
 Local verified-TLS and process-write acceptance can be reproduced with
 `node --experimental-strip-types --test tests/team-tls-process.test.ts` (OpenSSL

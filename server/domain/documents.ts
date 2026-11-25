@@ -1,8 +1,8 @@
 import { Buffer } from "node:buffer";
 import { randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
-import { hashContent } from "../../runtime/core/team/manifest.ts";
-import { layerOf, validateServerPath, type Layer } from "../../runtime/core/team/layout.ts";
+import { hashContent } from "../../shared/team-contracts/manifest.ts";
+import { layerOf, validateServerPath, type Layer } from "../../shared/team-contracts/layout.ts";
 import { withTransaction, type TeamDatabase } from "../store/sqlite.ts";
 
 const MAX_DOCUMENT_BYTES = 1024 * 1024;

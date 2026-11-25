@@ -3,7 +3,7 @@ import type { TeamDatabase } from "../store/sqlite.ts";
 import type { Account } from "./identity.ts";
 import { createTaskKey } from "./access.ts";
 import { bodyObject, invalid, notFound, text } from "../http/errors.ts";
-import { MEMORY_LAYERS } from "../../runtime/core/team/layout.ts";
+import { MEMORY_LAYERS } from "../../shared/team-contracts/layout.ts";
 import { writeDocument } from "./documents.ts";
 
 export interface WorkspaceInfo { id:string; orgId:string; name:string; ownerAccountId:string; repos:{url:string;branch:string}[]; seq:number }

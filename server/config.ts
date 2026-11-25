@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { assertId } from "../runtime/core/team/binding.ts";
+import { assertId } from "../shared/team-contracts/binding.ts";
 
 export interface TeamConfig { host:string; port:number; dbPath:string; orgId:string }
 export function readConfig(env:NodeJS.ProcessEnv=process.env): TeamConfig {

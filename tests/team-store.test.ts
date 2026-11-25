@@ -12,7 +12,7 @@ import {
 import { getChanges } from "../server/domain/changes.ts";
 import { applyMigrations, openTeamDatabase } from "../server/store/sqlite.ts";
 import { CURRENT_SCHEMA_VERSION } from "../server/store/schema.ts";
-import { hashContent } from "../runtime/core/team/manifest.ts";
+import { hashContent } from "../shared/team-contracts/manifest.ts";
 
 function open() {
   const store = openTeamDatabase(":memory:");

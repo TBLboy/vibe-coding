@@ -1,8 +1,8 @@
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import type { TeamDatabase } from "../store/sqlite.ts";
 import { CURRENT_SCHEMA_VERSION } from "../store/schema.ts";
-import { assertId } from "../../runtime/core/team/binding.ts";
-import { layerOf, validateServerPath } from "../../runtime/core/team/layout.ts";
+import { assertId } from "../../shared/team-contracts/binding.ts";
+import { layerOf, validateServerPath } from "../../shared/team-contracts/layout.ts";
 import { login, LoginLimiter, normalizeEmail, authenticateSession } from "../domain/identity.ts";
 import { authenticateWorkspace, connectWorkspace, requireOwner, rotateTaskKey, type WorkspaceAuth } from "../domain/access.ts";
 import { createWorkspace, listWorkspaces, workspaceInfo } from "../domain/workspace.ts";

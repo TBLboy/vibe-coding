@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { normalizeScope, findScopeOverlaps } from "../runtime/core/team/task-scope.ts";
+import { normalizeScope, findScopeOverlaps } from "../server/domain/task-scope.ts";
 
 test("scope normalization canonicalizes separators/leading ./ and returns a sorted set", () => {
   const scope = [" ./src\\auth\\ ", "src//auth/login.ts", "././src/auth/", " README.md "];

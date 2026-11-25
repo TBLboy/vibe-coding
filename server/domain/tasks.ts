@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { TeamDatabase } from "../store/sqlite.ts";
 import type { WorkspaceAuth } from "./access.ts";
-import { normalizeScope, findScopeOverlaps, type ScopeOverlap } from "../../runtime/core/team/task-scope.ts";
+import { normalizeScope, findScopeOverlaps, type ScopeOverlap } from "./task-scope.ts";
 import { ApiError, forbidden, invalid, notFound, text } from "../http/errors.ts";
 import { getDocument, writeDocument } from "./documents.ts";
 

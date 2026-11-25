@@ -49,9 +49,10 @@ Run `npm run test:core`.
 
 ### Team workspace foundations (opt-in product extension)
 
-- `tests/team-projection.test.ts`, `team-manifest.test.ts`, `team-binding.test.ts`:
-  shared path projection/private-area exclusion, stable manifests/hashes and binding validation.
-- `tests/team-change-feed.test.ts`: contiguous sequences, path/op/hash/version validation,
+Branch scope (`feat/team-workspace-workbench`): this branch runs the server tests and the shared contract tests in `shared/team-contracts/`. The bullets below for plugin-only tests (`team-projection`, `team-write-router`, `team-plugin-sync` and the T6 regressions) describe tests kept on `feat/team-workspace-plugin`. The cross-side acceptance (`team-e2e`, `team-tls-process`) stays on the combined baseline `feat/team-workspace`. None of those run here.
+
+- `shared/team-contracts/manifest.test.ts`, `binding.test.ts`: stable manifests/hashes and binding validation. `contracts-sync.test.ts` fails when a shared contract file differs from the committed `SHA256SUMS` or is not listed. Path projection and private-area exclusion are tested by the plugin-only `tests/team-projection.test.ts`.
+- `shared/team-contracts/change-feed.test.ts`: contiguous sequences, path/op/hash/version validation,
   cursor advancement and unsafe integer rejection.
 - `tests/team-store.test.ts`: real SQLite migrations and pragmas, optimistic version
   checks, historical content and tombstones, resurrection, workspace isolation,
