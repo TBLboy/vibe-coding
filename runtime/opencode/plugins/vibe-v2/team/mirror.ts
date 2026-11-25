@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { MEMORY_LAYERS } from "../../../../core/team/layout.ts";
+import { MEMORY_LAYERS } from "../../../../../shared/team-contracts/layout.ts";
 import { readdir } from "node:fs/promises";
-import { validateBinding } from "../../../../core/team/binding.ts";
-import { parseManifest, serializeManifest, hashContent, type Manifest } from "../../../../core/team/manifest.ts";
+import { validateBinding } from "../../../../../shared/team-contracts/binding.ts";
+import { parseManifest, serializeManifest, hashContent, type Manifest } from "../../../../../shared/team-contracts/manifest.ts";
 import { projectServerPath, unprojectLocalPath } from "../../../../core/team/projection.ts";
-import { validateChanges, type Change } from "../../../../core/team/change-feed.ts";
+import { validateChanges, type Change } from "../../../../../shared/team-contracts/change-feed.ts";
 import { routeLocalWrite, routeWriteConflict } from "../../../../core/team/write-router.ts";
 import { loadCredentials, type Credentials } from "./binding.ts";
 import { SafeFiles, withProjectLock, artifact } from "./files.ts";

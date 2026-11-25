@@ -15,6 +15,8 @@ L1 structure + L2 production adapter simulation run via `npm run verify`. L3/L4 
 
 ### Bounded provider-backed command/team-tool smoke
 
+Branch scope: this harness (`run_provider_host_smoke.py`, `provider_host_fixture.ts`, `test_provider_host_smoke.py`) needs both the plugin and a real workbench server, so it lives on the combined baseline `feat/team-workspace` and is not present on `feat/team-workspace-plugin`. The description is kept here for reference.
+
 `python3 evaluations/run_provider_host_smoke.py` is an explicit, paid-provider
 opt-in check, not part of `npm run verify`. It resolves the **existing host default
 route** through supported APIs and reuses its package/settings in a temporary

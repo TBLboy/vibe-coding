@@ -1,8 +1,8 @@
 import { lstat, mkdir, readdir, readFile, writeFile, rename, unlink, realpath, open } from "node:fs/promises";
 import { resolve, sep, dirname } from "node:path";
 import { randomBytes, randomUUID } from "node:crypto";
-import { validateServerPath } from "../../../../core/team/layout.ts";
-import { hashContent } from "../../../../core/team/manifest.ts";
+import { validateServerPath } from "../../../../../shared/team-contracts/layout.ts";
+import { hashContent } from "../../../../../shared/team-contracts/manifest.ts";
 
 export const missing=(error:unknown):boolean=>(error as NodeJS.ErrnoException)?.code==="ENOENT";
 export const artifact=(path:string):boolean=>/(?:\.conflict-|\.tmp-|\.copy(?:\.|$)|[ -]copy(?:[ .(/-]|$)|\(copy(?: \d+)?\)|副本)/iu.test(path);

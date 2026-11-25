@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { layerOf, validateServerPath } from "../runtime/core/team/layout.ts";
+import { layerOf, validateServerPath } from "../shared/team-contracts/layout.ts";
 import {
   buildMirrorPlan,
   projectServerPath,

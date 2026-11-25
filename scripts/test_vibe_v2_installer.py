@@ -110,6 +110,7 @@ class InstallerTests(unittest.TestCase):
             source = base / "source"
             (source / "docs").mkdir(parents=True)
             (source / "schemas").mkdir(parents=True)
+            (source / "shared" / "team-contracts").mkdir(parents=True)
             (source / "runtime" / "core").mkdir(parents=True)
             (source / "runtime" / "core" / "mode.ts").write_text("export {};\n", encoding="utf-8")
             plugin = source / "runtime" / "opencode" / "plugins" / "vibe-v2"
@@ -159,6 +160,7 @@ class InstallerTests(unittest.TestCase):
             source = base / "source"
             (source / "docs").mkdir(parents=True)
             (source / "schemas").mkdir(parents=True)
+            (source / "shared" / "team-contracts").mkdir(parents=True)
             (source / "runtime" / "core").mkdir(parents=True)
             (source / "runtime" / "core" / "mode.ts").write_text("export {};\n", encoding="utf-8")
             plugin = source / "runtime" / "opencode" / "plugins" / "vibe-v2"

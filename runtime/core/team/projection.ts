@@ -1,4 +1,4 @@
-import { layerOf, validateServerPath, type PathValidation } from "./layout.ts";
+import { layerOf, validateServerPath, type PathValidation } from "../../../shared/team-contracts/layout.ts";
 
 export type Projection =
   | { kind: "root"; relativePath: string }

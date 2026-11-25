@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { assertCanBind, validateBinding, type Binding } from "../runtime/core/team/binding.ts";
+import { assertCanBind, validateBinding, type Binding } from "./binding.ts";
 
 const VALID: Binding = {
   workspaceId: "ws_alpha1",

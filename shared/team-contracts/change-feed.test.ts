@@ -4,7 +4,7 @@ import {
   advanceCursor,
   validateChanges,
   type Change,
-} from "../runtime/core/team/change-feed.ts";
+} from "./change-feed.ts";
 
 const HASH = "a".repeat(64);
 

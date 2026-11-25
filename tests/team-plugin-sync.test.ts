@@ -11,7 +11,7 @@ import { setup } from "../runtime/opencode/plugins/vibe-v2/setup.ts";
 import type { HostContext, ToolDefinition, JsonValue } from "../runtime/opencode/plugins/vibe-v2/host-contract.ts";
 import { teamContext } from "../runtime/opencode/plugins/vibe-v2/team/context.ts";
 import { TeamClient } from "../runtime/opencode/plugins/vibe-v2/team/client.ts";
-import { hashContent } from "../runtime/core/team/manifest.ts";
+import { hashContent } from "../shared/team-contracts/manifest.ts";
 import { connectDirectory, loadCredentials } from "../runtime/opencode/plugins/vibe-v2/team/binding.ts";
 import { shouldEnableTeamModules } from "../runtime/opencode/plugins/vibe-v2/team/gate.ts";
 import { TeamMirror } from "../runtime/opencode/plugins/vibe-v2/team/mirror.ts";

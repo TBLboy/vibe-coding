@@ -1,6 +1,6 @@
-import { assertId } from "./binding.ts";
-import { layerOf } from "./layout.ts";
-import { classifyLocal, type ManifestEntry } from "./manifest.ts";
+import { assertId } from "../../../shared/team-contracts/binding.ts";
+import { layerOf } from "../../../shared/team-contracts/layout.ts";
+import { classifyLocal, type ManifestEntry } from "../../../shared/team-contracts/manifest.ts";
 import { projectServerPath } from "./projection.ts";
 
 export type WriteWarningCode = "namespace" | "not-owner" | "server-managed" | "unmapped" | "conflict";

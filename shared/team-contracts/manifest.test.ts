@@ -8,7 +8,7 @@ import {
   serializeManifest,
   setEntry,
   type Manifest,
-} from "../runtime/core/team/manifest.ts";
+} from "./manifest.ts";
 
 const HASH_ABC = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
 

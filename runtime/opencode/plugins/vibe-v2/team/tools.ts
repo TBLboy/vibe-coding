@@ -2,7 +2,7 @@ import type { ToolDefinition } from "../host-contract.ts";
 import { loadBinding, connectDirectory } from "./binding.ts";
 import { TeamError } from "./client.ts";
 import { TeamMirror } from "./mirror.ts";
-import { validateServerPath } from "../../../../core/team/layout.ts";
+import { validateServerPath } from "../../../../../shared/team-contracts/layout.ts";
 
 export function workspaceTools(root:string,mirror:TeamMirror,allowed:(sessionID:string)=>Promise<boolean>):ToolDefinition[] {
   const specs:{name:string;properties:Record<string,unknown>;required?:string[];run:(input:Record<string,unknown>,signal?:AbortSignal)=>Promise<unknown>}[]=[

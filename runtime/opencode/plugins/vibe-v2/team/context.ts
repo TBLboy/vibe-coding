@@ -1,4 +1,4 @@
-import { parseManifest } from "../../../../core/team/manifest.ts";
+import { parseManifest } from "../../../../../shared/team-contracts/manifest.ts";
 import { SafeFiles } from "./files.ts";
 import type { TeamMirror } from "./mirror.ts";
 

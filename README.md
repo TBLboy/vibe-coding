@@ -29,7 +29,7 @@ Four concepts only:
 
 - No compatibility with, or migration from, any previous framework.
 - No independent reviewer toggle. `fast` and `balanced` never invoke the reviewer; `strict` requires reviewer `go` before Task completion. Native background reviewer launches stay pending until Runtime reads the bound child's successful terminal result; see the [completion protocol](docs/03-STATE-MACHINE.md).
-- Team-workspace development is opt-in. Server/board instructions are in [`server/README.md`](server/README.md), and explicit connection plus safe plugin mirroring in [the team plugin guide](runtime/opencode/plugins/vibe-v2/team/README.md). Local real-server/two-client acceptance is covered by `tests/team-e2e.test.ts`; live OpenCode SDK activation and production deployment remain separate gates.
+- Team-workspace development is opt-in. This branch (`feat/team-workspace-plugin`) carries the OpenCode plugin; explicit connection plus safe plugin mirroring are in [the team plugin guide](runtime/opencode/plugins/vibe-v2/team/README.md). The headless workbench server lives on `feat/team-workspace-workbench`, and the real-server/two-client acceptance (`tests/team-e2e.test.ts`) stays on the combined baseline `feat/team-workspace`. Live OpenCode SDK activation and production deployment remain separate gates.
 - Task policy is frozen when the Task starts; changing Session mode affects new work only.
 - No Goal runtime, Run state machine, event-sourced operation ledger, SQLite projection, standalone Evidence model, default MCPs or third-party workflow plugins.
 - No logs for file reads, searches, shell commands, ordinary retries or intermediate actions.
