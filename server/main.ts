@@ -27,9 +27,9 @@ export async function main(): Promise<void> {
       if(!email || !password) throw new Error("First startup requires TEAM_BOOTSTRAP_EMAIL and TEAM_BOOTSTRAP_PASSWORD");
       await createAccount(store,{orgId:config.orgId,email,password,displayName:displayName??email});
     }
-    const server=createTeamServer(store,{orgId:config.orgId,logger:entry=>process.stdout.write(JSON.stringify(entry)+"\n")});
+    const server=createTeamServer(store,{orgId:config.orgId,logger:entry=>process.stdout.write(JSON.stringify(entry)+"\n"),...(config.tls?{tls:config.tls}:{})});
     await new Promise<void>((resolve,reject)=>{server.once("error",reject);server.listen(config.port,config.host,resolve);});
-    process.stdout.write(JSON.stringify({event:"listening",host:config.host,port:(server.address() as AddressInfo).port})+"\n");
+    process.stdout.write(JSON.stringify({event:"listening",host:config.host,port:(server.address() as AddressInfo).port,tls:config.tls?"https":"http"})+"\n");
     let stopping=false;
     const stop=()=>{
       if(stopping)return; stopping=true;

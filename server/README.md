@@ -11,7 +11,8 @@ environment; it does not read or modify OpenCode configuration.
 
 | Variable | Default / meaning |
 |---|---|
-| `TEAM_HOST` | `127.0.0.1`; expose outside loopback only behind your TLS/deployment boundary |
+| `TEAM_HOST` | `127.0.0.1`; expose outside loopback only behind TLS |
+| `TEAM_TLS_CERT`, `TEAM_TLS_KEY` | Optional PEM paths. Set both to serve HTTPS directly; set neither to serve HTTP |
 | `TEAM_PORT` | `7410`; `0` chooses a temporary port for tests |
 | `TEAM_DB_PATH` | `team-data/workspace.sqlite`, ignored by this repository |
 | `TEAM_ORG_ID` | `org_default`; one configured organization per server |
@@ -22,6 +23,22 @@ Inject passwords securely into the environment, not into source, shell history,
 logs or git. The data directory must be owner-only on Unix; a new directory is
 created as `0700`, and the SQLite file is `0600`. Existing directory permissions
 are never silently changed. Windows deployments must enforce equivalent ACLs.
+
+Environment-variable configuration; a missing PEM fails startup rather than falling
+back to plain HTTP.
+
+```sh
+# Self-signed HTTPS, reachable from other machines.
+TEAM_HOST=0.0.0.0 TEAM_PORT=8443 \
+TEAM_TLS_CERT=/home/ubuntu/vibe-data/tls/cert.pem \
+TEAM_TLS_KEY=/home/ubuntu/vibe-data/tls/key.pem \
+TEAM_DB_PATH=/home/ubuntu/vibe-data/workspace.sqlite \
+npm run start:team
+```
+
+Clients must trust the issuing CA, e.g. the plugin side sets
+`NODE_EXTRA_CA_CERTS=/path/to/ca.crt`. Never expose the plain HTTP mode outside
+loopback: passwords and identity tokens cross the wire in the request headers.
 
 There is no anonymous signup API. To provision another internal account, supply
 `TEAM_ACCOUNT_EMAIL`, `TEAM_ACCOUNT_PASSWORD`, optional `TEAM_ACCOUNT_NAME` and

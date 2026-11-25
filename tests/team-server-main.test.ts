@@ -13,6 +13,11 @@ test("server configuration defaults to loopback and validates ports", () => {
   assert.equal(readConfig({TEAM_PORT:"0"}).port,0);
   for(const port of ["-1","65536","abc","1.5"]) assert.throws(()=>readConfig({TEAM_PORT:port}),/TEAM_PORT/);
   assert.throws(()=>readConfig({TEAM_ORG_ID:"../bad"}),/workspaceId/);
+  assert.equal(readConfig({}).tls,undefined);
+  assert.deepEqual(readConfig({TEAM_TLS_CERT:"/c.pem",TEAM_TLS_KEY:"/k.pem"}).tls,{cert:"/c.pem",key:"/k.pem"});
+  // A half-configured listener would silently serve plain HTTP when TLS was intended.
+  assert.throws(()=>readConfig({TEAM_TLS_CERT:"/c.pem"}),/TEAM_TLS_CERT/);
+  assert.throws(()=>readConfig({TEAM_TLS_KEY:"/k.pem"}),/TEAM_TLS_CERT/);
 });
 
 test("production entrypoint bootstraps explicitly, serves HTTP and shuts down with persistent hashes", {timeout:30000}, async t => {

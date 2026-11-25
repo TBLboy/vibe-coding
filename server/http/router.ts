@@ -1,4 +1,6 @@
 import { createServer, type IncomingMessage, type Server } from "node:http";
+import { createServer as createSecureServer, type Server as SecureServer } from "node:https";
+import { readFileSync } from "node:fs";
 import type { TeamDatabase } from "../store/sqlite.ts";
 import { CURRENT_SCHEMA_VERSION } from "../store/schema.ts";
 import { assertId } from "../../shared/team-contracts/binding.ts";
@@ -16,7 +18,7 @@ import { getBoard, touchPresence } from "../domain/board.ts";
 import { boardForm, renderBoard } from "./board.ts";
 
 export interface RequestLog { event:"api_request"; method:string; route:string; status:number; durationMs:number }
-export interface ServerOptions { orgId:string; now?:()=>number; logger?:(entry:RequestLog)=>void }
+export interface ServerOptions { orgId:string; now?:()=>number; logger?:(entry:RequestLog)=>void; tls?:{cert:string;key:string} }
 const MAX_BODY=2*1024*1024;
 
 function readBody(req:IncomingMessage,form=false): Promise<Record<string,unknown>> {
@@ -85,10 +87,10 @@ function mayWrite(auth:WorkspaceAuth,path:string): void {
   if((layer==="constitution" || layer==="specs") && auth.role!=="owner") forbidden();
 }
 
-export function createTeamServer(store:TeamDatabase, options:ServerOptions): Server {
+export function createTeamServer(store:TeamDatabase, options:ServerOptions): Server | SecureServer {
   const clock=options.now??Date.now, limiter=new LoginLimiter(), counters=new Map<string,number>();
   store.db.prepare("DELETE FROM idempotency WHERE created_at<=?").run(clock()-24*60*60*1000);
-  return createServer({requestTimeout:5000,headersTimeout:5000,keepAliveTimeout:1000,maxHeaderSize:16384},async(req,res)=>{
+  const handler = async(req:IncomingMessage,res:import("node:http").ServerResponse)=>{
     const started=Date.now(), method=req.method??"GET";
     let route="not_found", reply:Reply, html:string|undefined;
     let accessed:{workspaceId:string;accountId:string}|undefined;
@@ -243,5 +245,10 @@ export function createTeamServer(store:TeamDatabase, options:ServerOptions): Ser
     const counter=`${method} ${route} ${reply.status}`; counters.set(counter,(counters.get(counter)??0)+1);
     try {options.logger?.({event:"api_request",method,route,status:reply.status,durationMs:Date.now()-started});}
     catch {process.stderr.write("Team workspace request logger failed\n");}
-  });
+  };
+  const tuning = {requestTimeout:5000,headersTimeout:5000,keepAliveTimeout:1000,maxHeaderSize:16384};
+  // TLS is opt-in; without it the server stays plain HTTP and must not be exposed publicly.
+  return options.tls
+    ? createSecureServer({...tuning,cert:readFileSync(options.tls.cert),key:readFileSync(options.tls.key)},handler)
+    : createServer(tuning,handler);
 }
