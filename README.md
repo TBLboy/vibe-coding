@@ -29,7 +29,7 @@ Four concepts only:
 
 - No compatibility with, or migration from, any previous framework.
 - No independent reviewer toggle. `fast` and `balanced` never invoke the reviewer; `strict` requires reviewer `go` before Task completion. Native background reviewer launches stay pending until Runtime reads the bound child's successful terminal result; see the [completion protocol](docs/03-STATE-MACHINE.md).
-- Team-workspace development is opt-in. Server/board instructions are in [`server/README.md`](server/README.md). The team plugin guide lives on `feat/team-workspace-plugin`, and the real-server/two-client acceptance (`tests/team-e2e.test.ts`) stays on the combined baseline `feat/team-workspace`. Live OpenCode SDK activation and production deployment remain separate gates.
+- Workbench is a single-user, API-only worklog sync server (no accounts, members or web UI). Run and API instructions are in [`server/README.md`](server/README.md). The OpenCode sync plugin lives on `feat/team-workspace-plugin`; real-server/two-client acceptance (T10) is not yet written. Live OpenCode SDK activation and production deployment remain separate gates.
 - Task policy is frozen when the Task starts; changing Session mode affects new work only.
 - No Goal runtime, Run state machine, event-sourced operation ledger, SQLite projection, standalone Evidence model, default MCPs or third-party workflow plugins.
 - No logs for file reads, searches, shell commands, ordinary retries or intermediate actions.

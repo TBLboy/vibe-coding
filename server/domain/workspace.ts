@@ -1,51 +1,59 @@
 import { randomUUID } from "node:crypto";
 import type { TeamDatabase } from "../store/sqlite.ts";
-import type { Account } from "./identity.ts";
-import { createTaskKey } from "./access.ts";
-import { bodyObject, invalid, notFound, text } from "../http/errors.ts";
-import { MEMORY_LAYERS } from "../../shared/team-contracts/layout.ts";
+import { ApiError, invalid, notFound, text } from "../http/errors.ts";
 import { writeDocument } from "./documents.ts";
+import { issueWorkspaceKey } from "./key.ts";
+import { DEFAULT_TYPE, getTemplate } from "../templates/registry.ts";
 
-export interface WorkspaceInfo { id:string; orgId:string; name:string; ownerAccountId:string; repos:{url:string;branch:string}[]; seq:number }
-export function workspaceInfo(store:TeamDatabase, orgId:string, id:string): WorkspaceInfo {
-  const row=store.db.prepare("SELECT id,org_id,name,created_by FROM workspace WHERE id=? AND org_id=? AND archived_at IS NULL")
-    .get(id,orgId) as {id:string;org_id:string;name:string;created_by:string}|undefined;
-  if(!row) notFound();
-  const repos=store.db.prepare("SELECT url,branch FROM workspace_repo WHERE workspace_id=? ORDER BY is_primary DESC,id")
-    .all(id) as unknown as {url:string;branch:string}[];
-  const sequence=store.db.prepare("SELECT seq FROM workspace_seq WHERE workspace_id=?").get(id) as {seq:number}|undefined;
-  return {id:row.id,orgId:row.org_id,name:row.name,ownerAccountId:row.created_by,repos:repos.map(r=>({...r})),seq:sequence?.seq??0};
+export interface WorkspaceInfo { id: string; name: string; type: string; createdAt: string }
+
+interface Row { id: string; name: string; type: string; created_at: string }
+const info = (r: Row): WorkspaceInfo => ({ id: r.id, name: r.name, type: r.type, createdAt: r.created_at });
+
+export function getWorkspace(store: TeamDatabase, id: string): WorkspaceInfo {
+  const row = store.db.prepare("SELECT id,name,type,created_at FROM workspace WHERE id=? AND archived_at IS NULL").get(id) as Row | undefined;
+  if (!row) notFound();
+  return info(row);
 }
-export function createWorkspace(store:TeamDatabase, account:Account, body:Record<string,unknown>, now:number): {workspace:WorkspaceInfo; taskKey:string} {
-  const name=text(body.name,"name",100);
-  if(!Array.isArray(body.repos) || body.repos.length<1 || body.repos.length>20) invalid("Provide 1 to 20 repositories");
-  const repos=body.repos.map(value=>{
-    const repo=bodyObject(value), url=text(repo.url,"repository URL",2048), branch=text(repo.branch,"branch",255);
-    if(url.includes("://")) {
-      let parsed:URL; try {parsed=new URL(url);} catch {invalid("Invalid repository URL");}
-      if(!["https:","http:","ssh:","git:"].includes(parsed.protocol) || !parsed.hostname || parsed.password ||
-        ((parsed.protocol==="https:" || parsed.protocol==="http:") && parsed.username)) invalid("Invalid repository URL or embedded credentials");
-    } else if(!/^[^\s@]+@[^\s:]+:.+$/u.test(url)) invalid("Invalid repository URL");
-    return {url,branch};
-  });
-  const id=`ws_${randomUUID()}`;
-  return store.transaction(db=>{
-    db.prepare("INSERT INTO workspace (id,org_id,name,slug,created_by,created_at) VALUES (?,?,?,?,?,?)")
-      .run(id,account.orgId,name,id,account.id,new Date(now).toISOString());
-    db.prepare("INSERT INTO membership (workspace_id,account_id,role,status,created_at,decided_at) VALUES (?,?,'owner','active',?,?)")
-      .run(id,account.id,now,now);
+
+/** Creates the workspace, its Key and the type template files in one transaction. */
+export function createWorkspace(store: TeamDatabase, body: Record<string, unknown>, now: number): { workspace: WorkspaceInfo; key: string } {
+  const name = text(body.name, "name", 100);
+  const type = body.type === undefined ? DEFAULT_TYPE : body.type;
+  if (typeof type !== "string") invalid("Invalid type");
+  const pack = getTemplate(type);
+  if (!pack) throw new ApiError(422, "unsupported_type", `Unsupported workspace type: ${type}`);
+  const id = `ws_${randomUUID()}`, iso = new Date(now).toISOString();
+  return store.transaction((db) => {
+    db.prepare("INSERT INTO org (id,name,created_at) VALUES ('single','single',?) ON CONFLICT(id) DO NOTHING").run(iso);
+    db.prepare("INSERT INTO workspace (id,org_id,name,slug,created_by,created_at,type) VALUES (?,?,?,?,?,?,?)")
+      .run(id, "single", name, id, "admin", iso, type);
     db.prepare("INSERT INTO workspace_seq (workspace_id,seq) VALUES (?,0)").run(id);
-    repos.forEach((repo,i)=>db.prepare("INSERT INTO workspace_repo (id,workspace_id,url,branch,is_primary) VALUES (?,?,?,?,?)")
-      .run(`repo_${randomUUID()}`,id,repo.url,repo.branch,i===0?1:0));
-    const taskKey=createTaskKey(store,id,now,null);
-    writeDocument(store,{workspaceId:id,path:"index.json",accountId:account.id,expectedVersion:0,
-      content:JSON.stringify({schemaVersion:1,workspaceId:id,layers:MEMORY_LAYERS}),now:new Date(now).toISOString()});
-    return {workspace:workspaceInfo(store,account.orgId,id),taskKey};
+    const key = issueWorkspaceKey(store, id, now);
+    for (const f of pack.files) writeDocument(store, { workspaceId: id, path: f.path, content: f.content, expectedVersion: 0, now: iso });
+    return { workspace: getWorkspace(store, id), key };
   });
 }
-export function listWorkspaces(store:TeamDatabase, account:Account): (WorkspaceInfo & {role:"owner"|"member"})[] {
-  const rows=store.db.prepare(`SELECT w.id,m.role FROM membership m JOIN workspace w ON w.id=m.workspace_id
-    WHERE m.account_id=? AND m.status='active' AND w.org_id=? AND w.archived_at IS NULL ORDER BY w.created_at,w.id`)
-    .all(account.id,account.orgId) as unknown as {id:string;role:"owner"|"member"}[];
-  return rows.map(row=>({...workspaceInfo(store,account.orgId,row.id),role:row.role}));
+
+export function listWorkspaces(store: TeamDatabase): WorkspaceInfo[] {
+  const rows = store.db.prepare("SELECT id,name,type,created_at FROM workspace WHERE archived_at IS NULL ORDER BY created_at,id").all() as unknown as Row[];
+  return rows.map(info);
+}
+
+export function renameWorkspace(store: TeamDatabase, id: string, body: Record<string, unknown>): WorkspaceInfo {
+  const name = text(body.name, "name", 100);
+  getWorkspace(store, id);
+  store.db.prepare("UPDATE workspace SET name=? WHERE id=?").run(name, id);
+  return getWorkspace(store, id);
+}
+
+/** Archive: data is kept, the Key stops working (findWorkspaceByKey reports archived). */
+export function archiveWorkspace(store: TeamDatabase, id: string, now: number): void {
+  getWorkspace(store, id);
+  store.db.prepare("UPDATE workspace SET archived_at=? WHERE id=?").run(new Date(now).toISOString(), id);
+}
+
+export function getWorkspaceKeyHint(store: TeamDatabase, id: string): { exists: boolean } {
+  getWorkspace(store, id);
+  return { exists: store.db.prepare("SELECT 1 FROM workspace_key WHERE workspace_id=?").get(id) !== undefined };
 }

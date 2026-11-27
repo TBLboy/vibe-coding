@@ -20,6 +20,8 @@ AGENTS.md                     Stable project rules and constraints
 .vibe/tasks/<task-id>.json     Only when a persistent Task is warranted
 .vibe/requirements/<work>.md   Optional; one requirement baseline per piece of work, created only when durable business rules need one
 .vibe/requirements/README.md   Index of baselines; exists only while at least one baseline exists
+.vibe/lessons/README.md        Index of lessons (type, status, keywords, summary); created by a Workbench workspace template
+.vibe/lessons/<id>.md          One lesson per file
 ```
 
 Do not create an empty optional file just because the template mentions it. Initialization creates `AGENTS.md`, `.vibe/progress.md`, `.vibe/docs/`, and the initializing Session's own `current-session.md` (initialization is the start of work); it never pre-creates `tasks/` or `requirements/`.
@@ -37,6 +39,15 @@ Purpose: keep each piece of work's clarified business rules separate, versioned,
 - Business rules that hold across all work are not left inside a baseline; once stable, distill them into the project `AGENTS.md` project-level rules. Audits treat `AGENTS.md` plus every `active` baseline as the current business truth.
 - A Task references its baseline by path in `goal`; `doneWhen` points at that baseline's acceptance criteria. The Task schema is unchanged.
 - A small bounded increment whose `goal` + `doneWhen` already state the rules needs no baseline file.
+
+## lessons/
+
+Purpose: keep reusable experience (bug causes and fixes, user corrections) so the same mistake is not repeated.
+
+- One file per lesson, indexed in `lessons/README.md` (id, type, status, keywords, one-line summary). Entries are independent files; the index is the only shared file.
+- A bug is registered first with its symptom; cause and fix are added once it is solved. A user's verbal correction is recorded by the Agent automatically and the user is told afterwards.
+- Similar lessons are merged and their count accumulated. At 3 occurrences the Agent proposes distilling the lesson into the project `AGENTS.md`; it never edits `AGENTS.md` without the user's decision.
+- `lessons/` is part of the synced `.vibe/` tree. Nothing in it is read automatically and it is never a substitute for `progress.md`.
 
 ## current-session.md
 

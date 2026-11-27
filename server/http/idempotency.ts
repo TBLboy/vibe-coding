@@ -1,5 +1,5 @@
 import type { TeamDatabase } from "../store/sqlite.ts";
-import { hashToken } from "../domain/identity.ts";
+import { hashToken } from "../domain/secrets.ts";
 import { conflict, invalid } from "./errors.ts";
 
 export interface Reply { status:number; body:unknown; oneTime?:boolean }

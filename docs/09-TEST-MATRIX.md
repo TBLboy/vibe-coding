@@ -47,77 +47,22 @@ Run `npm run test:core`.
 - material feature/decision/stage/limitation changes progress.
 - ordinary retries/tool operations do not trigger memory writes.
 
-### Team workspace foundations (opt-in product extension)
+### Workbench (single-user worklog sync)
 
-Branch scope (`feat/team-workspace-workbench`): this branch runs the server tests and the shared contract tests in `shared/team-contracts/`. The bullets below for plugin-only tests (`team-projection`, `team-write-router`, `team-plugin-sync` and the T6 regressions) describe tests kept on `feat/team-workspace-plugin`. The cross-side acceptance (`team-e2e`, `team-tls-process` and the provider-backed smoke harness `evaluations/run_provider_host_smoke.py`) stays on the combined baseline `feat/team-workspace`. None of those run here.
+Branch scope (`feat/team-workspace-workbench`): server tests and the shared contract tests in `shared/team-contracts/`. Plugin-side sync tests and the real-server/two-client acceptance (T10) are not on this branch and are not yet written.
 
-- `shared/team-contracts/manifest.test.ts`, `binding.test.ts`: stable manifests/hashes and binding validation. `contracts-sync.test.ts` fails when a shared contract file differs from the committed `SHA256SUMS` or is not listed. Path projection and private-area exclusion are tested by the plugin-only `tests/team-projection.test.ts`.
-- `shared/team-contracts/change-feed.test.ts`: contiguous sequences, path/op/hash/version validation,
-  cursor advancement and unsafe integer rejection.
-- `tests/team-store.test.ts`: real SQLite migrations and pragmas, optimistic version
-  checks, historical content and tombstones, resurrection, workspace isolation,
-  fault-injected transaction rollback, gap detection, count/serialized UTF-8 byte
-  bounds, WAL file reopen and stale writes across independent connections.
-- `tests/team-write-router.test.ts`: complete changed/unchanged layer/namespace/owner
-  decision table, authorized deletes, local preservation requirements, unmapped ignore,
-  nullable-hash conflict recovery, malformed facts and input immutability.
-- `tests/team-task-scope.test.ts`: canonical relative paths, exact-file/directory-prefix
-  overlap, boundary false-positive rejection, deterministic pairs, immutability,
-  path validation and count/UTF-8 limits.
-- `tests/team-auth.test.ts`: scrypt parameters and independent standard-library oracle,
-  salt uniqueness, malformed hashes, token/key entropy/digests and TTL constants.
-- `tests/team-server-api.test.ts`: real HTTP/SQLite account/workspace/join/key flows,
-  current credential/membership/organization scopes, write boundaries and If-Match,
-  history/feed, expiry/revocation/removal, idempotent replay/atomic rollback and secret
-  exclusion, bounded input/path/UTF-8 validation, concurrent login admission/throttling
-  and safe logs.
-- `tests/team-server-main.test.ts`: real executable bootstrap/HTTP/shutdown smoke,
-  private database mode, loopback config and explicit local account provisioning.
-- `tests/team-task-board.test.ts`: real HTTP scope advisory warnings, exclusive claims,
-  holder-only transitions/abandonment/reclaim, work version/change serialization,
-  idempotent replay and fault-injected atomic rollback (including presence failure);
-  member release/credential
-  revocation and cross-workspace preservation; current presence/five-minute boundary,
-  latest task, immutable-version authors and 50-entry metadata cap; no-JS HTML form,
-  token auth and XSS escaping; v2 additive migration and independent WAL connections.
-- `tests/team-plugin-sync.test.ts`: real existing setup with fake HTTP/temp filesystem
-  and child Git repos; unbound registry equivalence/no I/O, canonical binding and
-  authentication rejection and binding preservation, connect despite missing/extra
-  repositories and differing branches, primary/root/reviewer isolation, safe push/pull/restore,
-  409 preservation/lost-response acknowledgment, old-version/deletion replay,
-  unmanaged/conflict-copy retention, prototype-like path keys, corrupt/gapped/hash
-  failure, atomic manifest recovery, symlink/case/stale-snapshot guards, live/stale
-  lock behavior, budgets/backoff/auth/redirect/response limits and progress/tools/
-  bounded context without activity reads; executable CLI and parameterless reconnect
-  schema/environment path. `team-manifest` retains own special keys.
-- T6 review regressions: initial pull/replacement at214/215/255-byte ASCII and
-  255-byte multibyte basenames, byte-exact binary conflict preservation and temp
-  cleanup; editor-save injection after progress snapshot capture (existing/absent
-  append and existing replace) rejects without overwriting or uploading.
-- T4/T5 use additive schema upgrades and nested savepoints, covered by API upgrade and
-  `team-store` rollback tests. Full real-server/two-client and live OpenCode team
-  workflow acceptance remain T7/release gates, not proven by host simulations.
-- `tests/team-e2e.test.ts`: real file-backed SQLite/server and independent clients cover
-  authoritative index plus five-layer initialization, file/symlink collision safety,
-  Q1/Q3 projection and shared-write rejection, ten-account Q2 convergence, task/board
-  removal, restart/offline recovery, 205-document pagination/checkpoint convergence,
-  atomic index-bootstrap rollback, and isolated installer/actual module wiring,
-  including connecting without a Git checkout. This
-  validates the product slice locally; it is not a live provider-backed OpenCode SDK
-  or production deployment smoke.
-- `tests/team-tls-process.test.ts` plus `tests/helpers/team-acceptance-worker.ts`:
-  temporary OpenSSL CA/leaves and a test-only TLS proxy front the real file-backed
-  workbench. Separate Node processes use the actual plugin client/connector/mirror,
-  with `NODE_EXTRA_CA_CERTS` scoped to each child and normal certificate validation.
-  Tests assert HTTPS login/connect/pull/push, invalid task-key/workspace-token401,
-  untrusted-chain and trusted-chain hostname rejection (independent TLS error oracle
-  plus zero HTTP at proxy/backend), no failed binding/write, and private credentials.
-  Four independent identities/roots then append three rounds over verified TLS:
-  exactly12 writes, four version3 progress files, contiguous13-event history including
-  index, monotonic/final-head cursors, byte/hash/version agreement at every mirror,
-  no409/lock residue/output secrets. OpenSSL must be available; absence is a failure,
-  not a skipped pass. This is finite concurrency acceptance, not a stress benchmark.
+- `shared/team-contracts/*.test.ts`: stable manifests/hashes, binding validation, change-feed contiguity; `contracts-sync.test.ts` fails when a shared file differs from `SHA256SUMS`.
+- `tests/workspace-paths.test.ts`: only `AGENTS.md` and `.vibe/` paths are valid; `.vibe/.sync/`, traversal, absolute and legacy layer paths are rejected.
+- `tests/schema-v5.test.ts`: team tables are dropped; `document` keeps only the single-user columns; `workspace.type` exists.
+- `tests/key-admin.test.ts`: Key is 32 characters, the current Key and hash are stored, rotation keeps one active Key, archived Key is reported; admin token needs at least 32 characters and is compared in constant time.
+- `tests/templates.test.ts`: `engineering-dev` is the default and only type; the template creates exactly the R1 file set; `AGENTS.md` has one managed rules block and no sync instructions.
+- `tests/workspace-domain.test.ts`: create writes the template files and a working Key; unknown type returns 422 `unsupported_type` and creates nothing; rename and archive.
+- `tests/team-store.test.ts`: SQLite pragmas and migrations, If-Match conflicts, tombstones, change-feed bounds and gap detection, rollback on late failure, WAL reopen, path rules, transaction boundaries, and R12 (latest 20 versions kept, current version never pruned).
+- `tests/changes-pruned.test.ts`: a lagging cursor reads a gapless feed after pruning (coalesced into the current state, or a delete when the document is deleted).
+- `tests/workbench-api.test.ts`: real HTTP/SQLite admin and Key credentials, Key on an admin route returns 403, connect, If-Match 409 details, tombstone, `.vibe/.sync/` write rejected, cross-workspace isolation, archive returns 410 `workspace_archived`.
+- `tests/team-server-main.test.ts`: config validation; startup refused without a strong admin token; real executable serves the API and never prints the admin token or a Key. Process exit code is not asserted (Windows SIGTERM reports null).
 
+Covered: the admin-only `GET .../key` route returns the current Key and rejects archived workspaces.
 ## B. OpenCode live smoke tests
 
 These are required before declaring the framework installable; pure core tests do not cover them.

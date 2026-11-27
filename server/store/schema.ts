@@ -1,6 +1,8 @@
+import { randomBytes } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
+import { hashToken } from "../domain/secrets.ts";
 
-export const CURRENT_SCHEMA_VERSION = 4;
+export const CURRENT_SCHEMA_VERSION = 6;
 
 export interface Migration {
   version: number;
@@ -186,6 +188,78 @@ export const MIGRATIONS: readonly Migration[] = [
         ALTER TABLE session_token_v4 RENAME TO session_token;
         CREATE INDEX IF NOT EXISTS session_token_account_idx ON session_token(account_id, revoked_at);
       `);
+    },
+  },
+  {
+    // v5: single-user worklog sync. Drops the team model; keeps documents, versions, changes, idempotency.
+    version: 5,
+    apply(db) {
+      db.exec(`
+        ALTER TABLE workspace ADD COLUMN type TEXT NOT NULL DEFAULT 'engineering-dev';
+
+        CREATE TABLE workspace_key (
+          workspace_id TEXT PRIMARY KEY REFERENCES workspace(id) ON DELETE CASCADE,
+          secret_hash TEXT NOT NULL UNIQUE,
+          created_at INTEGER NOT NULL
+        );
+        INSERT INTO workspace_key (workspace_id, secret_hash, created_at)
+          SELECT workspace_id, secret_hash, MAX(created_at) FROM task_key WHERE revoked_at IS NULL GROUP BY workspace_id;
+
+        CREATE TABLE document_v5 (
+          id TEXT PRIMARY KEY,
+          workspace_id TEXT NOT NULL REFERENCES workspace(id) ON DELETE CASCADE,
+          path TEXT NOT NULL,
+          version INTEGER NOT NULL DEFAULT 0 CHECK (version >= 0),
+          content_hash TEXT,
+          updated_at TEXT NOT NULL,
+          deleted_at TEXT,
+          UNIQUE (workspace_id, path)
+        );
+        INSERT INTO document_v5 (id, workspace_id, path, version, content_hash, updated_at, deleted_at)
+          SELECT id, workspace_id, path, version, content_hash, updated_at, deleted_at FROM document;
+
+        CREATE TABLE document_version_v5 (
+          document_id TEXT NOT NULL REFERENCES document_v5(id) ON DELETE CASCADE,
+          version INTEGER NOT NULL CHECK (version >= 1),
+          content TEXT,
+          content_hash TEXT,
+          created_at TEXT NOT NULL,
+          PRIMARY KEY (document_id, version),
+          CHECK ((content IS NULL AND content_hash IS NULL) OR (content IS NOT NULL AND content_hash IS NOT NULL))
+        );
+        INSERT INTO document_version_v5 (document_id, version, content, content_hash, created_at)
+          SELECT document_id, version, content, content_hash, created_at FROM document_version;
+
+        DROP TABLE document_version;
+        DROP TABLE document;
+        ALTER TABLE document_v5 RENAME TO document;
+        ALTER TABLE document_version_v5 RENAME TO document_version;
+        CREATE INDEX IF NOT EXISTS document_version_lookup_idx ON document_version (document_id, version);
+
+        DROP TABLE IF EXISTS task;
+        DROP TABLE IF EXISTS presence;
+        DROP TABLE IF EXISTS workspace_token;
+        DROP TABLE IF EXISTS session_token;
+        DROP TABLE IF EXISTS invitation;
+        DROP TABLE IF EXISTS membership;
+        DROP TABLE IF EXISTS workspace_repo;
+        DROP TABLE IF EXISTS task_key;
+        DROP TABLE IF EXISTS account;
+      `);
+    },
+  },
+  {
+    // v6: retain the current workspace Key so the admin API can return it.
+    version: 6,
+    apply(db) {
+      db.exec("ALTER TABLE workspace_key ADD COLUMN secret TEXT");
+      const rows = db.prepare("SELECT workspace_id FROM workspace_key WHERE secret IS NULL").all() as { workspace_id: string }[];
+      const update = db.prepare("UPDATE workspace_key SET secret=?, secret_hash=? WHERE workspace_id=?");
+      for (const row of rows) {
+        const secret = randomBytes(24).toString("base64url");
+        update.run(secret, hashToken(secret), row.workspace_id);
+      }
+      db.exec("CREATE UNIQUE INDEX workspace_key_secret_idx ON workspace_key(secret)");
     },
   },
 ];
