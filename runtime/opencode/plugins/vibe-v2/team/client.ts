@@ -8,7 +8,7 @@ export function object(value:unknown):Record<string,any> {
 export class TeamClient {
   readonly serverUrl:string;readonly token:string;
   constructor(serverUrl:string,token:string){this.serverUrl=serverUrl;this.token=token;}
-  async request(path:string,method="GET",body?:unknown,headers:Record<string,string>={},deadline=Date.now()+1500,signal?:AbortSignal):Promise<Record<string,any>> {
+  async request(path:string,method="GET",body?:unknown,headers:Record<string,string>={},deadline=Date.now()+10000,signal?:AbortSignal):Promise<Record<string,any>> {
     if(deadline<=Date.now()||signal?.aborted)throw new TeamError("budget_exhausted");
     const encoded=body===undefined?undefined:JSON.stringify(body);
     if(encoded!==undefined&&Buffer.byteLength(encoded)>2*1024*1024)throw new TeamError("request_too_large");

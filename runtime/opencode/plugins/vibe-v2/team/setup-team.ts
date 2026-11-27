@@ -25,7 +25,7 @@ export async function setupTeam(ctx: HostContext, root: string, memoryRootFor: (
 
   await ctx.session.hook('context', async (event) => {
     if (!await allowed(event.sessionID) || !await shouldEnableTeamModules(root)) return;
-    await mirror.sync();
+    await mirror.sync(false, undefined, 1500);
     try { event.system.push({ type: 'text', text: await teamContext(root, mirror) }); }
     catch { event.system.push({ type: 'text', text: 'Workbench sync state unavailable; no automatic reset or deletion performed.' }); }
   });

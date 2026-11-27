@@ -201,7 +201,7 @@ export class TeamMirror {
     return { ...this.status(), pending };
   }
 
-  async sync(force = false, signal?: AbortSignal): Promise<SyncResult> {
+  async sync(force = false, signal?: AbortSignal, budgetMs?: number): Promise<SyncResult> {
     const now = (this.options.now ?? Date.now)();
     if (this.halted && !force) return this.status(false);
     if (!force && now < this.nextAttempt) return this.status(false);
@@ -213,7 +213,7 @@ export class TeamMirror {
       this.dir = stateDir(real);
       this.manifest = await this.loadManifest();
       this.workspace = { type: this.creds.workspaceType };
-      this.signal = signal; this.deadline = Date.now() + (this.options.budgetMs ?? 1500); this.pending = 0;
+      this.signal = signal; this.deadline = Date.now() + (budgetMs ?? this.options.budgetMs ?? 10000); this.pending = 0;
       this.client = new TeamClient(this.creds.serverUrl, this.creds.key);
       await this.pull();
       await this.push();

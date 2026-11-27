@@ -13,7 +13,7 @@ import { stateDir } from '../runtime/opencode/plugins/vibe-v2/team/device-state.
 
 const KEY = 'K'.repeat(32);
 
-async function fixture(t: { after(fn: () => Promise<void>): void }) {
+async function fixture(t: { after(fn: () => Promise<void>): void }, options: { delayMs?: number } = {}) {
   const base = await mkdtemp(join(tmpdir(), 'mir-'));
   const saved = process.env.OPENCODE_CONFIG_DIR;
   process.env.OPENCODE_CONFIG_DIR = join(base, 'cfg');
@@ -40,7 +40,9 @@ async function fixture(t: { after(fn: () => Promise<void>): void }) {
       if (p === '/api/connect') return send(200, { workspace: { id: 'ws_1', name: 'W', type: 'engineering-dev' } });
       if (p === '/api/workspaces/ws_1/changes') {
         const since = Number(url.searchParams.get('since'));
-        return send(200, { changes: changes.filter((c) => c.seq > since), nextSeq: changes.length, hasMore: false });
+        const reply = () => send(200, { changes: changes.filter((c) => c.seq > since), nextSeq: changes.length, hasMore: false });
+        if (options.delayMs) setTimeout(reply, options.delayMs); else reply();
+        return;
       }
       if (!p.startsWith(prefix)) return send(404, { error: {} });
       const path = decodeURIComponent(p.slice(prefix.length));
@@ -118,4 +120,12 @@ test('an archived workspace (410) halts automatic sync until forced', async (t) 
   h.setArchived(false);
   assert.equal((await h.mirror.sync()).ok, false);
   assert.equal((await h.mirror.sync(true)).ok, true);
+});
+
+test('a slow server still syncs within the default budget', async (t) => {
+  const h = await fixture(t, { delayMs: 2000 });
+  h.put('AGENTS.md', 'slow cloud');
+  const result = await new TeamMirror(h.root).sync(true);
+  assert.equal(result.ok, true, String(result.lastError));
+  assert.equal(await h.local('AGENTS.md'), 'slow cloud');
 });

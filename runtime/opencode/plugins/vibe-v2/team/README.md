@@ -44,6 +44,10 @@ then adds a <=2000-character read-only data summary. Reviewer/child Sessions and
 unrelated project Sessions do not sync; workspace tool executors enforce the same
 root/primary-Agent checks. No event stream or long connection.
 
+Connect, timer and tool syncs use a 10-second budget instead, so a slow network
+does not turn a successful request into a spurious `network_unavailable`; the
+shorter per-turn budget only bounds the context injection.
+
 A bound project also runs a **background sync timer**, because otherwise local
 edits would only reach the server when a turn starts. Interval defaults to 10
 seconds; `VIBE_TEAM_SYNC_INTERVAL_MS` overrides it and `0` disables it. Runs are
