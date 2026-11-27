@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -150,6 +151,7 @@ class InstallerTests(unittest.TestCase):
             self.assertFalse((home / "skills" / "demo" / "archive_root.conf").exists())
             self.assertNotIn("skills/demo/archive_root.conf", managed)
 
+    @unittest.skipIf(os.name == "nt", "Windows does not enforce POSIX permission bits: chmod(0o600) reports 0o666")
     def test_install_preserves_config_mode_and_hardens_backup(self):
         with tempfile.TemporaryDirectory() as temporary:
             home = Path(temporary) / "opencode"

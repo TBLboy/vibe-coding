@@ -8,7 +8,7 @@ Project Memory is not a transcript, diary, command log, event stream, or model-t
 
 ## Memory root
 
-A project owns exactly one `.vibe/` at its top level. Sub-directories, sub-repositories and worktrees share it; never create a second `.vibe/` below it. The runtime resolves the memory root as the nearest ancestor of the Session directory that already contains `.vibe/` (falling back to the Session directory for a fresh project) and injects its absolute path into the Session context. Changing the working directory does not move the memory root. `a-project-init` refuses to create a nested `.vibe/` unless explicitly told the directory is a separate project.
+A project owns exactly one `.vibe/` at its top level. Sub-directories, sub-repositories and worktrees share it; never create a second `.vibe/` below it. The runtime resolves the memory root as the nearest ancestor of the Session directory that already contains `.vibe/` (falling back to the Session directory for a fresh project) and injects its absolute path into the Session context. Changing the working directory does not move the memory root. A project's `AGENTS.md` and `.vibe/` are created by its Workbench workspace; the local side only connects and syncs, so it never creates a nested `.vibe/`.
 
 ## Files
 

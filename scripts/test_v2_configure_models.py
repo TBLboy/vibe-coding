@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -30,6 +31,7 @@ class ConfigureModelsTests(unittest.TestCase):
         config.chmod(0o600)
         return config
 
+    @unittest.skipIf(os.name == "nt", "Windows does not enforce POSIX permission bits: chmod(0o600) reports 0o666")
     def test_applies_defaults_removes_legacy_flag_and_preserves_unrelated_keys(self):
         with tempfile.TemporaryDirectory() as temporary:
             config = self.write_config(Path(temporary))

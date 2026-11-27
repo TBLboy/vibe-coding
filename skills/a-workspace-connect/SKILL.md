@@ -16,11 +16,12 @@ Use when the user hands over a workspace Key and asks to connect this project to
 - One workspace has one Key. The Key alone decides which cloud workspace the local project binds to; the local directory name is irrelevant, so two machines with different folder names reach the same workspace with the same Key.
 - The bound root is the project memory root injected by the plugin (the directory that owns `.vibe/`, or the Session directory for a fresh project), never a Git sub-repository inside it. All sub-repositories share the root's `AGENTS.md` and `.vibe/`.
 - After binding, the plugin syncs `AGENTS.md` and the whole `.vibe/` with the cloud every 10 seconds while OpenCode runs. The cloud copy is the single authoritative project log.
-- This Skill never creates `AGENTS.md` or `.vibe/` locally. Initialization belongs to Workbench; an empty local root receives both from the first sync.
+- This Skill never creates `AGENTS.md` or `.vibe/` locally. Creation belongs to Workbench; an empty local root receives both from the first sync. There is no local initialization path in this framework.
 
 ## Flow
 
 1. Take the Key from the user's message. Do not write it into any file, Task, progress note or memory, and do not repeat it back in replies.
+   - A brand-new project has no local `AGENTS.md` or `.vibe/` and may not have a Key yet. In that case ask for an existing Key, or create a workspace first through `b-workbench-remote-ops` (administrator Token) and use the returned Key. Never run a local project initialization to produce those files.
 2. Call `workspace_status`.
    - Not bound: continue.
    - Already bound to the workspace this Key belongs to: report that it is already connected and show the sync state; stop.

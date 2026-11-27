@@ -55,7 +55,7 @@ Report what changed, the relevant verification and its result, and any material 
 
 | 触发条件（中文别名 · English trigger） | Skill |
 |---|---|
-| 初始化项目 / 新建项目初始化 / 接入框架 · initialize, set up, or bootstrap a project | `a-project-init` |
+| 初始化项目 / 新建项目 / 接入框架 / 连接工作空间 / 绑定 key / 连接 workbench / 接入云端日志 · bootstrap a project from a Workbench workspace or connect an existing root with a workspace Key | `a-workspace-connect` |
 | 归档 / 存档 / 备份项目记忆 / 保存快照 · archive a V2 project memory snapshot (commit + push) | `a-project-archive` |
 | 模型上下文 / 图片输入 / 模态配置 / 改 context window · provider model context window, modalities, image input | `b-opencode-model-config` |
 | 讲讲代码 / 源码讲解 / 逐行解释 / 跟读代码 · source-level code explanation, function trace, runtime walkthrough | `b-source-code-tutoring` |
@@ -81,14 +81,13 @@ Report what changed, the relevant verification and its result, and any material 
 | 多角色走查 / 体验审计 / 试用这个网站 · audit a running web application across user roles | `b-multi-role-ux-audit` |
 | 拷问方案 / 压力测试计划 · stress-test a proposed plan or design | `b-plan-stress-test` |
 | 分支审查 / 工程审查 / 审查这个分支 / 合并前审查 · review one explicitly named branch as an engineering change against its target branch | `b-branch-engineering-review` |
-| 连接工作空间 / 绑定 key / 连接 workbench / 接入云端日志 · connect this project to a Workbench workspace with a workspace Key | `a-workspace-connect` |
-| 远端 Workbench 运维 / 部署 Workbench / 检查 Workbench 服务器 / 配置 Workbench 连接 · explicitly operate the personal remote Workbench | `b-workbench-remote-ops` (explicit-only) |
+| 操作 Workbench / 管理工作空间 / 创建工作空间 / 查看工作空间 Key / 重命名或归档工作空间 / 检查 Workbench 服务器 / 部署升级 Workbench / 排查同步故障 · operate the personal Workbench: workspaces, Keys, server health, deploy, upgrade, troubleshooting (explicit requests only) | `b-workbench-remote-ops` |
 | 网页界面设计 / UI设计 / UX设计 / 视觉优化 / 交互优化 · design, redesign, critique, or route web and product UI work | `b-ui-design` |
 
 The V2 main Agent remains the sole orchestrator; only `vibe-reviewer` may be invoked, and only under the strict review gate.
 
 ## 工作空间同步职责
 
-1. 使用者给出工作空间 Key 并要求连接时，按 `a-workspace-connect` 执行；已绑定的工程不得在本地初始化。
+1. 使用者给出工作空间 Key 并要求连接、或要求新建工程时，按 `a-workspace-connect` 执行；没有 Key 先创建工作空间。本框架不存在本地初始化路径。
 2. 每轮上下文若列出未处理的同步冲突，先向使用者提醒，列出路径与类型，不要自行取舍。
 3. 冲突按使用者的决定通过 `workspace_resolve_conflict` 解决；同步失败只提示一次，不自动修复。

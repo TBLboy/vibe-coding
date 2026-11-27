@@ -75,7 +75,7 @@ test("the new pack has no legacy upgrade or migration entrypoints", () => {
 });
 
 const V2_SKILLS = [
-  "a-architecture-decision", "a-business-clarify", "a-business-code-align", "a-project-archive", "a-project-init",
+  "a-architecture-decision", "a-business-clarify", "a-business-code-align", "a-project-archive",
   "a-codebase-onboarding", "a-deep-research", "a-engineering-landing",
   "a-engineering-spec", "a-paper-reading", "a-project-context-briefing",
   "a-requirement-baseline", "a-retrospective", "a-task-decompose", "a-verification",
@@ -112,7 +112,6 @@ test("managed capability Skills are V2-compatible and routed by the main Agent",
   }
   assert.ok(existsSync(resolve(root, "skills/b-opencode-model-config/scripts/configure_models.py")));
   assert.ok(existsSync(resolve(root, "skills/b-source-code-tutoring/references/teaching-template.md")));
-  assert.ok(existsSync(resolve(root, "skills/a-project-init/templates/general-rules.md")));
   assert.doesNotMatch(main, /old Project Log|\.project-log|Goal\/Run\/Evidence\/ledger\/SQLite/, "routing");
 });
 

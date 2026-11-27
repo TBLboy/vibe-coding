@@ -172,13 +172,6 @@ Do not call the package release-ready until:
 - A snapshot directory matched by the archive repository's `.gitignore` raises instead of producing an empty, unpublished commit.
 - A snapshot that cannot be published is reported, not silently accepted: a plain directory and a remote-less repository both return `publish.status` `not-a-repository` / `no-remote`, and the command exits 4 with "NOT pushed"; `--no-push` returns `skipped` and exit 0.
 
-## V2 project initialization (`scripts/test_v2_project_init.py`)
-
-- A fresh project receives the full managed general-rules block from `templates/general-rules.md`, a `## 项目级规则` section (distilled rules or an explicit empty hint), , `.vibe/progress.md`, `.vibe/docs/` and — given `--session-id` — the URL-encoded current Session recovery file; `.vibe/tasks/` is never pre-created.
-- An existing `AGENTS.md` keeps every byte (including CRLF); the managed block is injected at the top, and a rerun is `unchanged`.
-- A template change updates only the span between the markers; malformed markers are reported and the file is left untouched.
-- The general rules lead with the end-of-reply 点拨 (mentoring) rule as rule 1 — name the engineering term / pattern / mental model behind the user's informal question or action in 1–3 sentences, or stay silent when nothing is worth naming — and the remaining rules are numbered contiguously after it.
-
 ## V2 capability Skill routing (`tests/package-shape.test.ts`)
 
 - The routing table declares Chinese aliases as first-class triggers and forbids substituting an improvised parallel flow for a covered capability.
@@ -215,7 +208,6 @@ Do not call the package release-ready until:
 - `tests/mode.test.ts`: Session context carries the absolute memory root, recovery path and registered Task.
 - `tests/package-shape.test.ts`: plugin wires `resolveMemoryRoot`, `validateTaskRecord`, the review-completion marker and the gated close; sample config uses the real `plugin` key.
 - `scripts/test_vibe_v2_installer.py`: config permission bits preserved; backup dir `0700` / files `0600`; stale managed files removed only when unmodified.
-- `scripts/test_v2_project_init.py`: nested `.vibe/` refused unless `--allow-nested`.
 
 ## P0/P1 additions
 
