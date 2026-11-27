@@ -1,8 +1,5 @@
 import { Buffer } from "node:buffer";
 
-export const MEMORY_LAYERS = ["constitution", "specs", "work", "members", "activity"] as const;
-export type Layer = typeof MEMORY_LAYERS[number] | "index";
-
 export type ValidPath = { ok: true; path: string };
 export type InvalidPath = { ok: false; reason: string };
 export type PathValidation = ValidPath | InvalidPath;
@@ -36,10 +33,13 @@ export function validateServerPath(path: unknown): PathValidation {
   return { ok: true, path };
 }
 
-export function layerOf(path: string): Layer | undefined {
-  if (path === "index.json") return "index";
-  for (const layer of MEMORY_LAYERS) {
-    if (path.startsWith(`${layer}/`)) return layer;
-  }
-  return undefined;
+/** Synced paths: AGENTS.md or anything under .vibe/, except the device-private .vibe/.sync/. */
+export function validateSyncPath(path: unknown): PathValidation {
+  const base = validateServerPath(path);
+  if (!base.ok) return base;
+  const p = base.path;
+  if (p === "AGENTS.md") return base;
+  if (!p.startsWith(".vibe/")) return { ok: false, reason: "path must be AGENTS.md or under .vibe/" };
+  if (p.startsWith(".vibe/.sync/")) return { ok: false, reason: "path is device-private" };
+  return base;
 }

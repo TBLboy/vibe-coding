@@ -53,6 +53,15 @@ export async function setup(ctx: HostContext): Promise<(() => void) | undefined>
       memoryRoot: memoryRootFor, workspace: workspaceFor,
       childSession: async sessionID => await ctx.session.get({ sessionID }) as { parentID?: string; agent?: string; outcome?: string },
       childContext: sessionID => ctx.session.context({ sessionID }),
+      syncedHash: async (root, path) => {
+        try {
+          const { readFile } = await import("node:fs/promises");
+          const { parseManifest } = await import("../../../../shared/team-contracts/manifest.ts");
+          const { stateDir } = await import("./team/device-state.ts");
+          const manifest = parseManifest(await readFile(resolve(stateDir(await realpath(root)), "manifest.json"), "utf8"));
+          return Object.hasOwn(manifest.entries, path) ? manifest.entries[path].hash : null;
+        } catch { return null; }
+      },
     });
 
     await ctx.command.transform((editor) => {
@@ -110,7 +119,7 @@ export async function setup(ctx: HostContext): Promise<(() => void) | undefined>
         name: "vibe_task_control",
         description: "Runtime-owned persistent Task lifecycle. Start a fresh prepare JSON, then use transition events; never edit registered Task JSON directly. See docs/03-STATE-MACHINE.md.",
         input: { type: "object", properties: {
-          action: { type: "string", enum: ["start", "resume", "resume_blocked", "pause", "close", "authorize_review", "reset_review", "transition"] },
+          action: { type: "string", enum: ["start", "resume", "resume_blocked", "pause", "close", "authorize_review", "reset_review", "transition", "adopt"] },
           taskID: { type: "string", minLength: 1 }, event: { type: "object", additionalProperties: true },
         }, required: ["action", "taskID"], additionalProperties: false },
         execute: async (input, context) => {
@@ -163,7 +172,7 @@ export async function setup(ctx: HostContext): Promise<(() => void) | undefined>
       let root=resolveMemoryRoot(await realpath(ctx.location.directory),hasMemoryDirectory);
       const canonical=ctx.location.project?.canonical;
       if(canonical&&hasMemoryDirectory(canonical))root=await realpath(canonical);
-      if(await shouldEnableTeamModules(root)) {
+      {
         const {setupTeam}=await import("./team/setup-team.ts");
         const stopTeam=await setupTeam(ctx,root,memoryRootFor);
         // Registered only for a bound project: the timer stops if the plugin is reloaded.

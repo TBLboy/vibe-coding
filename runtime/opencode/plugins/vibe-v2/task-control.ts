@@ -14,6 +14,8 @@ export interface ControlHost {
   workspace(sessionID: string): Promise<string | null>;
   childSession(sessionID: string): Promise<{ parentID?: string; agent?: string; outcome?: string }>;
   childContext(sessionID: string): Promise<readonly unknown[]>;
+  /** Hash recorded by the sync manifest for a synced path, or null when the path is not tracked. Required for adopt. */
+  syncedHash?(root: string, path: string): Promise<string | null>;
 }
 export interface Caller { sessionID: string; agent?: string }
 export interface ReviewCall { messageID: string; id: string }
@@ -154,6 +156,27 @@ export function createTaskController(host: ControlHost) {
         await save(loc, fresh, { owner: sessionID, policy: mode, digest: "", closed: false });
         await pointer(sessionID, fresh, true);
         return `Task ${taskID} started in prepare.`;
+      }
+      if (action === "adopt") {
+        // Cross-device continuation: a Task file delivered by sync is the authoritative record. Take it over only when it is intact
+        // (matches the sync manifest hash, passes schema) and not terminal; old evidence and review permits are void.
+        if (!host.syncedHash) throw new Error("Task adoption is unavailable: sync manifest is not connected");
+        const prior = await storage.get(loc.key) as Receipt | undefined;
+        if (prior?.closed) throw new Error("Task is closed; start a new Task");
+        const { task: synced, digest } = await load(loc, taskID);
+        if (await host.syncedHash(loc.root, `.vibe/tasks/${taskID}.json`) !== digest) throw new Error("Task file does not match the synced version; sync first or start a new Task");
+        if (synced.status === "completed" || synced.status === "cancelled") throw new Error("Terminal Tasks cannot be adopted");
+        const adopted: Task = {
+          ...synced,
+          phase: synced.phase === "prepare" ? "prepare" : "implement",
+          verification: { status: "not_run", summary: "", checks: [], limitations: [] },
+          review: synced.review ? { ...synced.review, verdict: "pending", findings: [] } : undefined,
+          nextAction: synced.nextAction ?? "Adopted from another device: re-run implementation checks and verify again.",
+        };
+        if (prior && prior.owner !== sessionID) { const old = await storage.get(activeTaskStorageKey(prior.owner)); if (isTaskPointer(old, taskID)) await pointer(prior.owner, adopted, false); }
+        await save(loc, adopted, { owner: sessionID, policy: adopted.policy, digest: "", closed: false });
+        await pointer(sessionID, adopted, true);
+        return `Task ${taskID} adopted with frozen policy ${adopted.policy}; verification and review must be redone.`;
       }
       let { task, receipt } = await registered(loc, taskID);
       if (receipt.closed) throw new Error("Task is closed; start a new Task");

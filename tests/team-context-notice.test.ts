@@ -1,0 +1,29 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { mkdtemp, mkdir, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { teamContext } from '../runtime/opencode/plugins/vibe-v2/team/context.ts';
+
+test('failure notice is injected once per distinct reason and cleared on recovery', async (t) => {
+  const base = await mkdtemp(join(tmpdir(), 'ctx-'));
+  const saved = process.env.OPENCODE_CONFIG_DIR;
+  process.env.OPENCODE_CONFIG_DIR = join(base, 'cfg');
+  t.after(async () => { if (saved === undefined) delete process.env.OPENCODE_CONFIG_DIR; else process.env.OPENCODE_CONFIG_DIR = saved; await rm(base, { recursive: true, force: true }); });
+  const root = join(base, 'proj');
+  await mkdir(root);
+  let lastError: string | null = null;
+  const mirror: any = { workspace: { type: 'engineering-dev' }, status: () => ({ lastError, lastSyncAt: null, pending: 0 }) };
+  const ctx = () => teamContext(root, mirror);
+  assert.doesNotMatch(await ctx(), /sync problem/);
+  lastError = 'network_unavailable';
+  assert.match(await ctx(), /sync problem: network_unavailable/);
+  assert.doesNotMatch(await ctx(), /sync problem/);
+  lastError = 'workspace_archived';
+  assert.match(await ctx(), /sync problem: workspace_archived/);
+  assert.doesNotMatch(await ctx(), /sync problem/);
+  lastError = null;
+  assert.doesNotMatch(await ctx(), /sync problem/);
+  lastError = 'workspace_archived';
+  assert.match(await ctx(), /sync problem: workspace_archived/);
+});

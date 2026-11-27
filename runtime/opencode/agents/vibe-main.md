@@ -81,5 +81,12 @@ Report what changed, the relevant verification and its result, and any material 
 | 多角色走查 / 体验审计 / 试用这个网站 · audit a running web application across user roles | `b-multi-role-ux-audit` |
 | 拷问方案 / 压力测试计划 · stress-test a proposed plan or design | `b-plan-stress-test` |
 | 分支审查 / 工程审查 / 审查这个分支 / 合并前审查 · review one explicitly named branch as an engineering change against its target branch | `b-branch-engineering-review` |
+| 连接工作空间 / 绑定 key / 连接 workbench / 接入云端日志 · connect this project to a Workbench workspace with a workspace Key | `a-workspace-connect` |
 
 The V2 main Agent remains the sole orchestrator; only `vibe-reviewer` may be invoked, and only under the strict review gate.
+
+## 工作空间同步职责
+
+1. 使用者给出工作空间 Key 并要求连接时，按 `a-workspace-connect` 执行；已绑定的工程不得在本地初始化。
+2. 每轮上下文若列出未处理的同步冲突，先向使用者提醒，列出路径与类型，不要自行取舍。
+3. 冲突按使用者的决定通过 `workspace_resolve_conflict` 解决；同步失败只提示一次，不自动修复。
