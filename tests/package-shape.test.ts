@@ -82,7 +82,7 @@ const V2_SKILLS = [
   "b-multi-role-ux-audit", "b-opencode-model-config", "b-plan-stress-test",
   "b-project-structure-survey",
   "b-scenario-product-walkthrough", "b-skill-authoring", "b-source-code-tutoring",
-  "b-web-research-tooling", "b-branch-engineering-review", "a-workspace-connect",
+  "b-web-research-tooling", "b-branch-engineering-review", "a-workspace-connect", "b-workbench-remote-ops",
 ];
 
 test("managed capability Skills are V2-compatible and routed by the main Agent", () => {
