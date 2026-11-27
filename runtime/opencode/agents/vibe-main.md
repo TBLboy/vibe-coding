@@ -83,6 +83,7 @@ Report what changed, the relevant verification and its result, and any material 
 | 分支审查 / 工程审查 / 审查这个分支 / 合并前审查 · review one explicitly named branch as an engineering change against its target branch | `b-branch-engineering-review` |
 | 连接工作空间 / 绑定 key / 连接 workbench / 接入云端日志 · connect this project to a Workbench workspace with a workspace Key | `a-workspace-connect` |
 | 远端 Workbench 运维 / 部署 Workbench / 检查 Workbench 服务器 / 配置 Workbench 连接 · explicitly operate the personal remote Workbench | `b-workbench-remote-ops` (explicit-only) |
+| 网页界面设计 / UI设计 / UX设计 / 视觉优化 / 交互优化 · design, redesign, critique, or route web and product UI work | `b-ui-design` |
 
 The V2 main Agent remains the sole orchestrator; only `vibe-reviewer` may be invoked, and only under the strict review gate.
 

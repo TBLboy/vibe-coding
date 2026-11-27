@@ -184,6 +184,19 @@ Do not call the package release-ready until:
 - The routing table declares Chinese aliases as first-class triggers and forbids substituting an improvised parallel flow for a covered capability.
 - Every routed Skill carries a Chinese alias in its routing row **and** at the start of its frontmatter `description`, so a request phrased in the user's language reaches the Skill instead of being reinterpreted (regression guard for VIBE-FW-ROUTE-001).
 
+### UI design routing bundle
+
+- `b-ui-design` is the only discoverable entry. Package checks cover eight relative
+  guide routes, resolved active links, text-only assets, project-neutral instructions,
+  and complete provenance/normalized SHA-256 for all pinned upstream snapshots,
+  licenses and notices. Upstream text is provenance-only, not an executable Skill.
+- `scripts/test_vibe_v2_installer.py` checks byte-exact installation of the whole
+  bundle, one discoverable entry, and clean removal while retaining user config.
+- `skills/b-ui-design/EXAMPLES.md` supplies manual routing oracles for product,
+  marketing, reading, critique, interaction, mobile and worst-data scenarios.
+  These structural tests are not live model routing trials or proof of UI quality;
+  actual designs still need rendered/interaction acceptance in their target project.
+
 ## V2 capability Skill completeness
 
 - `tests/package-shape.test.ts` requires every managed Skill to carry at least two methodology sections beyond the shared V2 operating rules and a minimum length, so a Skill cannot regress to a summary stub.

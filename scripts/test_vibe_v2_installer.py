@@ -45,12 +45,22 @@ class InstallerTests(unittest.TestCase):
             ]:
                 relative = Path("skills") / skill / "references" / reference
                 self.assertEqual((home / relative).read_bytes(), (ROOT / relative).read_bytes())
+            ui_root = Path("skills/b-ui-design")
+            ui_files = [path.relative_to(ROOT) for path in (ROOT / ui_root).rglob("*") if path.is_file()]
+            self.assertGreater(len(ui_files), 20)
+            for relative in ui_files:
+                self.assertEqual((home / relative).read_bytes(), (ROOT / relative).read_bytes(), str(relative))
+            self.assertEqual(
+                [path.relative_to(home / ui_root).as_posix() for path in (home / ui_root).rglob("SKILL.md")],
+                ["SKILL.md"],
+            )
             installer.verify(ROOT, home)
             installer.uninstall(home)
             restored = json.loads((home / "opencode.json").read_text(encoding="utf-8"))
             self.assertEqual(restored, original)
             self.assertFalse((home / installer.STATE_FILE).exists())
             self.assertFalse((home / "skills" / "a-verification" / "SKILL.md").exists())
+            self.assertFalse(any(path.is_file() for path in (home / ui_root).rglob("*")))
 
     def test_uninstall_preserves_modified_managed_file(self):
         with tempfile.TemporaryDirectory() as temporary:
