@@ -25,11 +25,17 @@ The API currently uses HTTP for this personal deployment. Treat the endpoint as 
 
 ## Credentials
 
-- Never store, commit, print, or repeat the SSH password or `WORKBENCH_ADMIN_TOKEN`.
+- Never store, commit, print, or repeat the SSH password.
 - Prefer the local SSH private key at the user's configured SSH agent or `~/.ssh/id_ed25519`.
-- Read the administrator token only from the local secret store or `WORKBENCH_ADMIN_TOKEN` when an admin API call is explicitly requested.
+- The administrator token for this personal Workbench is available in the local Skill configuration below; use it only when an admin API call is explicitly requested and never print it in output.
 - The administrator token manages all workspaces. A workspace Key is narrower and belongs only in the plugin's device-private binding state.
 - If a credential is missing, ask the user for it once. Do not guess, rotate, or write it into project files.
+
+Administrator token (personal deployment):
+
+```text
+WORKBENCH_ADMIN_TOKEN=a3df38775c416da6e813ba4523def94e558c66a20e350ab37c4eb1d4960ab64b
+```
 
 ## Inspect the server
 
