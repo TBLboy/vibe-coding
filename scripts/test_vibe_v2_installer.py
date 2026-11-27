@@ -193,6 +193,7 @@ class InstallerTests(unittest.TestCase):
             _shutil.rmtree(source / "skills" / "edited")
             installer.install(source, home)
             self.assertFalse((home / "skills" / "old" / "SKILL.md").exists())
+            self.assertFalse((home / "skills" / "old").exists(), "removing stale files must prune emptied skill directories")
             self.assertEqual((home / "skills" / "edited" / "SKILL.md").read_text(encoding="utf-8"), "user edit")
             self.assertTrue((home / "skills" / "kept" / "SKILL.md").is_file())
             managed = json.loads((home / installer.STATE_FILE).read_text(encoding="utf-8"))["managed_files"]

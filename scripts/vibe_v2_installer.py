@@ -92,6 +92,18 @@ def assert_within(root: Path, candidate: Path) -> Path:
     return resolved
 
 
+def prune_empty_parents(home: Path, start: Path) -> None:
+    """Remove directories emptied by a deleted managed file.
+
+    An empty `skills/<id>/` still looks like an installed Skill to a directory scan, so a
+    removed managed file must not leave one behind. Stop at the first non-empty ancestor.
+    """
+    parent = start
+    while parent != home and parent.is_dir() and not any(parent.iterdir()):
+        parent.rmdir()
+        parent = parent.parent
+
+
 def source_files(root: Path):
     for source_relative, destination_relative in COPY_ROOTS:
         source_root = root / source_relative
@@ -189,6 +201,7 @@ def remove_stale_managed_files(home: Path, prior_state, current: set[str]) -> No
         if target.is_file() and sha256(target) == digest:
             target.unlink()
             print(f"[-] Removed stale managed file {relative}")
+            prune_empty_parents(home, target.parent)
         elif target.exists():
             print(f"PRESERVE {relative}: no longer managed but changed after installation")
 
@@ -300,6 +313,7 @@ def uninstall(home: Path) -> None:
         target = assert_within(home, home / relative)
         if target.is_file() and sha256(target) == digest:
             target.unlink()
+            prune_empty_parents(home, target.parent)
         elif target.exists():
             print(f"PRESERVE {relative}: changed after installation")
     config = read_json(config_path(home), {})
