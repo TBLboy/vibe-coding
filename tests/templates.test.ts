@@ -13,7 +13,7 @@ test("engineering-dev is the default and only registered type", () => {
 test("engineering-dev template creates exactly the R1 file set", () => {
   const pack = getTemplate("engineering-dev");
   assert.ok(pack);
-  assert.equal(pack.version, 1);
+  assert.equal(pack.version, 2);
   assert.deepEqual(pack.files.map((f) => f.path).sort(), [
     ".vibe/docs/.gitkeep",
     ".vibe/lessons/README.md",

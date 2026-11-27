@@ -4,12 +4,12 @@ export interface TemplateFile { path: string; content: string }
 export interface TemplatePack { type: string; version: number; files: TemplateFile[] }
 
 export const TYPE = "engineering-dev";
-export const VERSION = 1;
+export const VERSION = 2;
 
 const BEGIN = "<!-- VIBE-PROJECT-GENERAL:BEGIN -->";
 const END = "<!-- VIBE-PROJECT-GENERAL:END -->";
 
-// Generic rules are a vendored copy of the framework template (a-project-init/templates/general-rules.md).
+// Generic rules are the authoritative "engineering-dev" template source. Local packages no longer carry a copy.
 const rules = readFileSync(new URL("./general-rules.md", import.meta.url), "utf8").replace(/\r\n/g, "\n").trim() + "\n";
 
 const agents = `${BEGIN}\n${rules}${END}\n\n## 项目级规则\n\n（暂无，可在此补充项目级规则。）\n`;
