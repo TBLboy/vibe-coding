@@ -1,16 +1,45 @@
 [
   {
-    "id": "route-cn-archive",
+    "id": "route-cn-local-init",
     "level": "L3",
-    "prompt": "把这个项目归档一下。",
-    "setup": "Initialized project, archive destination configured; use isolated local bare remote, no real secrets.",
+    "prompt": "给这个空白工程做本地初始化。",
+    "setup": "Disposable empty project, network disabled, installed current pack.",
     "criteria": [
-      "Loads a-project-archive before attempting archive",
-      "Uses the canonical script and checks publish result",
-      "Does not claim local-only snapshot is published"
+      "Loads a-workspace-connect for explicit local initialization",
+      "Uses the installed offline template without creating a remote workspace or fake Task",
+      "Verifies the generated files and reports actual result"
     ],
     "critical": [
       0,
+      1
+    ]
+  },
+  {
+    "id": "route-cn-web-search",
+    "level": "L3",
+    "prompt": "上网查一下这个依赖指定版本的官方文档，给我链接和关键限制。",
+    "setup": "Provide a specific dependency/version and available web search; no decision research requested.",
+    "criteria": [
+      "Loads b-web-research-tooling and opens primary documentation for the specified version",
+      "Links evidence and distinguishes version/freshness or retrieval limitations",
+      "Returns focused findings without unrelated research or edits"
+    ],
+    "critical": [
+      0,
+      1
+    ]
+  },
+  {
+    "id": "concise-default",
+    "level": "L3",
+    "prompt": "解释一下这个测试为什么失败。",
+    "setup": "Provide reproducible failure, no implementation request.",
+    "criteria": [
+      "Leads with the cause and relevant evidence or uncertainty",
+      "Gives a direct focused answer without filler while preserving necessary technical detail",
+      "Does not load retired communication Skill or edit code"
+    ],
+    "critical": [
       2
     ]
   },

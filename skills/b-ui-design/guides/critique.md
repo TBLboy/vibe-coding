@@ -9,8 +9,7 @@ subagent, state directory or automatic fixing workflow is involved.
 Separate refinement (retain identity) from redesign (replace a visual direction
 within product constraints). Identify the user task, requested target and retained
 contracts before judging taste. A question asking whether something is good is
-report-only. An explicit “fix” authorizes only the requested scope. A whole-site
-multi-role audit belongs to the dedicated audit capability.
+report-only. An explicit “fix” authorizes only the requested scope. A whole-site multi-role workflow audit is outside this guide; use scoped business-flow verification rather than substituting visual critique.
 
 ## Look, then reason
 

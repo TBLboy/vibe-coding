@@ -9,110 +9,37 @@ metadata:
 
 # Requirement Baseline
 
-## Purpose
+## Mental model
 
-Create a temporary but explicit contract for the current increment. A baseline is not a promise that requirements will never change; it defines what is currently approved, what is excluded, and how later changes are handled.
+A baseline is a versioned contract for an approved increment, not a permanent freeze, technical design or claim of implementation. Preserve the distinction between confirmed behavior, experimental behavior, current implementation facts and verification status.
 
-## Location
+## Construct the contract
 
-Each piece of work owns its own baseline:
+Use clarified atoms and latest confirmations, relevant existing active baselines (via index), project rules, durable decisions and current Task criteria. Reconcile overlaps and conflicts before activation. Apply these quality dimensions:
 
-```text
-.vibe/requirements/
-├── README.md        # index: | id | title | status | version | tasks |
-└── <work>.md        # one baseline per work item; slug = Task ID by default
-```
+- **Atomicity:** split independently implementable, changeable, failing or acceptable behavior; not by sentence or module.
+- **Completeness:** cover accepted functional rules, constraints, high-impact exceptions and explicit non-goals; retain unaffected contracts.
+- **Accuracy:** remove rejected proposals and obsolete assumptions; distinguish observed code from intended behavior.
+- **Derivation:** add only necessary implications of confirmed rules and existing constraints, with premise; optional or material C behavior requires approval.
+- **Traceability:** each durable atom has a stable unique ID, rule, observable acceptance (Given/When/Then when useful), source and authority. Separate user confirmation, existing contracts, evidence-derived implications and assumptions.
+- **Proportionality:** group complex rules by domain; for a bounded increment `goal`/`doneWhen` may suffice. Do not freeze future technical solutions as business requirements.
 
-- Create `<work>.md` only when durable business rules need a dedicated home. For a single bounded increment, the Task `goal` + `doneWhen` may be baseline enough; do not create the file by ritual.
-- Never put a second work item's rules into an existing baseline; create a new file. Never edit an `active` rule in place; use change control below.
-- Rules that turn out to hold across all work are distilled into the project `AGENTS.md` project-level rules and referenced from the baseline, not duplicated.
-- Maintain `README.md` on every create / activate / supersede. Create it together with the first baseline; it is the entry point other Skills read to learn which baselines are `active`.
-- Reference the baseline path from the Task `goal`; point `doneWhen` at its acceptance criteria.
+Activate only user-confirmed or evidence-derived rules without material conflict, or explicitly labeled experimental rules. Never activate inferred product-semantic changes without confirmation. Each atom needs acceptance criteria; assumptions need owner/invalidation trigger; unresolved questions identify whether they block implementation. No activation while a blocking clarification conflict remains.
 
-## Inputs
+## Persistence and change control
 
-- clarified business atoms and open questions (`a-business-clarify` output);
-- the previous version of this work's baseline, if any (`.vibe/requirements/<work>.md`), and the index `README.md` to spot overlap with other active baselines;
-- decisions that constrain the scope (`.vibe/progress.md`, Task `decisions`);
-- the active Task and current user confirmations.
+When a durable baseline is warranted, use `.vibe/requirements/<work>.md` (work slug, normally Task ID), one file per work item. Maintain `.vibe/requirements/README.md` on create/activate/supersede with id, title, status, version and related Task IDs. Use `draft` / `active` / `superseded` and retain history. Stable cross-work project rules belong in AGENTS.md only with user approval; reference rather than duplicate them.
 
-## Baseline Rules
+For complex work organize metadata (ID/version/status/dates), goal/actors/scope, domain-grouped rules and acceptance, constraints/quality attributes, non-goals, assumptions/open questions, related existing contracts, source/approval, change log and supersession metadata. This is a reference structure, not a required template for trivial work.
 
-1. Include only business atoms relevant to the current goal.
-2. An atom may be activated when it is user-confirmed, evidence-derived without material conflict, or explicitly experimental.
-3. Inferred behavior that changes product semantics cannot become active without appropriate confirmation.
-4. Every active atom needs at least one acceptance criterion.
-5. Record in-scope and out-of-scope items separately.
-6. Record assumptions with an owner and invalidation trigger.
-7. Unresolved questions must state whether they block implementation.
-8. Baseline changes after implementation starts require impact analysis.
+When new information conflicts with an active baseline, create a change candidate; trace affected atoms, Tasks, code, tests, interfaces, migration and delivery risks. A local reversible decision may be resolved directly; B material recoverable decisions via Runtime `record_decision` or durable `.vibe/progress.md`; C product semantics, public interfaces, safety, data, cost or irreversible choices require user approval. Supersede only after acceptance and preserve the superseded version; never overwrite an `active` rule in place or mix another work item's rules into it.
 
-## Workflow
+Reference the baseline in Task `goal` and acceptance in `doneWhen` **before registration**. Registered criteria cannot be edited: compatible clarifications use `record_decision` in prepare/implement; if scope or acceptance changes materially, follow the supersession rule in `docs/06-AGENT-CONTRACT.md` and start a new Task with the approved criteria. Do not change frozen Policy. See `docs/03-STATE-MACHINE.md`. Update progress only for durable project-level changes. When a change is approved, reconcile affected current summaries and technical references; keep the prior baseline and supersession links. A code discrepancy is a finding, not authority to revise the rule.
 
-1. Identify the baseline goal and increment boundary.
-2. Select covered business atoms.
-3. Verify atom status, authority, acceptance criteria, and conflicts.
-4. Consolidate shared actors, constraints, quality attributes, and external dependencies.
-5. List exclusions and deferred behavior.
-6. List blocking and non-blocking unresolved questions.
-7. Create or increment a baseline version.
-8. Write the baseline only after all exit conditions are met.
+## Completion
 
-Do not activate a baseline while the clarification gate is open or blocked. Functional rules, current technical facts, and their conflicts must be distinguishable.
-
-## Decision authority
-
-- **A**: reversible, local, low-impact — resolve directly.
-- **B**: material but recoverable — resolve, then record it in the active Task JSON `decisions` (or `.vibe/progress.md` when it is a durable project fact).
-- **C**: product semantics, safety, data, public interfaces, cost, or irreversible architecture — ask the user; one question, with a recommendation and its consequence.
-
-## Change Control
-
-When a new statement conflicts with an active baseline:
-
-- do not overwrite the old rule in place;
-- create a change candidate;
-- identify affected atoms, tasks, code, tests, interfaces, migration, and delivery risk;
-- use the authority matrix;
-- supersede the old baseline only after the change is accepted, and keep the superseded version visible in the file.
-
-## Outputs
-
-`.vibe/requirements/<work>.md` (when warranted) must include:
-
-- ID (the work slug) and version;
-- status (`draft` / `active` / `superseded`);
-- goal;
-- actors;
-- in-scope and out-of-scope items;
-- business rules with acceptance criteria;
-- constraints and quality attributes;
-- assumptions;
-- unresolved questions;
-- evidence/approval;
-- dates and supersession metadata;
-- a change log of accepted changes to this baseline.
-
-Update `.vibe/requirements/README.md` in the same step.
-
-Point the active Task `doneWhen` at the covered acceptance criteria. When the baseline changes what the user should know about the project stage, summarize it in `.vibe/progress.md`.
-
-## Completion Gate
-
-- all in-scope atoms are active or explicitly experimental;
-- every atom has acceptance criteria;
-- no blocking conflict remains hidden;
-- scope exclusions are explicit;
-- change-control behavior is established;
-- the baseline is listed in `README.md` with its current status and version.
+Check against actual user confirmations/corrections and existing authority: unique IDs, independent observable acceptance, scope coverage, retained rules, explicit exclusions, authority/source, open-question status, version/index consistency and accepted change history. Distinguish an active baseline from implemented or verified behavior. Report unresolved blockers rather than activating by ceremony.
 
 ## V2 operating rules
 
-- For registered Tasks, use Runtime lifecycle events in `docs/03-STATE-MACHINE.md`; never edit Task JSON directly.
-
-- Follow the current project `AGENTS.md` and Session policy.
-- Use a persistent `.vibe/tasks/<task-id>.json` only when V2 Task policy warrants it.
-- Write `.vibe/sessions/<session-id>/current-session.md` only for resumable unfinished work or a blocker.
-- Update `.vibe/progress.md` only for durable project facts.
-- Use only the V2 Task JSON and V2 Project Memory locations described above for durable state.
-- Report confirmed facts, assumptions, verification performed, and material limitations.
+Follow project `AGENTS.md` and effective Policy (frozen policy for existing Task work). Use Runtime lifecycle events, never edit registered Task JSON. Persist only warranted Task/Project Memory facts under the injected root and exact recovery path (`docs/05-MEMORY-CONTRACT.md`). Report evidence and limits; Main Agent owns strict review.

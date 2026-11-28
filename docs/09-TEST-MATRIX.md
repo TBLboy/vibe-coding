@@ -15,10 +15,10 @@ Run `npm run test:core`.
 
 ### Task creation
 
-- strict always creates a Task.
+- strict engineering implementation (even small) and engineering work needing durable tracking require a Task; ordinary consultation without durable tracking needs does not in any mode.
 - fast trivial one-turn work does not create a Task.
 - fast creates a Task for cross-session recovery, blocker, high risk, durable decision/deliverable, or persistent acceptance criteria.
-- balanced creates a Task for multi-step/multi-file work or any durable persistence signal.
+- balanced creates a Task for non-trivial coordination or any durable persistence signal; file count alone does not decide. The helper is a semantic reference, not a production classifier.
 
 ### Task state machine
 
@@ -134,7 +134,7 @@ during the model wait. Do not print raw provider-routing responses.
 | Strict reviewer returns go | Task may complete |
 | Strict reviewer returns findings | Repair → verification → re-review |
 | Third unsuccessful review | Task blocked; no fourth automatic repair |
-| Reviewer permissions | Cannot edit; cannot run arbitrary shell, glob, or grep |
+| Reviewer permissions | Native read and bounded locator work; cannot edit or run native shell/glob/grep |
 | Reviewer without permit | Plugin permission hook denies invocation |
 | Reviewer with a valid strict review permit | Exactly one invocation is allowed |
 | Fast/balanced Task attempts review | Plugin permission hook denies invocation |
@@ -161,21 +161,21 @@ Do not call the package release-ready until:
 - Every managed V2 capability Skill has a `SKILL.md` with V2 operating boundaries.
 - The main Agent routes every managed capability Skill by an explicit trigger.
 - The installer copies Skill files, verifies their digests, and removes only unchanged managed Skill files on uninstall.
-- No migrated Skill may instruct writes to `.project-log` or create legacy Goal, Run, ledger, SQLite, standalone Evidence, or reviewer transcript objects. `a-project-archive` may *name* the pre-existing V1 snapshots inside the archive repository so it can forbid touching them; a mention that frames creating or writing them fails the test.
+- No managed Skill may instruct writes to `.project-log` or create legacy Goal, Run, ledger, SQLite, standalone Evidence, or reviewer transcript objects.
 
-## V2 project archive
+## Retired capabilities and upgrade (D-28)
 
-- Archive snapshots contain only project-root `AGENTS.md` when present and `.vibe/` memory.
-- Archive publication validates SHA-256 manifest entries, never modifies source files, and rejects unsafe paths.
-- The archive root is remembered in the installed Skill (`archive_root.conf`, user data, never shipped or deleted by the installer): unconfigured → exit 3 and ask once; `--set-archive-root` validates an existing absolute directory and persists it; later runs reuse it.
-- Archiving publishes: the snapshot directory is committed and pushed to the archive repository's branch, and the remote ref is confirmed equal to the local commit; an unrelated file in that repository is never committed.
-- A snapshot directory matched by the archive repository's `.gitignore` raises instead of producing an empty, unpublished commit.
-- A snapshot that cannot be published is reported, not silently accepted: a plain directory and a remote-less repository both return `publish.status` `not-a-repository` / `no-remote`, and the command exits 4 with "NOT pushed"; `--no-push` returns `skipped` and exit 0.
+- Exactly 22 managed Skills and matching routes; no active references to the six retired Skill IDs in other Skill instructions, no retired helper/test entrypoints. The old Git archive workflow is not a synchronization or backup substitute.
+- Installer upgrade removes unchanged previously managed retired files (including helper scripts); preserves edited or unowned files, former archive settings, unrelated user config and project data. Fresh install does not distribute retired Skills.
+- Main Agent default concise/direct/efficient/focused style preserves necessary warnings, evidence and requested detail; no separate communication mode. Online search Skill remains independent from decision research, with source inspection, freshness, cross-checking, untrusted-content and unavailable-tool boundaries. Structural tests only; live model cases remain pending.
 
 ## V2 capability Skill routing (`tests/package-shape.test.ts`)
 
 - The routing table declares Chinese aliases as first-class triggers and forbids substituting an improvised parallel flow for a covered capability.
 - Every routed Skill carries a Chinese alias in its routing row **and** at the start of its frontmatter `description`, so a request phrased in the user's language reaches the Skill instead of being reinterpreted (regression guard for VIBE-FW-ROUTE-001).
+
+- Prompt refinement: package checks pin exactly one row for each of the 22 Skills and preserve high-impact scope qualifiers (focused online search, trivial edits, routine tests, named branch, explicit Workbench operations, local initialization discovery). The existing sync-duty test still protects the three duties. This is structural evidence only.
+- Real-model acceptance: compare old/new Main Agent in identical fresh disposable host sessions with pinned model, mode, fixtures and Skills. Observe simple edits, business constraints, root-cause investigation, design restraint, user corrections, Chinese workflow routing, strict-risk gates and honest blocked delivery. Use actual traces, diffs and checks; do not infer behavioral improvement from prompt size or a green package suite. See the delivery note for the manual A/B protocol.
 
 ### UI design routing bundle
 
@@ -192,8 +192,12 @@ Do not call the package release-ready until:
 
 ## V2 capability Skill completeness
 
-- `tests/package-shape.test.ts` requires every managed Skill to carry at least two methodology sections beyond the shared V2 operating rules and a minimum length, so a Skill cannot regress to a summary stub.
-- Restored helper assets are pinned: `b-opencode-model-config/scripts/configure_models.py` (`scripts/test_v2_configure_models.py`: defaults applied, legacy `attachment` removed, unrelated keys and file mode preserved, dry-run writes nothing, idempotent, unknown provider/model rejected) and `b-source-code-tutoring/references/teaching-template.md`.
+- `b-skill-authoring` structural checks protect domain-value guidance, non-mandatory design dimensions, progressive disclosure with essential safety in the main file, guarded explicit routing, complete Memory contract references, and real-model comparison limitations. Actual authoring quality requires representative positive, near-miss and boundary examples in the real host; a passing package test is not proof of professional gain.
+
+- `tests/package-shape.test.ts` checks managed Skill shape, routing and V2 compatibility. Character count is not a quality gate; domain-specific behavioral acceptance remains separate.
+- Core engineering refinement: structural checks guard audit-only authorization, registered-criteria supersession, plan versus registered Task, proportionate specifications, architecture ownership, implementation preservation and independent verification oracles. Existing reference examples must resolve. See the delivery report for eight live positive/boundary scenario pairs; these checks do not execute a model.
+- Engineering cognition and knowledge refinement: package checks guard onboarding evidence versus authority, static survey read-only boundaries, explicit source tutoring and actual versus illustrative execution, scenario control boundaries, decision research and paper evidence, brief disclosure and Runtime-owned Task references, and lessons/index plus user-approved AGENTS.md writes. The eight live positive/boundary scenario pairs in the delivery report are manual acceptance, not executed model tests.
+- The retained `b-source-code-tutoring/references/teaching-template.md` helper asset is pinned.
 - `b-branch-engineering-review` is pinned in the managed list: an explicit-only branch audit whose trigger requires a named branch, with the four-state comparison, capability ledger and evidence grading as its methodology. Its behaviour is validated by the branch scenarios in the design document (deleted-but-contracted code, half-implemented interface, changed default, cross-file contract break, tests without assertions, legitimate deletion, needless abstraction); those scenarios are run by hand against real branches, since a fixture repository for all seven is not shipped.
 
 ## Per-work requirement baselines (D-21)
@@ -211,7 +215,7 @@ Do not call the package release-ready until:
 
 ## P0/P1 additions
 
-Production adapter simulation tests now drive registered tools and permission/completion hooks, with ownership, policy freeze, stale evidence and reviewer replay regressions. Installer/archive tests use temporary profiles and local Git remotes. See `evaluations/README.md` for actual host and L3/L4 model evaluation gates.
+Production adapter simulation tests now drive registered tools and permission/completion hooks, with ownership, policy freeze, stale evidence and reviewer replay regressions. Installer tests use temporary profiles. See `evaluations/README.md` for actual host and L3/L4 model evaluation gates.
 
 ### Native background review repair (OpenCode 2.3.0 contract)
 
@@ -228,3 +232,36 @@ remains a separate gate, not implied by a green local suite.
 ## P2 — engineering capability evaluation
 
 The existing L1/L2 suite remains unchanged in scope. The installer regression also checks that the three new Skill references are copied byte-for-byte. `evaluations/test_p2_fixtures.py` exercises all six materialized L4 scenarios, fresh Git baselines, the dirty user-edit setup, seeded production bypass and destination rejection. `evaluations/cases.json` contains the six new criteria sets; see `evaluations/README.md` for preparation and independent evaluation. Local fixture checks are not L4 model execution. Real host and model acceptance remain separate release gates.
+
+
+## Specialist Skill refinement
+
+- Package checks guard the UI routing and scoped accessibility evidence, pinned four-state branch comparisons with a merge **tree** ID, isolation and conflict limitations, binding versus first-sync outcomes, private conflict recovery, admin versus workspace-Key authorization, no blind create retry, and backup/restore approval. Existing UI source pinning, native workspace tests, installer and Workbench HTTP tests remain in force.
+- Real-model acceptance remains separate: use comparable rendered UI states, a clean and conflicting branch, offline and remote binding (including failed first sync), and read-only/approved operations in an isolated service. No production actions are implied by this test matrix.
+
+
+## Project Memory knowledge quality refinement
+
+- Package-shape regression checks guard the installed contract reference, claim-specific authority, selective retrieval, timely canonical maintenance, Session isolation, indexed lessons and user-approved AGENTS.md. They are structural checks, not evidence of model compliance.
+- Template v3 retains the exact six files and empty Task/Session state; Workbench tests and local-init tests check content, version, server export equality, installed bytes and refusal to overwrite existing knowledge. The real two-device Workbench test checks identical blank bytes, requirement/lesson/index and recovery transfer and recovery deletion, plus existing import/conflict regression. No sync algorithm or Task schema changes.
+- Manual model acceptance: see `evaluations/README.md`, Project Memory section. No real model or cloud test is claimed by the above checks.
+
+
+## Context efficiency (local structural and host boundaries)
+
+- `tests/mode.test.ts` checks every Session/frozen-policy pair with active and inactive pointers, exact encoded recovery path, deterministic rendering, reviewer exception, and strict gate language. `tests/runtime-integration.test.ts` also switches a live simulated adapter Session from strict to fast, checks both policy scopes, and verifies the existing strict Task can still authorize review. Existing lifecycle/permit/compacted-child rejection tests remain unchanged.
+- `tests/package-shape.test.ts` pins the compact footer for all 22 Skills, preserved UI-specific boundary, context/evidence guidance, native compaction recovery and unchanged compaction configuration. The installer continues to distribute current bytes without touching project memory or user model/provider configuration.
+- No automated assertion of model intelligence, token savings or provider cost. See the manual context efficiency scenarios in `evaluations/README.md`; use actual target-host usage and comparable successful outputs.
+
+### Mode experience refinement
+
+- `tests/task-policy.test.ts`: ordinary consultation without durable tracking in all modes, durable signals take precedence, clear Fast work vs meaningful Balanced coordination, mandatory Strict engineering work. The helper is a semantic reference, not an automatic production classifier.
+- `tests/mode.test.ts`: effective-policy instructions for consultation, risk floor, light Fast, adaptive Balanced and non-ceremonial Strict; switch acknowledgement reflects returned frozen policy without automatic resume.
+- `tests/runtime-integration.test.ts`: actual adapter switch feedback with no pointer, same/different policy, active/inactive pointer and another Session; existing Task bytes remain unchanged. Existing Strict-to-Fast permit regression now also checks the tool's user-facing facts.
+- `tests/package-shape.test.ts`: structural alignment of product/Agent/Skill instructions, not a claim of model compliance. Real-model mode experience remains a manual release check; see `evaluations/README.md`.
+
+## Independent Reviewer refinement
+
+- `tests/reviewer-search.test.ts`: literal file/text location, artifact inventory, bounds, sensitive/generated/linked/nonregular paths, invalid scopes and no content in results.
+- `tests/runtime-integration.test.ts`: production tool registration, consumed permit and host child identity/workspace, denied host permission and pre-read candidate check, later Session allow cannot grant prohibited Reviewer actions in the adapter hook, bound/terminal child and post-review denial, successful multiple-tool child completion. No new verdict or lifecycle state.
+- `tests/package-shape.test.ts`: exact default-deny Reviewer grants and professional review contract. These are local adapter and filesystem tests, not actual host authorization or model quality validation. Live evaluation must prove the installed tool can be called, permissions cannot be bypassed, and real material defects are found without preference-based findings.

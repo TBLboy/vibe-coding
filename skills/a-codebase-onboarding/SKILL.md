@@ -9,37 +9,24 @@ metadata:
 
 # Codebase Onboarding
 
-## Purpose
+## Mental model and scope
 
-建立“系统现在如何工作”的证据地图，为业务澄清、对齐和任务规划提供起点，而不是把旧代码批量写成正式业务规范。
+Build an evidence map of how the system currently works so another engineer can reason about it. Start with the user's intended work, not a directory inventory. `b-project-structure-survey` answers where things live; onboarding connects real entry points to behavior, state, integrations and risks. `b-source-code-tutoring` teaches a selected source path. No automatic handoff or code repair.
 
-## Procedure
+## Investigate the system
 
-1. 从用户目标限定分析范围；不做无边界全仓扫描。
-2. 识别语言、入口、构建、模块、数据存储、部署、外部集成和测试。
-3. 提取当前可观察行为、状态、错误、配置、隐含契约和关键路径。
-4. 标注证据等级：正式资料、测试、代码、配置、注释或推断。
-5. 形成候选业务原子，默认标记为 `draft` / `inferred` / `evidence-derived`；不得直接视为已确认规则。
-6. 双向检查当前行为与已有业务记录（`AGENTS.md`、`.vibe/requirements/` 下的 active 基线、`.vibe/progress.md`），分类差异（finding 类型见 `a-business-code-align`）。
-7. 列出后续澄清、测试补齐、规格化、修复或研究工作；仅在需要持久跟踪时创建 Task JSON。
+- Establish the actual package/workspace roots, stack, build/configuration, deployment assumptions, entry points, tests and external dependencies. Find which profiles, flags, registrations and defaults select the live implementation; distinguish available code from enabled code.
+- Trace a few representative use cases from trigger through authorization/validation, domain decisions, state owners and persistence, external calls, result and failure handling. Include material alternate paths (retry, cancellation, duplicate request, recovery) when relevant. Identify the boundaries between observed code, mocks, generated wiring and external systems. Do not equate an import graph with runtime execution.
+- Reconcile data models, lifecycle transitions, invariants, configuration and actual consumers. Check how existing tests exercise the entry points and what they omit. Execute safe, isolated checks only when authorized and useful; do not start external services, write production data or modify product code as part of onboarding.
+- Compare relevant `AGENTS.md`, indexed active requirements and durable progress/decisions against implementation. Use progress as navigation, selectively follow relevant technical docs and lessons, and check their scope/revision before relying on them. Report stale guidance and correct only authorized current knowledge; do not rewrite approved rules from observed behavior. Distinguish normative rules from observations: explicit user-approved contract, actual execution evidence, test assertions, static code/configuration, comments and inference. A test or current code is not automatically business authority; record conflicts, do not silently choose a winner.
+- Derive candidate business atoms from material behaviors, with source, trigger, condition, effect and exception. Label them `evidence-derived`, `inferred` or `unknown`; keep any proposed baseline `draft` until authorized. Use `a-business-code-align` when a full bidirectional audit is requested, and `a-business-clarify` for unresolved semantics.
 
-## Outputs
+## Deliver a usable map
 
-- 架构与关键路径摘要；
-- 候选业务原子（带证据等级）；
-- 高风险和知识盲区；
-- 对齐 findings；
-- 首批后续工作清单。
+Provide system boundaries and key paths with source anchors; observed behavior and candidate business rules; known constraints, risks, contradictory evidence and important gaps; and the smallest useful next investigation or authorized work. Scale coverage to the goal; do not claim whole-system knowledge from a sampled path or successful build. Distinguish static understanding, executed checks and unverified external behavior.
 
-持久化只写有长期价值的事实：架构约束与关键限制进入 `.vibe/progress.md`；稳定、可执行的项目规则进入 `AGENTS.md` 的项目级规则。不得直接修改产品代码。
+Default to a concise report. Persist a useful onboarding document under `.vibe/docs/` when warranted, and only durable project facts in `.vibe/progress.md`. Propose stable project-level rules for `AGENTS.md` and require user approval before editing it. Use the existing requirement baseline and lesson rules for those knowledge types; do not auto-activate inferred business rules. A follow-up list is a plan, not registered Task state. Do not create placeholder Tasks for findings.
 
 ## V2 operating rules
 
-- For registered Tasks, use Runtime lifecycle events in `docs/03-STATE-MACHINE.md`; never edit Task JSON directly.
-
-- Follow the current project `AGENTS.md` and Session policy.
-- Use a persistent `.vibe/tasks/<task-id>.json` only when V2 Task policy warrants it.
-- Write `.vibe/sessions/<session-id>/current-session.md` only for resumable unfinished work or a blocker.
-- Update `.vibe/progress.md` only for durable project facts.
-- Use only the V2 Task JSON and V2 Project Memory locations described above for durable state.
-- Report confirmed facts, assumptions, verification performed, and material limitations.
+Follow project `AGENTS.md` and effective Policy (frozen policy for existing Task work). Use Runtime lifecycle events, never edit registered Task JSON. Persist only warranted Task/Project Memory facts under the injected root and exact recovery path (`docs/05-MEMORY-CONTRACT.md`). Report evidence and limits; Main Agent owns strict review.

@@ -9,11 +9,11 @@ import { hashContent } from '../shared/team-contracts/manifest.ts';
 import { connectWorkspace } from '../runtime/opencode/plugins/vibe-v2/team/binding.ts';
 import { TeamMirror } from '../runtime/opencode/plugins/vibe-v2/team/mirror.ts';
 import { listConflicts } from '../runtime/opencode/plugins/vibe-v2/team/conflicts.ts';
-import { stateDir } from '../runtime/opencode/plugins/vibe-v2/team/device-state.ts';
+import { boundStateDir } from '../runtime/opencode/plugins/vibe-v2/team/device-state.ts';
 
 const KEY = 'K'.repeat(32);
 
-async function fixture(t: { after(fn: () => Promise<void>): void }, options: { delayMs?: number } = {}) {
+async function fixture(t: { after(fn: () => Promise<void>): void }, options: { delayMs?: number; pageLimit?: number; failSince?:number } = {}) {
   const base = await mkdtemp(join(tmpdir(), 'mir-'));
   const saved = process.env.OPENCODE_CONFIG_DIR;
   process.env.OPENCODE_CONFIG_DIR = join(base, 'cfg');
@@ -21,7 +21,7 @@ async function fixture(t: { after(fn: () => Promise<void>): void }, options: { d
   await mkdir(root);
   const docs = new Map<string, { version: number; content: string | null }>();
   const changes: any[] = [];
-  let archived = false;
+  let archived = false, failedPage=false;
   const put = (path: string, content: string | null) => {
     const version = (docs.get(path)?.version ?? 0) + 1;
     docs.set(path, { version, content });
@@ -40,7 +40,9 @@ async function fixture(t: { after(fn: () => Promise<void>): void }, options: { d
       if (p === '/api/connect') return send(200, { workspace: { id: 'ws_1', name: 'W', type: 'engineering-dev' } });
       if (p === '/api/workspaces/ws_1/changes') {
         const since = Number(url.searchParams.get('since'));
-        const reply = () => send(200, { changes: changes.filter((c) => c.seq > since), nextSeq: changes.length, hasMore: false });
+        if(!failedPage&&options.failSince===since){failedPage=true;return send(503,{error:{}});}
+        const page=changes.filter(c=>c.seq>since).slice(0,options.pageLimit??200),nextSeq=page.at(-1)?.seq??since;
+        const reply = () => send(200, { changes: page, nextSeq, hasMore:nextSeq<changes.length });
         if (options.delayMs) setTimeout(reply, options.delayMs); else reply();
         return;
       }
@@ -87,7 +89,7 @@ test('same path, different content: cloud lands on the path, local goes to the d
   const r = await h.mirror.sync(true);
   assert.equal(r.ok, true, String(r.lastError));
   assert.equal(await h.local('AGENTS.md'), 'cloud');
-  const list = await listConflicts(stateDir(await (await import('node:fs/promises')).realpath(h.root)));
+  const list = await listConflicts(await boundStateDir(await (await import('node:fs/promises')).realpath(h.root)));
   assert.equal(list.length, 1);
   assert.equal(list[0].kind, 'both_modified');
   assert.equal(list[0].local, 'local');
@@ -128,4 +130,30 @@ test('a slow server still syncs within the default budget', async (t) => {
   const result = await new TeamMirror(h.root).sync(true);
   assert.equal(result.ok, true, String(result.lastError));
   assert.equal(await h.local('AGENTS.md'), 'slow cloud');
+});
+
+
+test('refinement: repeated conflicts and edits before resolution are protected',async t=>{
+ const h=await fixture(t);h.put('AGENTS.md','remote0');await h.write('AGENTS.md','localA');assert.equal((await h.mirror.sync(true)).ok,true);
+ h.put('AGENTS.md','remote1');await h.write('AGENTS.md','localB');assert.equal((await h.mirror.sync(true)).ok,true);
+ await h.write('AGENTS.md','localC');const r=await h.mirror.resolveConflict('AGENTS.md','keep_remote',undefined);assert.equal(r.status,'resolved');assert.equal(await h.local('AGENTS.md'),'remote1');
+ const dir=join(await boundStateDir(h.root),'recoveries');const values=await Promise.all((await readdir(dir)).map(async n=>JSON.parse(await readFile(join(dir,n),'utf8')).local));assert.deepEqual(values.sort(),['localB','localC']);
+});
+
+test('refinement: invalid local bytes are not overwritten on pull and cursor does not advance',async t=>{
+ const h=await fixture(t);h.put('AGENTS.md','initial');assert.equal((await h.mirror.sync(true)).ok,true);const before=h.mirror.status().cursor;
+ const bytes=Buffer.from([255,254,128]);await writeFile(join(h.root,'AGENTS.md'),bytes);h.put('AGENTS.md','new');const r=await h.mirror.sync(true);assert.equal(r.ok,false);assert.equal(r.cursor,before);assert.deepEqual(await readFile(join(h.root,'AGENTS.md')),bytes);
+});
+
+
+test('refinement: interrupted page persists only applied cursor and never pushes stale local state',async t=>{
+ const h=await fixture(t,{pageLimit:2,failSince:2});h.put('AGENTS.md','one');h.put('AGENTS.md','two');h.put('AGENTS.md',null);h.put('AGENTS.md','four');
+ const first=await h.mirror.sync(true);assert.equal(first.ok,false);assert.equal(first.cursor,2);assert.equal(await h.local('AGENTS.md'),'two');assert.equal(h.docs.get('AGENTS.md')?.version,4);
+ const restarted=new TeamMirror(h.root);assert.equal((await restarted.sync(true)).ok,true);assert.equal(await h.local('AGENTS.md'),'four');assert.equal(restarted.status().cursor,4);assert.equal(h.docs.get('AGENTS.md')?.version,4);
+});
+
+test('refinement: failure to create recovery leaves new local edit and prior cursor intact',async t=>{
+ const h=await fixture(t);h.put('AGENTS.md','r1');await h.write('AGENTS.md','a');assert.equal((await h.mirror.sync(true)).ok,true);const before=h.mirror.status().cursor;
+ const dir=await boundStateDir(h.root);await writeFile(join(dir,'recoveries'),'blocked directory');await h.write('AGENTS.md','b');h.put('AGENTS.md','r2');
+ const r=await h.mirror.sync(true);assert.equal(r.ok,false);assert.equal(r.cursor,before);assert.equal(await h.local('AGENTS.md'),'b');assert.equal((await listConflicts(dir))[0].local,'a');
 });

@@ -1,12 +1,12 @@
 import { realpath } from 'node:fs/promises';
-import { loadNotified, saveNotified, stateDir } from './device-state.ts';
+import { loadNotified, saveNotified, boundStateDir } from './device-state.ts';
 import { listConflicts } from './conflicts.ts';
 import type { TeamMirror } from './mirror.ts';
 
 /** Per-turn injection (R18): short, data only. Conflicts stay listed until resolved. */
 export async function teamContext(root: string, mirror: TeamMirror, _deadline?: number): Promise<string> {
   const state = mirror.status();
-  const dir = stateDir(await realpath(root));
+  const dir = await boundStateDir(await realpath(root));
   const conflicts = await listConflicts(dir);
   const notified = await loadNotified(dir);
   const last = state.lastSyncAt === null ? 'never' : new Date(state.lastSyncAt).toISOString();

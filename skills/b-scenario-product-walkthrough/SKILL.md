@@ -9,94 +9,21 @@ metadata:
 
 # Scenario-Driven Product Walkthrough
 
-## Purpose
+## Mental model
 
-Help users understand a product by placing its capabilities in a representative, realistic work situation. Explain what the user does, what the system does, what artifacts change, and how normal work, exceptions, and later changes are handled.
+Explain a product through a realistic end-to-end use situation so the user can predict what happens when they act. This is an operational mental model, not a feature inventory, source tutorial, product redesign or a claim of having executed a simulation. Use the user's actual domain and requested role, starting state and goal when known; label illustrative examples.
 
-Use this instead of a feature inventory when the user needs an operational mental model.
+## Construct the scenario from evidence
 
-## Inputs
+- Read relevant documentation, code/config, screenshots or confirmed facts first. Establish the user's role/permissions, desired result, entry point, starting data/state and available capabilities. Ask only for an unavailable fact that changes the scenario. Separate documented behavior, evidence-derived behavior, illustrative inputs and unknowns; never invent automation, APIs, integrations or guarantees.
+- Select one representative normal path that exercises the important capabilities; add a meaningful exception or decision and later change/resumption if supported. Use two short scenarios only when distinct roles or modes cannot be explained honestly in one. A hypothetical future capability must remain labeled as such.
+- Walk through the sequence in user-visible order. For each material stage connect **user intent/action → system response → visible result/artifact/state → control boundary**. Explain who decides, what is automatic vs manual, what approval is needed and what a failure leaves behind. Use short concrete commands, state examples, screenshots or diagrams only when supported and useful; explain terms at first use.
+- Cover initial setup, main work loop, collaboration between capabilities, state ownership/persistence, relevant error or ambiguity, later change/bug, interruption/recovery and ordinary daily use when applicable. Do not force irrelevant branches or make a lifecycle look like a mandatory one-way waterfall. Check that recovery, state transitions and user controls agree with the actual product.
 
-Collect only what is needed:
+## Output
 
-- the product or workflow being explained;
-- the intended user, role, and desired outcome;
-- available documentation, code, configuration, screenshots, or prior facts;
-- the user's requested depth and whether they want a new-project, existing-project, or troubleshooting scenario.
-
-Read available evidence before asking. If key product behavior is undocumented, label the gap as an assumption or ask one focused question. Never invent APIs, automation, integrations, or guarantees.
-
-## Scenario Selection
-
-Choose one scenario that is concrete, representative, and broad enough to exercise the product's important capabilities. State the scenario in one sentence before starting.
-
-Prefer a scenario that includes:
-
-- the user's initial trigger and concrete goal;
-- the normal success path;
-- a meaningful decision, failure, or exception branch;
-- a later change, bug fix, or resumed session when the product supports iteration;
-- the resulting output and the user's normal daily operating pattern.
-
-Use two short scenarios only when one cannot cover distinct user roles or product modes. Do not fabricate a fictional business domain merely for style; use the user's domain when known and otherwise identify the example as illustrative.
-
-## Walkthrough Method
-
-Present the work in chronological stages. For each stage, include:
-
-1. **User intent or action**: what the user says, clicks, configures, or requests.
-2. **System response**: which feature, workflow step, Agent, Skill, service, or integration acts and why.
-3. **Visible result**: the artifact, state change, output, or decision the user can inspect.
-4. **Control boundary**: what happens automatically, what remains manual, and when the system must ask the user.
-
-Use short commands, snippets, state examples, or artifact trees only where they clarify the action. Explain terms at first use.
-
-## Required Coverage
-
-Cover the following when applicable:
-
-- first-time setup or entry point;
-- the main work loop from goal to usable result;
-- how individual capabilities cooperate rather than listing them in isolation;
-- important data, documents, task state, or durable artifacts;
-- a realistic exception, ambiguity, failed validation, or decision branch;
-- how a new request or bug revisits earlier work without restarting everything;
-- interruption and recovery when state is persistent;
-- the user's two or three practical daily usage patterns.
-
-For workflows, explicitly distinguish a lifecycle from a one-way waterfall. For autonomous systems, state who chooses the next step and when user approval is required.
-
-## Accuracy Rules
-
-- Separate confirmed behavior, evidence-derived behavior, and illustrative assumptions.
-- Do not claim a feature is automatic unless the product actually automates it.
-- Do not turn an illustrative scenario into a requirement for the user's project.
-- Match the terminology and interaction style used by the product.
-- Keep internal implementation detail proportional to the user's goal.
-
-## Output Shape
-
-Use this outline unless the user requests another format:
-
-```text
-Scenario and goal
-Starting context
-Stage-by-stage walkthrough
-Key branch or exception
-Later change / bug / iteration
-Daily-use summary
-Feature-to-scenario map
-```
-
-End with a compact map from the major features to the moment in the scenario where each mattered. Offer a deeper technical walkthrough, role-specific variant, or a scenario based on the user's own project only if useful.
+State scenario and goal, starting context and chronological walkthrough; show a meaningful branch/iteration and practical daily-use summary when useful. A compact feature-to-scenario map helps when many capabilities cooperate, but is not mandatory for a short explanation. Depth follows the user's goal; do not bury the operational picture in internal implementation. Mark simulated/illustrative state and unverified behavior clearly. Do not treat the example as an approved requirement, run a real workflow, create state or modify code simply to explain it.
 
 ## V2 operating rules
 
-- For registered Tasks, use Runtime lifecycle events in `docs/03-STATE-MACHINE.md`; never edit Task JSON directly.
-
-- Follow the current project `AGENTS.md` and Session policy.
-- Use a persistent `.vibe/tasks/<task-id>.json` only when V2 Task policy warrants it.
-- Write `.vibe/sessions/<session-id>/current-session.md` only for resumable unfinished work or a blocker.
-- Update `.vibe/progress.md` only for durable project facts.
-- Use only the V2 Task JSON and V2 Project Memory locations described above for durable state.
-- Report confirmed facts, assumptions, verification performed, and material limitations.
+Follow project `AGENTS.md` and effective Policy (frozen policy for existing Task work). Use Runtime lifecycle events, never edit registered Task JSON. Persist only warranted Task/Project Memory facts under the injected root and exact recovery path (`docs/05-MEMORY-CONTRACT.md`). Report evidence and limits; Main Agent owns strict review.

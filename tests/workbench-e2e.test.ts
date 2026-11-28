@@ -9,7 +9,9 @@ import { once } from 'node:events';
 import { connectWorkspace } from '../runtime/opencode/plugins/vibe-v2/team/binding.ts';
 import { TeamMirror } from '../runtime/opencode/plugins/vibe-v2/team/mirror.ts';
 import { listConflicts } from '../runtime/opencode/plugins/vibe-v2/team/conflicts.ts';
-import { stateDir } from '../runtime/opencode/plugins/vibe-v2/team/device-state.ts';
+import { importWorkspace } from '../runtime/opencode/plugins/vibe-v2/team/import-workspace.ts';
+import { TeamClient } from '../runtime/opencode/plugins/vibe-v2/team/client.ts';
+import { clearDeviceBinding,stateDir,withStateLock,boundStateDir } from '../runtime/opencode/plugins/vibe-v2/team/device-state.ts';
 
 // Real Workbench process (sibling worktree) + two independent plugin clients (V14).
 const SERVER = resolve(import.meta.dirname, '..', '..', 'team-workspace-workbench', 'server', 'main.ts');
@@ -59,6 +61,27 @@ test('two devices converge through a real Workbench: sync, conflict, delete', { 
   assert.equal(b1.ok, true, String(b1.lastError));
   assert.equal(await B.read('AGENTS.md'), await A.read('AGENTS.md'));
 
+  // New remote blank initialization and the local published pack have identical bytes.
+  const pack=JSON.parse(await readFile(resolve(import.meta.dirname,'../shared/team-contracts/templates/engineering-dev.json'),'utf8'));
+  assert.equal(pack.version,3);
+  for(const f of pack.files)assert.equal(await A.read(f.path),f.content);
+  // Cross-device knowledge transport, not an assertion about Agent retrieval behavior.
+  const memory = {
+    '.vibe/lessons/README.md': '# Lessons\n| sync-retry | bug | active | retry, timeout | do not infer success |\n',
+    '.vibe/lessons/sync-retry.md': '# Retry\nTrigger: timeout. Cause: unknown. Prevention: check actual state.\n',
+    '.vibe/requirements/sync.md': '# Sync\nStatus: active. Verify first sync separately.\n',
+    '.vibe/requirements/README.md': '# Requirements\n| sync | Sync | active | 1 | - |\n',
+    '.vibe/sessions/ses_a/current-session.md': '# Recovery\nNext: verify local state.\n',
+  };
+  for(const [path,content] of Object.entries(memory))await A.write(path,content);
+  assert.equal((await A.mirror.sync(true)).ok,true);
+  assert.equal((await B.mirror.sync(true)).ok,true);
+  for(const [path,content] of Object.entries(memory))assert.equal(await B.read(path),content);
+  await A.remove('.vibe/sessions/ses_a/current-session.md');
+  assert.equal((await A.mirror.sync(true)).ok,true);
+  assert.equal((await B.mirror.sync(true)).ok,true);
+  await assert.rejects(()=>B.read('.vibe/sessions/ses_a/current-session.md'));
+
   await A.write('.vibe/docs/x.md', 'from A');
   assert.equal((await A.mirror.sync(true)).ok, true);
   assert.equal((await B.mirror.sync(true)).ok, true);
@@ -71,7 +94,7 @@ test('two devices converge through a real Workbench: sync, conflict, delete', { 
   assert.equal(bc.ok, true, String(bc.lastError));
   assert.equal(bc.conflicts, 1);
   assert.equal(await B.read('.vibe/progress.md'), 'A edit');
-  const conflicts = await listConflicts(stateDir(await realpath(B.root)));
+  const conflicts = await listConflicts(await boundStateDir(await realpath(B.root)));
   assert.equal(conflicts.length, 1);
   assert.equal(conflicts[0].local, 'B edit');
   const res = await B.mirror.resolveConflict('.vibe/progress.md', 'keep_local', undefined);
@@ -84,6 +107,23 @@ test('two devices converge through a real Workbench: sync, conflict, delete', { 
   assert.equal((await A.mirror.sync(true)).ok, true);
   assert.equal((await B.mirror.sync(true)).ok, true);
   await assert.rejects(() => B.read('.vibe/docs/x.md'));
+  // Real HTTP and both clients preserve byte content, including NUL.
+  const large='\0'.repeat(1024*1024-5)+'\ufeff\r\n';await A.write('.vibe/docs/large.md',large);assert.equal((await A.mirror.sync(true)).ok,true);assert.equal((await B.mirror.sync(true)).ok,true);assert.equal(await B.read('.vibe/docs/large.md'),large);
+  // Lag behind >200 changes, including history pruning and deletion/recreation.
+  const ws=(await new TeamClient(serverUrl,key).request('/connect','POST',{})).workspace.id;const client=new TeamClient(serverUrl,key);const path=`/workspaces/${ws}/documents/${encodeURIComponent('.vibe/docs/history.md')}`;
+  let version=0;for(let i=0;i<205;i++){const r=await client.request(path,'PUT',{content:`history ${i}`},{'if-match':String(version)});version=r.version;}
+  version=(await client.request(path,'DELETE',undefined,{'if-match':String(version)})).version;
+  version=(await client.request(path,'PUT',{content:'recreated'},{'if-match':String(version)})).version;
+  const before=B.mirror.status().cursor;assert.equal((await B.mirror.sync(true,undefined,60000)).ok,true);assert.equal(await B.read('.vibe/docs/history.md'),'recreated');assert.ok(B.mirror.status().cursor-before>200);assert.equal((await client.request(path)).version,version);
+  assert.equal((await B.mirror.sync(true)).ok,true);assert.equal((await client.request(path)).version,version);
+  // Import from an existing local root, bind a fresh root, compare bytes.
+  const source=join(base,'import-source');await mkdir(join(source,'.vibe'),{recursive:true});await writeFile(join(source,'AGENTS.md'),'\ufeffimported\r\n');await writeFile(join(source,'.vibe/progress.md'),'progress\0');
+  const imported=await importWorkspace(source,'Imported','engineering-dev',serverUrl,ADMIN);const target=join(base,'import-target');await mkdir(target);await connectWorkspace(target,{serverUrl,key:imported.key});const im=new TeamMirror(target);assert.equal((await im.sync(true)).ok,true);
+  for(const rel of ['AGENTS.md','.vibe/progress.md'])assert.deepEqual(await readFile(join(source,rel)),await readFile(join(target,rel)));
+  // Different workspace retains no previous cursor; rebind same workspace resumes its own cursor.
+  const aState=await boundStateDir(A.root);const saved=await readFile(join(aState,'manifest.json'),'utf8');const dir=stateDir(A.root);
+  await withStateLock(dir,()=>clearDeviceBinding(dir));await connectWorkspace(A.root,{serverUrl,key:imported.key});const bState=await boundStateDir(A.root);assert.notEqual(aState,bState);await assert.rejects(readFile(join(bState,'manifest.json')));
+  await withStateLock(dir,()=>clearDeviceBinding(dir));await connectWorkspace(A.root,{serverUrl,key});assert.equal(await boundStateDir(A.root),aState);assert.equal(await readFile(join(aState,'manifest.json'),'utf8'),saved);
   assert.equal(out.includes(key), false);
   assert.equal(out.includes(ADMIN), false);
 });

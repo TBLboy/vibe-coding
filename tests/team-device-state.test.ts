@@ -40,3 +40,18 @@ test('invalid bindings are rejected and disconnect keeps other state', async (t)
   assert.equal(await loadDeviceBinding(dir), null);
   assert.equal(await loadKey(dir), null);
 });
+
+
+test('refinement: bound legacy migration, identities separated, unowned data retained and operation lock exclusive',async t=>{
+ const {workspaceStateDir,migrateLegacyState,withStateLock}=await import('../runtime/opencode/plugins/vibe-v2/team/device-state.ts');
+ const {mkdir,writeFile,readFile}=await import('node:fs/promises');
+ const dir=await mkdtemp(join(tmpdir(),'state-refine-'));t.after(()=>rm(dir,{recursive:true,force:true}));
+ await writeFile(join(dir,'manifest.json'),'old');await migrateLegacyState(dir,B);
+ assert.equal(await readFile(join(workspaceStateDir(dir,B),'manifest.json'),'utf8'),'old');
+ const other={...B,workspaceId:'ws_2'},sameIdOtherUrl={...B,serverUrl:'https://other.example.test'};
+ assert.notEqual(workspaceStateDir(dir,B),workspaceStateDir(dir,other));assert.notEqual(workspaceStateDir(dir,B),workspaceStateDir(dir,sameIdOtherUrl));
+ await assert.rejects(readFile(join(workspaceStateDir(dir,other),'manifest.json')));
+ await writeFile(join(dir,'manifest.json'),'unknown');await migrateLegacyState(dir,null);
+ const backup=(await readdir(dir)).find(x=>x.startsWith('legacy-unowned-'))!;assert.equal(await readFile(join(dir,backup,'manifest.json'),'utf8'),'unknown');
+ await withStateLock(dir,async()=>{await assert.rejects(withStateLock(dir,async()=>{}),/sync busy/);});
+});

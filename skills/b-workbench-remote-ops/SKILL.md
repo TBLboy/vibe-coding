@@ -10,105 +10,111 @@ metadata:
 
 # Workbench Operations
 
-Use only when the user explicitly asks to operate the personal Workbench: create, list, rename or archive a workspace, view a workspace Key, check the server, deploy or upgrade it, or troubleshoot sync. This Skill owns the server side and the workspace lifecycle.
+## Scope and authority
 
-Connecting a local project root with a workspace Key is a different job: hand that off to `a-workspace-connect`.
+Explicit user requests only: workspace lifecycle, health, deployment/upgrade and
+sync diagnosis. Local initialization/binding belongs to `a-workspace-connect`.
+Read-only inspection does not authorize credential disclosure, creation, import,
+archive, restart, migration, restore or deployment. Confirm destructive or
+availability-affecting actions before executing; obey effective Policy. Never
+change provider, user configuration or SSH settings as a side effect.
 
-## 1. Connection facts
+## Resolve the actual environment
 
-- Workbench API: `http://49.233.90.195:8443`
-- SSH host: `49.233.90.195`, user `ubuntu`, port `22`
-- Service: `vibe-workbench.service`, code at `/home/ubuntu/vibe-workbench`
-- Database: `/home/ubuntu/vibe-data/workspace.sqlite` (plus `-wal`/`-shm`)
-- Environment file: `/home/ubuntu/vibe-data/workbench.env`
-- Deployment is HTTP for personal use; treat the endpoint as sensitive until HTTPS is configured.
+Use the configured `WORKBENCH_URL`, confirmed SSH host/user, active service unit
+and actual code/data paths; do not infer the deployment from a hardcoded address.
+Previous personal deployment conventions (verify before use): `vibe-workbench.service`,
+code `/home/ubuntu/vibe-workbench`, database `/home/ubuntu/vibe-data/workspace.sqlite`,
+environment `/home/ubuntu/vibe-data/workbench.env`, SSH user `ubuntu`, port 22,
+service port 8443. These are hints, not authority to contact a host. Verify identity
+and configuration without dumping environment values. Server settings are
+`TEAM_HOST`, `TEAM_PORT`, `TEAM_DB_PATH`, and paired `TEAM_TLS_CERT`/`TEAM_TLS_KEY`.
+The administrator token is `WORKBENCH_ADMIN_TOKEN` in process environment; if
+missing, ask the user to configure it securely, never search history. Prefer SSH
+agent or existing approved key. Use verified HTTPS for public credentials; do not
+bypass TLS validation or send real credentials to legacy public HTTP. Keep secrets
+out of shell arguments, command traces, replies, logs, Git and Project Memory.
+Only disclose a workspace Key to the authorized user when explicitly requested
+or returned as the result of approved creation; redact it elsewhere. Never print
+administrator tokens, SSH passwords or private keys. Workspace Keys are scoped
+to one workspace; administrator credentials have broader authority.
 
-Administrator token (personal deployment):
+## Health and diagnosis
 
-```text
-WORKBENCH_ADMIN_TOKEN=a3df38775c416da6e813ba4523def94e558c66a20e350ab37c4eb1d4960ab64b
-```
+Start with the least intrusive evidence: known host identity, service state and
+recent redacted journal, disk/memory, Node version, configured listener (`ss -lnt`),
+local then public `/api/healthz` using the actual protocol and address. A loopback
+listener behind a reverse proxy can be intentional. Record schema version and
+workspace count as health facts, not proof of a particular build; verify deployed
+commit separately. For local-success/public-failure test DNS, TCP, firewall/cloud
+security group, proxy, routing and TLS separately; do not assert one cause or
+change network rules without evidence and authorization. Check authenticated list
+only when needed and authorized. Never dump environment, secret-bearing config
+or full document bodies to diagnose health.
 
-Credential rules:
+## Workspace management
 
-- Never print, echo or repeat the administrator token or the SSH password in replies, logs or files.
-- Never write a workspace Key into a project file, `.vibe/`, a Task or `progress.md`.
-- Prefer the local SSH key (`~/.ssh/id_ed25519`) or the SSH agent.
-- The administrator token manages every workspace; a workspace Key reaches exactly one.
+Admin routes use `Authorization: Bearer` from the environment, not a Key. Confirm
+workspace ID (names may repeat), operation, scope and supported type. Use the
+actual server response and redact all credentials except authorized Key disclosure.
 
-## 2. Health checks
-
-Read-only, safe to run when asked to "check Workbench":
-
-1. Server identity: `whoami`, hostname, `node --version`, disk, memory.
-2. Service: `systemctl status vibe-workbench.service --no-pager`, recent journal lines.
-3. Listener: `ss -lnt | grep ':8443 '` must show `0.0.0.0:8443`.
-4. Local health: `curl -fsS http://127.0.0.1:8443/api/healthz` → `{ok, schemaVersion, workspaceCount}`.
-5. Public health from the user's machine: TCP `8443` plus the same endpoint.
-6. If local health works but public fails, the cause is outside the host: check the cloud security-group rule for inbound TCP `8443`. SSH cannot change it.
-7. Report schema version and workspace count so the user sees which build is live.
-
-## 3. Workspace management
-
-All routes below require `Authorization: Bearer <administrator token>`.
-
-| Operation | Request | Notes |
+| Operation | Request | Result / boundary |
 |---|---|---|
-| List | `GET /api/workspaces` | Active workspaces only; returns `{id,name,type,createdAt}` |
-| Create | `POST /api/workspaces` `{name, type?}` | 201 `{workspace, key}`; default type `engineering-dev`; unknown type 422 `unsupported_type` |
-| View Key | `GET /api/workspaces/{id}/key` | Returns the current Key; archived workspace 404 |
-| Rename | `PATCH /api/workspaces/{id}` `{name}` | |
-| Archive | `DELETE /api/workspaces/{id}` | Data kept; the Key immediately returns 410 `workspace_archived` |
+| List | `GET /api/workspaces` | `{workspaces:[...]}` active only |
+| Create blank | `POST /api/workspaces` `{name,type?}` | 201 `{workspace,key}`; default `engineering-dev` |
+| Import | `POST /api/workspaces/import` `{name,type,files}` | Atomic creation, no template overlay |
+| View Key | `GET /api/workspaces/{id}/key` | `{key}` current; archived not available |
+| Rename | `PATCH /api/workspaces/{id}` `{name}` | `{workspace}` |
+| Archive | `DELETE /api/workspaces/{id}` | `{archived:true}`; retained data, Key rejected with 410 |
 
-Rules:
+For creation distinguish blank and existing logs. Import only the authorized root
+and approved eligible files; check for sensitive content before transfer. Use
+installed `${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/runtime/opencode/plugins/vibe-v2/team/import-workspace.ts`
+with Node `--experimental-strip-types`, arguments `root name type` and environment
+`WORKBENCH_URL`, `WORKBENCH_ADMIN_TOKEN`. Requires AGENTS.md and `.vibe/progress.md`;
+invalid/unsafe source, oversized content or changing source may be rejected; the
+helper does not replace a review for secrets. No fallback to blank creation. Both
+creation routes lack idempotency keys; if response is lost, inspect the workspace
+list and resolve ambiguity before retrying. Archive requires explicit confirmation;
+it is not a purge. Key rotation is not exposed by the current public API; do not
+invent an endpoint or modify database records to rotate it.
 
-- One workspace has exactly one current Key. A new Key replaces the old one and the old stops working.
-- Creating writes the type template files in the same transaction, so a new workspace already contains `AGENTS.md` and the `.vibe/` skeleton.
-- Report a newly created Key once, in the reply that answers the request, and never store it in project memory.
-- Archiving is destructive for connections: confirm with the user before calling `DELETE`.
+## Deployment and recovery
 
-## 4. Deployment and upgrade
+For an authorized upgrade: identify source/target commits, actual unit/config,
+required Node version, database/schema compatibility and backup/restore plan.
+Validate code and paired template compatibility in isolation before changing live
+service. Use a database-native consistent online backup (e.g. `VACUUM INTO` to
+an unused destination), verify integrity and isolated restore, protect backup
+permissions. Never copy a live WAL database as independent files. Preserve service
+configuration and environment secrets (owner-only files) unless approved changes
+are necessary. Deploy only the intended commit; do not reset unrelated changes.
+Confirm restart/downtime, then check running service, listener, local/public
+health, authenticated list and scoped sync smoke using disposable test data only
+when authorized. Upgrade Workbench before the companion Plugin when their
+contracts change. A health response alone is not end-to-end acceptance.
 
-Only when the user asks to deploy or upgrade:
+On migration/startup failure stop further changes and preserve diagnostics; do
+not retry blindly. Restore only with user approval and a consistent backup,
+considering any writes since backup; plan downtime and recovery of those writes.
+Do not delete the database, WAL files, environment or backups to force startup.
+Archived data and historical backups stay unless explicitly authorized for removal.
 
-1. Back up `workspace.sqlite`, `-wal` and `-shm` to a timestamped directory; record the path.
-2. Fetch the approved branch, check out the intended commit, and report the commit hash.
-3. Keep `WORKBENCH_ADMIN_TOKEN` in `workbench.env` (owner-readable, mode 600), never in Git.
-4. Run with `TEAM_HOST=0.0.0.0`, `TEAM_PORT=8443`, persistent `TEAM_DB_PATH`.
-5. Restart via `systemctl restart vibe-workbench.service`; confirm `Restart=on-failure` and `enabled`.
-6. Verify: process running, listener on `0.0.0.0:8443`, local health, public health, authenticated list.
-7. A schema bump migrates on startup; if it fails, restore the backup and report instead of retrying blindly.
+## Sync troubleshooting
 
-## 5. Sync troubleshooting
-
-- `401` from the plugin: the Key is wrong or was replaced. Ask the user to re-check it; do not guess variants.
-- `410 workspace_archived`: the workspace was archived; the plugin stops until the user reconnects to another workspace.
-- Public timeout with healthy local health: cloud security-group rule.
-- Plugin reports conflicts: that is not a server fault; hand off to the conflict flow (`workspace_resolve_conflict`).
-- Plugin reports `pending` and never drains: compare `GET /api/workspaces/{id}/changes` behavior and the plugin's `WORKBENCH_URL`; a wrong base URL is the common cause.
-- Database locked or corrupt: stop the service, keep the files for inspection, restore the latest backup with the user's approval.
-
-## 6. Data handling
-
-- Never delete the database, `workbench.env`, or backups without explicit user instruction.
-- Delete old backups only when asked; keep at least the most recent one.
-- Data for an archived workspace is retained; do not purge it.
-
-## 7. Boundaries
-
-- Do not create or edit `AGENTS.md` or `.vibe/` in a local project; Workbench creates them.
-- Do not perform project binding; that is `a-workspace-connect`.
-- Do not resolve sync conflicts on the user's behalf.
-- Do not rotate Keys or change SSH configuration unless explicitly requested.
-- Ask before: archiving a workspace, restarting the service, `git reset`, deleting data, editing SSH configuration.
+Distinguish binding, connectivity, authentication, file eligibility, conflicts,
+client state and server behavior. Use actual `workspace_status`/sync results,
+redacted logs and server health, not polling or direct private-state edits.
+`401` suggests credentials; `403` wrong audience/scope; `410 workspace_archived`
+means the binding cannot sync; `409` is a version conflict; timeouts can be
+transient. The change feed `GET /api/workspaces/{id}/changes?since=<cursor>&limit=<n>`
+requires that workspace's Key, not the administrator token. Compare cursor and
+actual response metadata only if authorized; do not export document contents.
+A pending count alone does not identify the cause. Conflicts require user choices
+via `a-workspace-connect`; do not choose a side. Database lock/corruption requires
+non-destructive diagnosis first, approval before stop/restore. Report facts,
+affected scope, action taken, verification and next step; no new operations panel.
 
 ## V2 operating rules
 
-- For registered Tasks, use Runtime lifecycle events in `docs/03-STATE-MACHINE.md`; never edit Task JSON directly.
-
-- Follow the current project `AGENTS.md` and Session policy.
-- Use a persistent `.vibe/tasks/<task-id>.json` only when V2 Task policy warrants it.
-- Write `.vibe/sessions/<session-id>/current-session.md` only for resumable unfinished work or a blocker.
-- Update `.vibe/progress.md` only for durable project facts.
-- Use only the V2 Task JSON and V2 Project Memory locations described above for durable state.
-- Report confirmed facts, assumptions, verification performed, and material limitations.
+Follow project `AGENTS.md` and effective Policy (frozen policy for existing Task work). Use Runtime lifecycle events, never edit registered Task JSON. Persist only warranted Task/Project Memory facts under the injected root and exact recovery path (`docs/05-MEMORY-CONTRACT.md`). Report evidence and limits; Main Agent owns strict review.

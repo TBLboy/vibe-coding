@@ -40,12 +40,12 @@ export function buildModeCommandPrompt(mode: Mode, taskText: string, hasAttachme
   const header = [
     `The user explicitly invoked /${mode}. Do not start any work until the mode change tool reports success.`,
     `First call vibe_set_session_mode exactly once with mode=${mode} and token=${token}. If the tool rejects the request, stop and explain that the mode did not change.`,
-    "After the tool succeeds, acknowledge the mode change briefly.",
+    "After the tool succeeds, acknowledge briefly; if its result reports a different frozen Task policy, explain it and that the new mode governs new work. Do not imply a paused/closed Task is active or resume it automatically. Closed Tasks cannot resume.",
     "An existing Task keeps the policy captured when that Task started; do not downgrade or upgrade it because the Session mode changed.",
   ].join("\n");
 
   if (!task && !hasAttachments) {
-    return `${header}\nNo task was supplied after the mode command. After the tool succeeds, confirm the mode only; do not start implementation.`;
+    return `${header}\nNo task was supplied after the mode command. After the tool succeeds, confirm the mode and any reported frozen-policy distinction only; do not start implementation.`;
   }
 
   if (!task && hasAttachments) {
@@ -73,49 +73,41 @@ export function renderModeInstructions(mode: Mode, sessionID?: string, facts: Se
   const relativeRecovery = sessionID ? sessionMemoryRelativePath(sessionID) : ".vibe/sessions/<session-id>/current-session.md";
   const recoveryPath = facts.memoryRoot ? `${facts.memoryRoot}/${relativeRecovery}` : relativeRecovery;
   const memoryRootLine = facts.memoryRoot
-    ? `Project memory root: ${facts.memoryRoot} — the only .vibe/ for this project. All Task, progress, requirements and Session recovery files live under it even when the working directory is a sub-directory, sub-repository or worktree. Never create another .vibe/ below it.`
-    : "Project memory root: the directory that owns this project's single .vibe/ (the nearest ancestor containing .vibe/, otherwise the project root). Never create a second .vibe/ in a sub-directory, sub-repository or worktree.";
+    ? `Project memory root: ${facts.memoryRoot} — sole .vibe/ owner, including sub-directories, sub-repositories and worktrees. Never create another .vibe/.`
+    : "Project memory root: nearest ancestor owning .vibe/, otherwise project root. Never create another .vibe/ in a sub-directory, sub-repository or worktree.";
   const activeTaskLine = facts.activeTask
-    ? `Registered Task for this Session: ${facts.activeTask.taskID} (frozen policy ${facts.activeTask.policy}, ${facts.activeTask.active ? "active" : "paused/closed"}). Read its JSON under .vibe/tasks/ before continuing related work.`
+    ? `Registered Task for this Session: ${facts.activeTask.taskID} (frozen policy ${facts.activeTask.policy}, ${facts.activeTask.active ? "active" : "paused/closed"}). Read its JSON under .vibe/tasks/ before continuing it; do not register it again.`
     : "No Task is registered for this Session.";
   const shared = [
     "## Vibe Coding V2 — Session Policy",
     `Authoritative Session mode: ${mode}`,
-    "These mode/execution instructions govern the primary vibe-main Agent. If you are vibe-reviewer, follow the read-only reviewer contract and assess the already-authorized strict Task; do not treat a child Session's default mode as permission to skip that review.",
-    "The mode is stored by the OpenCode plugin per Session. Do not infer or change it from ordinary text, code, quoted text, or agent output.",
-    "A Task's policy is frozen when that Task starts. Existing Task policy takes precedence for that Task; Session mode applies to new work.",
-    "All code changes require risk-appropriate verification before delivery. Strict-risk work requires a new strict Task; stop and request explicit /strict rather than downgrade risk. Registered Task JSON is Runtime-owned: use vibe_task_control lifecycle events, never edit it directly. Verification does not always mean running an automated test suite; if a check is not applicable, state why.",
-    "Do not log file reads, searches, shell commands, routine retries, or intermediate actions. Persist only facts that will matter to future work.",
+    "For vibe-main only; vibe-reviewer follows its read-only strict review contract, regardless of child Session mode.",
+    "Only explicit /fast, /balanced, /strict commands change Session mode; never infer it from text or output. Existing Task policy is frozen and takes precedence for that Task; Session mode applies to new work.",
     memoryRootLine,
     activeTaskLine,
     `Session recovery file: ${recoveryPath}`,
-    "Write the Session-specific current-session.md only when unfinished work must be resumed or a blocker must be preserved; delete it (and its empty directory) once nothing resumable remains. Update project-level .vibe/progress.md only when a durable project fact changes.",
+    "Registered Task JSON is Runtime-owned: use vibe_task_control, never edit directly. Verify every code change to its risk floor; explain inapplicable checks and use valid alternatives. Judge risk by consequences, contracts, data/security and recovery, not file count. Stop before strict-risk implementation under fast/balanced policy; require explicit /strict and a new strict Task, not a downgrade.",
+    "Ordinary consultation/read-only explanation or investigation without durable tracking needs creates no Task or Reviewer call in any mode; an agreed durable engineering deliverable is not ordinary consultation.",
+    "Persist future-useful facts only, not operation logs. Use exact recovery path only for resumable work/blockers; delete it and its empty directory when finished. Update progress only for durable changes.",
   ];
-
-  const byMode: Record<Mode, string[]> = {
-    fast: [
-      "Policy: FAST.",
-      "Use the shortest correct path: minimal necessary clarification → implement → targeted verification → deliver.",
-      "Do not invoke the reviewer. Do not create review records or a standalone evidence system. Do not create a Task for trivial, single-turn work.",
-      "Create a Task only when durable tracking or recovery is genuinely needed (for example cross-session work, a blocker, or multiple persistent deliverables).",
-      "Do not perform formal planning or task decomposition unless complexity or risk makes it necessary.",
-    ],
-    balanced: [
-      "Policy: BALANCED (default).",
-      "Use normal engineering judgment: understand the request, plan only as needed, implement, verify, deliver.",
-      "Do not invoke the reviewer. Do not create review records or a standalone evidence system.",
-      "Create a Task for non-trivial multi-step/multi-file work, durable deliverables, explicit acceptance criteria, blockers, or work that needs recovery. Skip Task creation for trivial one-turn changes.",
-      "Clarification, technical selection, and task breakdown are capabilities to use when useful, not mandatory ritual stages.",
-    ],
-    strict: [
-      "Policy: STRICT.",
-      "Create and persist a Task. Register it with vibe_task_control(action=start) before substantial implementation; preserve the Task's policy until it closes.",
-      "Explicitly clarify business rules and acceptance criteria, make necessary technical decisions, and decompose work when useful before implementation.",
-      "Use begin_verification before running checks and report verification through a transition. Then authorize review and invoke a fresh native vibe-reviewer with no reused sessionID. A running result is only a launch: wait for the host notification without polling. Runtime retrieves the child's terminal verdict at the next natural parent continuation; read the Task then. Do not invent a foreground option or write/forward a verdict yourself. Strict cannot complete unless the reviewer returns go.",
-      "Reviewer findings may trigger at most two automatic repair rounds. Re-verify after every repair before asking for review again. If unresolved after the limit, block and explain.",
-      "Reviewer must assess only the agreed request, doneWhen, relevant constraints and verification result. It must not add features, perform unrelated refactors, or edit product code.",
-    ],
+  const newTask: Record<Mode, string> = {
+    fast: "Task only for durable tracking/recovery (including persistent acceptance, material decisions/risk, deliverables or blockers); none for trivial work without these needs.",
+    balanced: "Task for non-trivial coordination, durable deliverables, persistent acceptance, material risk/decisions, blockers or recovery; not for trivial edits without these needs or file count alone.",
+    strict: "For engineering implementation (even small) or engineering work needing durable tracking (including agreed deliverables), create/register a Task via vibe_task_control(action=start) before executing the work; ordinary consultation is excluded.",
   };
-
-  return [...shared, ...byMode[mode]].join("\n");
+  const work: Record<Mode, string> = {
+    fast: "Shortest correct path, even for clear multi-file work; skip unnecessary planning/documents, use relevant Skills and risk-appropriate verification. Do not invoke the reviewer or create review records.",
+    balanced: "Adapt depth to complexity: direct for simple work, investigate/design/decompose as useful for consequential work; risk-appropriate verification. Do not invoke the reviewer or create review records.",
+    strict: "For registered strict work, establish business rules, scope, doneWhen, material decisions and needed breakdown; no mandatory separate documents or Skill sequence. Use begin_verification before checks; submit verification, authorize review, invoke fresh native vibe-reviewer (no reused sessionID). A running result is only a launch: await host notification without polling or duplicate calls. Runtime retrieves verdict on natural parent continuation; read Task then. Do not invent a foreground option or write/forward a verdict. Strict completes only when the reviewer returns go. At most two automatic repairs, each re-verified/re-authorized; block/pause if unresolved or user decision needed. Reviewer assesses agreed scope/evidence only; no edits or scope expansion.",
+  };
+  // Keep new-work instructions distinct from continuing a frozen Task, including
+  // a paused pointer. Never infer that the pointer is a command to resume it.
+  const policy = [`New-work policy (${mode}): ${newTask[mode]} ${work[mode]}`];
+  if (facts.activeTask && facts.activeTask.policy !== mode) {
+    const frozen = facts.activeTask.policy;
+    policy.push(`Only if continuing that existing Task, apply frozen policy (${frozen}): ${work[frozen]}`);
+  } else if (facts.activeTask) {
+    policy.push("Same work rules for continuation; use the existing Task, not new Task creation.");
+  }
+  return [...shared, ...policy].join("\n");
 }

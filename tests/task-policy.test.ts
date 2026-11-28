@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { shouldCreateTask } from "../runtime/core/task-policy.ts";
 
-test("strict always creates a Task", () => {
+test("strict engineering work creates a Task even without complexity signals", () => {
   assert.equal(shouldCreateTask("strict", {}), true);
 });
 
@@ -28,4 +28,21 @@ test("all modes persist explicit durable deliverables", () => {
   assert.equal(shouldCreateTask("fast", { durableDeliverable: true }), true);
   assert.equal(shouldCreateTask("balanced", { durableDeliverable: true }), true);
   assert.equal(shouldCreateTask("strict", { durableDeliverable: true }), true);
+});
+
+test("ordinary consultation is light in every mode, durable work still persists", () => {
+  for (const mode of ["fast", "balanced", "strict"] as const) {
+    assert.equal(shouldCreateTask(mode, { consultationOnly: true }), false);
+    assert.equal(shouldCreateTask(mode, { consultationOnly: true, multiStep: true, multiFile: true }), false);
+    assert.equal(shouldCreateTask(mode, { durableDeliverable: true }), true);
+    // Durable tracking signals take precedence over a contradictory consultation hint.
+    assert.equal(shouldCreateTask(mode, { consultationOnly: true, needsRecovery: true }), true);
+  }
+});
+
+test("clear multi-file work is light in fast; meaningful coordination is tracked in balanced", () => {
+  assert.equal(shouldCreateTask("fast", { multiFile: true, multiStep: true }), false);
+  assert.equal(shouldCreateTask("balanced", { multiFile: true }), true);
+  assert.equal(shouldCreateTask("balanced", {}), false);
+  assert.equal(shouldCreateTask("strict", {}), true);
 });

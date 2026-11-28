@@ -13,7 +13,7 @@ Only the entry Skill is auto-discovered; secondary guides are ordinary files.
 | “用真实极端数据检查成员表” | `guides/resilience.md`; map fields, exercise 0/1/many and realistic long names through fixtures | Edit DOM to make a screenshot pass or alter production data |
 | “帮我选一个金融后台风格” | `guides/scenario-reference.md` + `guides/product-ui.md`; compare context-fit alternatives | Claim a Pro Max query ran or mandate dark/glass style by industry |
 | “调用付费工具把页面生成出来” | Name unavailable/unapproved capabilities and ask before external effects | Execute upstream install, hook, binary or API instructions |
-| “审查所有角色能否完成网站流程” | `b-multi-role-ux-audit` owns the broad workflow; scoped design findings may use this router | Silently replace role-based audit with an aesthetic pass |
+| “审查所有角色能否完成网站流程” | Outside this router; scope actual workflow checks using existing verification methods; scoped design findings may use this router | Silently replace role-based audit with an aesthetic pass |
 
 For an implementation trial, judge the rendered before/after at the same width,
 state and data. Structural/package tests validate paths and integrity only; they

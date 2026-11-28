@@ -56,18 +56,31 @@ Do not review the diff alone. Establish four states and record their commits:
 | T → M | What will the maintainer actually receive? |
 | F → M | Does the feature's intended behavior still hold after integration? |
 
-Resolve `B` with `git merge-base T F`. Build `M` only in an isolated worktree — never in the user's working tree, never committing to or pushing `T` or `F`:
+Resolve named refs to immutable commit IDs first (`git rev-parse --verify` on
+exact branch refs); use these IDs throughout, not moving branch names. Run
+`git merge-base --all T F`: record all bases if multiple; do not pretend one
+arbitrary base is the exact merge algorithm's virtual base. No common history
+means integration is unverified; do not force unrelated histories.
 
-```bash
-git worktree add --detach <tmp>/review-M T
-cd <tmp>/review-M && git merge --no-commit --no-ff F
-```
+Build `M` only in a fresh isolated detached worktree at the pinned target SHA,
+never in the user's working tree, never committing to or pushing either branch.
+Inspect local hooks, filters, merge drivers and test commands before executing;
+if untrusted execution cannot be excluded or authorized, limit to static evidence.
+Use a unique temporary directory and a merge with `--no-commit --no-ff` and the
+pinned feature SHA. Disable hooks for the isolated commands; do not alter global
+or repository configuration. On a clean result, `git write-tree` records the
+merged index tree ID; `HEAD` still denotes T, not M. Compare T and F against this
+actual tree. Record `base_sha` (or bases), `target_sha`, `feature_sha`, and
+`merge_result_tree` (or `unbuilt`), not a fabricated merge commit SHA.
 
-Remove the worktree (`git worktree remove --force`, then `git worktree prune`) when the review ends, including on failure. If `M` cannot be built, say which integration conclusions remain unverified instead of guessing them.
-
-A conflict during the simulated merge is itself an integration finding: record the conflicting paths and the two sides, then continue the rest of the review in a worktree merged with `-X ours` or by comparing the two sides file by file. Never resolve a conflict to make `M` look clean.
-
-Record `base_sha`, `target_sha`, `feature_sha`, `merge_result_sha` (or `unbuilt`) in the report header.
+If conflicts occur, record paths, index stages and both sides; `M` is unbuilt.
+Continue static comparisons and identify what integration remains unknown. Do not
+use `-X ours` as evidence of the actual merge, or resolve conflicts for the user.
+Remove only the review-created worktree, even on failure; do not prune unrelated
+worktrees. If cleanup fails report the exact residual location. Never modify the
+user's worktree, refs or index. Running branch code/tests needs a safe isolated
+environment without production credentials or data; read-only review does not
+authorize deployment or external effects.
 
 Zero file overlap is not proof of semantic agreement. Track shared interfaces, configuration keys, dependency versions, generated artifacts, and shared state across files.
 
@@ -140,9 +153,13 @@ Declare the report depth at the top and why: a small fix branch and a large feat
 
 ## Report
 
-Write the report to the user-chosen path, defaulting to `<project-root>/branch-review-<target>-<feature>-<short-sha>.md`. It is a review artifact, not project memory — do not place it under `.vibe/`.
+Write the review report to the user-chosen path, or default to a safe filename
+under the project root such as
+`branch-review-<target>-<feature>-<short-sha>.md`; sanitize branch names to single
+filename components and never overwrite an existing report without approval.
+It is a review artifact, not project memory — do not place it under `.vibe/`.
 
-Sections: scope and baseline; change landscape; architecture before and after; capability and contract ledger; engineering problems; engineering decisions; integration and impact; tests and evidence; benefit and cost; open decisions.
+Use relevant sections at the chosen depth: scope and baseline; change landscape; architecture before and after; capability and contract ledger; engineering problems; engineering decisions; integration and impact; tests and evidence; benefit and cost; open decisions.
 
 Finding template:
 
@@ -165,19 +182,12 @@ Severity follows real impact, trigger conditions, and recovery cost — not diff
 
 The review is complete when all of these hold:
 
-- the four states and their commits are recorded, or the missing state is named as a limitation;
-- every affected capability appears in the ledger with a status;
-- every finding carries a location and an evidence state;
+- the pinned states and merged tree are recorded, or the missing state is named as a limitation;
+- every capability within the reviewed scope appears in the ledger with a status;
+- every finding carries a location and an evidence state; unresolved high-impact unknowns are explicit;
 - the isolation worktree is removed;
 - the report states what was not reviewed.
 
 ## V2 operating rules
 
-- For registered Tasks, use Runtime lifecycle events in `docs/03-STATE-MACHINE.md`; never edit Task JSON directly.
-
-- Follow the current project `AGENTS.md` and Session policy.
-- Use a persistent `.vibe/tasks/<task-id>.json` only when V2 Task policy warrants it.
-- Write `.vibe/sessions/<session-id>/current-session.md` only for resumable unfinished work or a blocker.
-- Update `.vibe/progress.md` only for durable project facts.
-- Use only the V2 Task JSON and V2 Project Memory locations described above for durable state.
-- Report confirmed facts, assumptions, verification performed, and material limitations.
+Follow project `AGENTS.md` and effective Policy (frozen policy for existing Task work). Use Runtime lifecycle events, never edit registered Task JSON. Persist only warranted Task/Project Memory facts under the injected root and exact recovery path (`docs/05-MEMORY-CONTRACT.md`). Report evidence and limits; Main Agent owns strict review.

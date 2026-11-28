@@ -1,6 +1,6 @@
 ---
 name: a-business-clarify
-description: "业务澄清/需求澄清/规则不清楚 | Clarify vague business intent into atomic, testable business logic through active evidence gathering, one-question-at-a-time interviewing, controlled inference, and durable V2 memory updates."
+description: "业务澄清/需求澄清/规则不清楚 | Clarify vague business intent into atomic, testable business logic through active evidence gathering, focused clarification, controlled inference, and durable V2 memory updates."
 license: MIT
 compatibility: opencode
 metadata:
@@ -9,179 +9,35 @@ metadata:
 
 # Business Clarify
 
-## Purpose
+## Mental model
 
-Turn incomplete, conversational, or contradictory product ideas into atomic business logic that can be implemented and verified without repeatedly guessing the user's intent.
+Clarification builds an accurate model of what the product should mean and do, not a questionnaire or a technical solution. Ground it in the actual user's goals, actors, habits, existing tools, constraints and non-goals. Read relevant user statements, AGENTS.md, active requirements (via index), Task/Session context, code, configuration, tests and historical decisions before asking for facts already obtainable.
 
-Ask one high-value question at a time and provide a recommended answer. This is not an interrogation script. The user may answer, correct, or proactively add information at any moment.
+## Establish and reconcile business logic
 
-## Inputs
+- **Fact map:** classify material claims as `confirmed`, `evidence-derived`, `inferred`, `unknown`, `conflict` or `out-of-scope`. Current code is evidence of behavior, not automatic business authority. Never promote inference to confirmation silently.
+- **Functional view:** actors/permissions, triggers, preconditions, normal and exceptional flows, state transitions, inputs/outputs, effects, invariants, boundary/repeat/concurrency/idempotency semantics, ownership/visibility/retention. Select relevant dimensions, not an exhaustive form.
+- **Technical view:** trace how existing code, configuration, interfaces, state, transactions, dependencies and deployment constraints carry that behavior. Identify conflicts among implementation, tests and authoritative rules. Do not choose future libraries or architecture here.
+- **Alignment:** mark material differences as `confirmed-match`, `missing-implementation`, `implementation-drift`, `missing-test`, `test-drift`, `constraint-conflict` or `unknown`. A full bidirectional audit belongs to `a-business-code-align` when needed.
+- **Product reasoning:** when asked for analysis, present a coherent assessment and recommendations with evidence, benefits, costs, tradeoffs and assumptions. Check whether existing tools or user practices already solve the problem before proposing a feature. Do not extrapolate beyond the actual usage scenario.
+- **Controlled derivation:** infer necessary consequences of confirmed rules and existing constraints (e.g. importing existing logs cannot silently replace their contents). State premises and reasoning; distinguish logically required integrity/observable behavior from optional conveniences or technical alternatives. Escalate material C decisions rather than assuming approval.
 
-Read, when available:
+## Atomic rules and clarification
 
-1. User statements in the current Session.
-2. The project's durable memory: `AGENTS.md`, `.vibe/progress.md`, the baselines under `.vibe/requirements/` (start from its `README.md` index, if present), the active Task JSON, and the current Session's `current-session.md`.
-3. Existing code, tests, config, product documents, tickets, screenshots, and historical decisions.
+An atom is one independently judgeable behavior, transition, constraint or integration rule. Split when parts can fail, change or be accepted independently. Capture actor/trigger, preconditions, inputs, rule, effects, failure/invariants, observable acceptance (Given–When–Then where useful), and source/authority. Scale to actual complexity.
 
-Never ask the user for information that can be reliably obtained from the project.
+Resolve A reversible local decisions directly; record B material recoverable decisions through Runtime `record_decision` or durable `.vibe/progress.md`; C product semantics, public interfaces, safety, data, cost or irreversible architecture require user authority. When a material blocker remains, rank by business impact × uncertainty × rework cost, then ask one highest-value question with recommendation, reason and consequence (safe default only if real). Do not force a one-question loop when the user invites a holistic review. A user may correct or add information at any time.
 
-## Clarification Loop
+Treat feedback as a revision of the whole model: retain accepted rules, replace corrected ones, discard rejected proposals, separate deferred ones; invalidate affected assumptions and downstream decisions/tasks before selecting the next question. Do not reopen settled decisions without new evidence.
 
-### 1. Build the fact map
+Use `a-deep-research` only if technical feasibility, platform/hardware, latency, licensing, cost/privacy or other constraints materially change possible business behavior, or the user requests it. Ordinary technical preferences do not require research during clarification.
 
-Classify every material statement as:
+## Output and authority boundary
 
-- **confirmed**: explicitly confirmed by the user or an active higher-priority source;
-- **evidence-derived**: strongly supported by project artifacts;
-- **inferred**: a reversible working assumption made by the Agent;
-- **unknown**: required information not currently available;
-- **conflict**: two sources prescribe incompatible behavior;
-- **out-of-scope**: intentionally excluded from this increment.
+Return consolidated goal, use context, confirmed/changed/rejected rules, necessary implications, observable acceptance, non-goals and blocking/non-blocking questions. Draft/inferred rules remain labeled. Use `a-requirement-baseline` for durable business rules; no separate file for small work by ritual. Set Task `goal`/`doneWhen` before registration. After registration, never rewrite them: clarify the impact, use `record_decision` for compatible refinements in prepare/implement, and if acceptance/scope materially changes, follow the supersession rule in `docs/06-AGENT-CONTRACT.md` and start a new Task with the approved criteria under the current Session policy. Use `block` for unresolved blocking C decisions and the Session recovery note when needed. Follow `docs/03-STATE-MACHINE.md`.
 
-Do not silently promote `inferred` to `confirmed`.
-
-### 2. Clarify functional business logic
-
-Record what the system should mean and do for users and the business:
-
-- actors, roles, and permissions;
-- normal scenarios and state transitions;
-- inputs, outputs, side effects, and invariants;
-- exception, boundary, concurrency, repeat-operation, and idempotency semantics;
-- data ownership, visibility, and retention;
-- scope, non-goals, and C-level product decisions.
-
-Current code behavior is evidence, not automatic product authority.
-
-### 3. Clarify technical business logic
-
-Record how the current system actually carries the relevant business behavior:
-
-- current implementation facts and state machines;
-- interfaces, error codes, events, and data contracts;
-- database, cache, queue, and external-system state relationships;
-- transaction, consistency, concurrency, idempotency, and failure semantics;
-- security, deployment, environment, and compatibility constraints;
-- conflicts among code, config, tests, documentation, and active rules.
-
-Technical business logic describes current facts and binding constraints. Do not select a future framework, library, lock, middleware, or refactoring strategy here; route those questions to `a-deep-research`.
-
-### 4. Align functional and technical views
-
-Compare what should happen with what currently happens. Classify each material result as:
-
-- `confirmed-match`
-- `missing-implementation`
-- `implementation-drift`
-- `missing-test`
-- `test-drift`
-- `constraint-conflict`
-- `unknown`
-
-Keep confirmed atoms and open questions in the working clarification list. When clarification changes the active Task's scope, update the Task `goal`/`doneWhen` and, if work is unfinished, the current Session's `current-session.md`.
-
-### 5. Form atomic candidates
-
-A business atom must describe one independently judgeable behavior, state transition, constraint, contract, flow step, or integration rule.
-
-Split a statement when two parts can fail, change, or be accepted independently.
-
-Each candidate should include:
-
-- actor and trigger;
-- preconditions and inputs;
-- one core rule;
-- outputs and side effects;
-- exception/failure behavior;
-- invariants;
-- Given–When–Then acceptance criteria;
-- source and authority.
-
-### 6. Resolve autonomously where safe
-
-## Decision authority
-
-- **A**: reversible, local, low-impact — resolve directly.
-- **B**: material but recoverable — resolve, then record it in the active Task JSON `decisions` (or `.vibe/progress.md` when it is a durable project fact).
-- **C**: product semantics, safety, data, public interfaces, cost, or irreversible architecture — ask the user; one question, with a recommendation and its consequence.
-
-Typical autonomous clarification decisions include naming, decomposing a compound rule, deriving an obvious error message category, or preserving existing behavior when the change does not target it.
-
-### 7. Choose the next question
-
-Only ask a question when the unresolved item materially blocks the current baseline.
-
-Rank candidate questions by:
-
-```text
-question priority = business impact × uncertainty × future rework cost
-```
-
-Ask exactly one highest-priority question. Include:
-
-- the question;
-- why it matters;
-- the recommended answer;
-- the consequence of that recommendation;
-- a fallback/default only when it is genuinely safe.
-
-Do not ask a long questionnaire in one message.
-
-### 8. Integrate user-provided information
-
-When the user volunteers new information:
-
-1. update the fact map;
-2. revise or split affected atoms;
-3. invalidate outdated assumptions;
-4. identify downstream tasks/decisions that may need reopening;
-5. then select the next highest-value unresolved question.
-
-Do not mechanically return to an obsolete question sequence.
-
-## Controlled Use of Research
-
-Load `a-deep-research` during clarification only when technology constrains the business decision, such as:
-
-- feasibility is uncertain;
-- latency, hardware, licensing, privacy, cost, or platform restrictions change the possible product behavior;
-- two technical paths create materially different user experiences;
-- the user asks whether a capability is possible before confirming the rule.
-
-Do not research ordinary framework preferences during business clarification.
-
-## Outputs
-
-- Confirmed atoms with acceptance criteria: into the active Task `doneWhen` for this increment; into this work's own baseline `.vibe/requirements/<work>.md` only when they are durable business rules worth a baseline (`a-requirement-baseline`).
-- Material B-level decisions: Task JSON `decisions`.
-- Open C-level questions that block work: Task `blocker` and the current Session's `current-session.md`.
-- Follow-up work: new Task JSON files only when persistent tracking is warranted.
-
-Draft or inferred atoms stay labeled as such. Promote to confirmed only when their authority and evidence satisfy the baseline rules.
-
-## Completion Gate
-
-Business clarification is complete for the current scope when:
-
-- the primary happy path is covered;
-- high-impact branches, failure modes, permissions, and boundary cases are covered;
-- every in-scope behavior is represented by atomic logic or explicitly marked unresolved;
-- no unresolved C-level question blocks implementation;
-- relevant technical business logic has been investigated;
-- functional/technical conflicts are recorded and blocking conflicts are resolved or explicitly waiting on the user;
-- future solution choices have been routed to research instead of being silently decided here;
-- acceptance criteria are observable;
-- remaining unknowns are low impact, intentionally deferred, or assigned to research.
-
-The goal is not to eliminate every conceivable unknown. It is to eliminate expensive hidden assumptions.
+Completion: relevant happy paths, material exceptions, permissions and invariants are covered; technical facts/conflicts are investigated; no blocking C question remains for implementation; in-scope atoms are observable or explicitly unresolved; low-impact unknowns are deferred or assigned to research. Clarification eliminates expensive hidden assumptions, not every possible unknown.
 
 ## V2 operating rules
 
-- For registered Tasks, use Runtime lifecycle events in `docs/03-STATE-MACHINE.md`; never edit Task JSON directly.
-
-- Follow the current project `AGENTS.md` and Session policy.
-- Use a persistent `.vibe/tasks/<task-id>.json` only when V2 Task policy warrants it.
-- Write `.vibe/sessions/<session-id>/current-session.md` only for resumable unfinished work or a blocker.
-- Update `.vibe/progress.md` only for durable project facts.
-- Use only the V2 Task JSON and V2 Project Memory locations described above for durable state.
-- Report confirmed facts, assumptions, verification performed, and material limitations.
+Follow project `AGENTS.md` and effective Policy (frozen policy for existing Task work). Use Runtime lifecycle events, never edit registered Task JSON. Persist only warranted Task/Project Memory facts under the injected root and exact recovery path (`docs/05-MEMORY-CONTRACT.md`). Report evidence and limits; Main Agent owns strict review.

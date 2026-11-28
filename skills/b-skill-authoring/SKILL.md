@@ -1,6 +1,6 @@
 ---
 name: b-skill-authoring
-description: "写Skill/做技能 | Design and write a focused V2-compatible OpenCode Skill with clear triggers, progressive disclosure, optional deterministic helpers, and reviewable resource boundaries."
+description: "写Skill/做技能 | Create or refine a focused V2-compatible OpenCode Skill that adds domain expertise, routes accurately, uses progressive disclosure, and has observable quality checks."
 license: MIT
 compatibility: opencode
 metadata:
@@ -9,71 +9,73 @@ metadata:
 
 # Skill Authoring
 
-## Purpose
+## Purpose and mental model
 
-Create a new Skill package when a repeatable procedure needs focused instructions or deterministic helpers. A new Skill is incomplete until its `a-*`/`b-*` classification, naming, trigger description, routing decision, and V2 compatibility are explicit.
+A Skill supplies reusable domain expertise that the base model and Main Agent may not reliably apply on their own. It is not a persona, general engineering checklist, or mandatory workflow stage. Create or refine one only for a real recurring need or specialist capability; identify what it improves and when it should remain unloaded. Prefer extending an existing coherent Skill over a synonym or duplicate. If the model, existing Skill, or a simple instruction already solves the need reliably, do not create another Skill.
 
-## Design
+## Design for professional value
 
-Establish the task boundary, triggering requests, inputs, outputs, dependencies, prohibited uses, and validation. Prefer the smallest Skill that owns one coherent job. Keep its description specific enough to route correctly.
+Select the following design dimensions as relevant; they are not mandatory headings or a fixed procedure.
 
-## Classification, Naming, and Routing Gate
+- **Scope:** name the job, triggering intent, inputs, exclusions and neighboring capabilities. Give the Skill one coherent responsibility, with a useful result even when used independently.
+- **Mental model:** express what experts pay attention to in this domain: important relationships, invariants, failure modes and reasons for decisions. Avoid generic exhortations already covered by Main Agent.
+- **Method:** supply actionable domain heuristics, evidence to inspect, decision criteria, trade-offs, and techniques the model might otherwise miss. Use specific examples or counterexamples when they change a decision; do not turn every method into a compulsory sequence.
+- **Quality and constraints:** preserve necessary safety gates, authority, failure handling and evidence requirements. Match freedom to risk: flexible principles for judgment-heavy work; precise steps, parameters and checks for deterministic or fragile operations. Verify that tools and interfaces actually exist.
+- **Outcome:** define observable results and completion criteria, including partial or blocked outcomes. Scale investigation, output and verification to the task; do not require a full template for a small job.
 
-Before creating files, make and record all five decisions below.
+Ground domain methods in actual project evidence or reliable specialist sources when uncertainty warrants research. Distinguish facts, recommendations and assumptions; do not import whole external playbooks or unverified practices. Ask of each passage: what useful decision or behavior would be lost if it were removed? Merge duplicate rules, remove filler and speculative procedures, and preserve indispensable specialist knowledge. Optimize information value, not a fixed length or compression target.
 
-1. **Classify the capability.** Use `a-<kebab-case-name>` only when it is a stable, cross-project, cross-lifecycle method that governs how work is performed or recorded. Use `b-<kebab-case-name>` for a concrete domain, tool, interaction mode, audit, communication pattern, or specialized operation.
-2. **Check for overlap and collisions.** Inspect existing `skills/` and the routing table in `runtime/opencode/agents/vibe-main.md`. Extend an existing Skill when the new behavior shares its boundary; do not create a synonym or duplicate capability. The folder name and frontmatter `name` must be identical, lowercase kebab-case, and start with the chosen prefix.
-3. **Use the Skill as the entry point.** OpenCode discovers `SKILL.md` directly. A same-named command is optional glue, not a substitute for the Skill contract.
-4. **Decide automatic versus explicit routing.** Add a row to the `vibe-main` routing table only when user language can identify the capability reliably, activation is low-risk and low-cost, and loading it does not write external systems, run destructive operations, create broad audits, or create a snapshot/package. Otherwise keep it explicit-only, set `metadata.routing: explicit-only`, and state the reason in the Skill.
-5. **Implement and verify the decision.** For an automatic route, add precise trigger wording and the exact Skill name to the routing table, and write the `description` with the user's own-language aliases *first* (the package test rejects an English-only route or description, because a request phrased as `归档一下` then never reaches the Skill). Add the Skill id to the pinned list in `tests/package-shape.test.ts` so the package test guards the Skill, its V2 markers, and its route.
+## Progressive disclosure
 
-Default safety rule: a vague request never justifies automatically starting a high-cost browser audit, Skill/agent/plugin creation, credential operation, destructive action, or irreversible change. Require an explicit user request for those operations.
+- `description`: a compact discovery contract in the user's language first; distinguish trigger, intent, and nearby non-triggers where important. Do not duplicate the body or advertise unavailable capabilities.
+- `SKILL.md`: self-contained core method, judgment criteria, essential boundaries and completion standard. Keep safety-critical rules here; do not hide them behind optional reading.
+- References or examples: move detailed, low-frequency knowledge, variants and worked cases out of the main path. Link each from the relevant decision point; read only when needed, keep references one level deep, and avoid duplicate sources of truth. Do not reload an unchanged Skill or reference while its applicable instructions remain available; reacquire after context loss or change.
+- Scripts/templates: use only for real deterministic repetition or exact artifacts; verify failure behavior and dependencies. Do not add code, resources, or new tools merely to make a Skill look complete.
+
+Main Agent owns general engineering judgment; Skills own domain methods; Runtime owns enforceable lifecycle and Policy; Project Memory owns project facts. Refer to the authority instead of duplicating its rules. Keep environment-specific values and secrets outside the distributed Skill; discover actual configuration and verify time-sensitive capabilities when needed.
+
+## Classification, naming and routing gate
+
+Before creating files, make these decisions (record only at the depth the current task warrants):
+
+1. **Classify:** `a-<kebab-case-name>` for stable, cross-project, cross-lifecycle engineering methods; `b-<kebab-case-name>` for concrete domains, tools, interaction modes, audits, communication patterns or specialized operations.
+2. **Check overlap:** inspect `skills/` and `runtime/opencode/agents/vibe-main.md`; extend an existing coherent capability if possible. Folder and frontmatter `name` must match, lowercase kebab-case with the chosen prefix.
+3. **Entry point:** OpenCode discovers `SKILL.md` directly; a same-named command is optional glue, not a replacement.
+4. **Routing:** infer activation only when intent is reliably identifiable, low-risk and low-cost. High-cost audits, snapshots, Skill/agent/plugin creation, credential operations, external writes, destructive or irreversible changes require explicit user intent and separate authorization where needed. For explicit-only capabilities set `metadata.routing: explicit-only` and state why. In the current managed pack, retain an explicit named trigger row with its guard (the package tests require a row for every managed Skill); explicit-only never means broad inferred activation. Changing that managed routing contract requires a separate approved decision.
+5. **Integrate:** use Chinese/user-language aliases first in both the description and the managed routing row, with the exact Skill ID and applicable qualifiers. Update the pinned list in `tests/package-shape.test.ts` for additions/removals and protect existing routes. A matched route authorizes loading the method, not its side effects.
 
 ## V2 compatibility contract
 
-Every Skill must:
+Every managed Skill must:
 
-- carry `metadata.v2: true` in frontmatter;
-- end with the standard "V2 operating rules" section (copy it from any existing Skill);
-- persist durable state only in the V2 locations: Task JSON under `.vibe/tasks/`, `.vibe/progress.md`, the Session's `current-session.md`, optional per-work baselines under `.vibe/requirements/`, and the project `AGENTS.md`;
-- never invoke `vibe-reviewer` itself; review belongs to the strict gate owned by the main Agent;
-- describe only positive V2 guidance — do not include sentences about retired frameworks or forbidden legacy terms.
+- carry `metadata.v2: true`, and end with the standard `V2 operating rules` section (use this Skill's compact footer verbatim; retain indispensable domain constraints in its body);
+- follow `docs/05-MEMORY-CONTRACT.md` for durable state: `AGENTS.md`, `.vibe/progress.md`, `sessions/`, `tasks/`, `requirements/`, `lessons/`, and `docs/` under the resolved memory root as applicable; use Runtime events for registered Tasks and obtain user approval before changing project rules;
+- never invoke `vibe-reviewer` itself; the strict gate belongs to Main Agent;
+- describe positive V2 guidance without introducing retired objects, extra lifecycle stages or parallel persistence.
 
 ## Package
 
-Create under the framework source tree, then install with the V2 installer:
+Create under the framework source tree and distribute with the existing V2 installer. Use only the resources needed by the capability:
 
 ```text
 skills/<a-or-b-kebab-case-name>/
 ├── SKILL.md
-├── REFERENCE.md      # only for rarely needed detail
-├── EXAMPLES.md       # only when examples clarify behavior
-├── templates/        # only for files the Skill must reproduce verbatim
-└── scripts/          # only for deterministic repeated operations (no third-party dependencies)
+├── references/      # optional targeted depth, directly linked
+├── EXAMPLES.md      # optional decision-changing examples
+├── templates/       # optional exact artifacts
+└── scripts/         # optional deterministic helpers
 ```
 
-Keep `SKILL.md` concise but complete: method, rules, outputs, completion gate. Put required frontmatter first: `name`, trigger-focused `description`, `license`, `compatibility`, and metadata. Do not embed time-sensitive facts, secrets, personal paths, or unrelated project state. Scripts referenced by the Skill must resolve from `${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/skills/<name>/...`, and each script needs a test under `scripts/test_*.py` or an explicit reason it cannot be tested.
+Frontmatter: `name`, trigger-focused `description`, `license`, `compatibility`, and metadata. No new third-party dependency without approval. Script paths must resolve from `${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/skills/<name>/...`; provide a test under `scripts/test_*.py` or an explicit reason it cannot be tested.
 
-## Review
+## Review and refinement
 
-Verify the trigger description, terminology, input/output contract, normal and boundary flows, tool assumptions, safety constraints, and at least one evaluation example. Also verify:
+Check relevance, distinct scope, discoverability, domain value, freedom appropriate to risk, executable instructions, safe authority and observable outputs. Inspect the diff: preserve useful methods, domain safety, referenced resources and existing trigger coverage; avoid edits based on length alone.
 
-- `a-*` or `b-*` classification and reasoning are explicit;
-- folder and frontmatter names match with no collision;
-- automatic or explicit-only routing has an explicit decision and rationale;
-- the routing row and the `description` both begin with user-language aliases, not English-only wording;
-- `vibe-main.md` and `tests/package-shape.test.ts` were updated when the routing decision requires it;
-- `npm run test:core` and the installer tests pass, and the installed copy matches the source.
+Use representative positive, near-miss and boundary/failure scenarios as applicable. For prompt quality, compare the same task with Main Agent alone, the previous Skill (when refining), and the candidate Skill, keeping model, project, Policy and tools fixed where feasible. Inspect decisions, actual work and verification, not just polished prose or length. Use existing evaluations or small manual trials; do not create an evaluation platform. If the real host/model cannot be run, report that limitation separately from static checks.
 
-Keep references one level deep. Review the diff before installing or promoting a Skill.
+Verify naming, V2 markers, routing decisions, links, helpers and installed bytes. Run `npm run test:core` and the installer tests; update relevant tests/docs when the contract changes. Do not claim better model behavior from structural tests alone. Promote the Skill when its demonstrated value justifies its context cost, with outstanding behavioral validation made explicit.
 
 ## V2 operating rules
 
-- For registered Tasks, use Runtime lifecycle events in `docs/03-STATE-MACHINE.md`; never edit Task JSON directly.
-
-- Follow the current project `AGENTS.md` and Session policy.
-- Use a persistent `.vibe/tasks/<task-id>.json` only when V2 Task policy warrants it.
-- Write `.vibe/sessions/<session-id>/current-session.md` only for resumable unfinished work or a blocker.
-- Update `.vibe/progress.md` only for durable project facts.
-- Use only the V2 Task JSON and V2 Project Memory locations described above for durable state.
-- Report confirmed facts, assumptions, verification performed, and material limitations.
+Follow project `AGENTS.md` and effective Policy (frozen policy for existing Task work). Use Runtime lifecycle events, never edit registered Task JSON. Persist only warranted Task/Project Memory facts under the injected root and exact recovery path (`docs/05-MEMORY-CONTRACT.md`). Report evidence and limits; Main Agent owns strict review.

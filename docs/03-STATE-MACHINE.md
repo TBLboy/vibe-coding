@@ -14,7 +14,7 @@ strict ────/balanced───> balanced
 
 A valid explicit mode command is the only transition trigger. The command handler queues a mode-change prompt and creates a one-time pending token. The active mode changes only when the queued prompt consumes that token, so an in-flight action is not interrupted. A bare mode command asks the main Agent to acknowledge the change only.
 
-Mode changes do not mutate an already-started Task's frozen policy. The current Session mode applies to new work.
+Mode changes do not mutate an already-started Task's frozen policy. The current Session mode applies to new work. A successful mode tool result reports a different frozen policy when a registered pointer exists; active versus paused/closed is pointer state, not the complete Task status. Read the record before continuing it. A bare switch never resumes or starts work.
 
 ## 2. Task state
 
@@ -36,6 +36,8 @@ Phase:
 Status and phase are different dimensions. `blocked` preserves the phase at which work stopped; `resume` returns to that phase by default. Changing phase while resuming requires a recorded decision, and a blocked Task cannot resume directly to `complete`. `completed` and `cancelled` are terminal after close. An unclosed completed Task may invalidate stale verification and return to implementation.
 
 ## 3. Valid transitions
+
+The lifecycle applies only to registered work. See `01-PRODUCT-CONTRACT.md` for creation criteria: ordinary consultation without durable tracking needs has no Task, while strict implementation (even small) and engineering work needing durable tracking must register before execution. Once registered, all existing transitions and strict completion gates apply.
 
 ```text
 create Task

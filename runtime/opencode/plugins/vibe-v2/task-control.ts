@@ -90,7 +90,7 @@ function terminalReviewerText(messages: readonly unknown[]): string | null {
  * plugin storage keeps only a project-scoped integrity/ownership receipt, not a second Task. */
 export function createTaskController(host: ControlHost) {
   const storage = host.storage;
-  async function location(sessionID: string, taskID: string) {
+  async function location(sessionID: string, taskID: string, createDirectory = true) {
     if (!idPattern.test(taskID)) throw new Error("Invalid Task ID");
     const root = await host.memoryRoot(sessionID);
     if (!root) throw new Error("Project memory root unavailable");
@@ -98,7 +98,7 @@ export function createTaskController(host: ControlHost) {
     const base = resolve(root, ".vibe");
     if (await realpath(base) !== base) throw new Error("Unsafe .vibe root");
     const dir = resolve(base, "tasks");
-    await mkdir(dir, { recursive: true });
+    if (createDirectory) await mkdir(dir, { recursive: true });
     if (await realpath(dir) !== dir) throw new Error("Unsafe Task directory");
     return { root, key, path: resolve(dir, `${taskID}.json`) };
   }
@@ -323,5 +323,22 @@ export function createTaskController(host: ControlHost) {
       return true;
     });
   }
-  return { control, admit, complete, reconcile };
+  /** Read-only access to the existing review context. No new permit or receipt.
+   * Before background binding, a host-created fresh child may already be running.
+   * Once bound, only that child can investigate; completed children cannot reuse it. */
+  async function reviewWorkspace(caller: Caller): Promise<{ root: string; artifacts: string[]; authorization: string } | null> {
+    if (caller.agent !== "vibe-reviewer") return null;
+    const child = await host.childSession(caller.sessionID);
+    if (child.agent !== "vibe-reviewer" || !child.parentID || child.outcome != null) return null;
+    const parent = child.parentID;
+    const p = await storage.get(activeTaskStorageKey(parent));
+    if (!isTaskPointer(p) || !p.active || p.policy !== "strict") return null;
+    const loc = await location(parent, p.taskID, false);
+    const { task, receipt } = await registered(loc, p.taskID);
+    const review = receipt.review;
+    if (receipt.owner !== parent || receipt.closed || task.policy !== "strict" || task.phase !== "review" || task.status !== "active" || task.review?.verdict !== "pending" || !review?.call || review.digest !== receipt.digest || (review.childSessionID && review.childSessionID !== caller.sessionID)) return null;
+    const workspace = await host.workspace(parent);
+    return workspace && workspace === await host.workspace(caller.sessionID) && task.verification.evidence?.root === workspace ? { root: workspace, artifacts: task.verification.evidence.paths, authorization: hash(JSON.stringify([receipt.owner, receipt.digest, review.call])) } : null;
+  }
+  return { control, admit, complete, reconcile, reviewWorkspace };
 }

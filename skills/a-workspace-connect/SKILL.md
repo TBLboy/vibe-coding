@@ -1,6 +1,6 @@
 ---
 name: a-workspace-connect
-description: "连接工作空间/绑定 Key/连接 Workbench/接入云端日志 | Bind the project root to a Workbench workspace from a workspace Key and start automatic two-way sync of AGENTS.md and .vibe/."
+description: "初始化项目/本地初始化/离线初始化/连接工作空间/绑定 Key/连接 Workbench/接入云端日志 | Bootstrap via Workbench creation and Key binding (default), connect an existing workspace for automatic two-way log sync, or explicitly initialize locally/offline."
 license: MIT
 compatibility: opencode
 metadata:
@@ -9,54 +9,94 @@ metadata:
 
 # Workspace Connect
 
-Use when the user hands over a workspace Key and asks to connect this project to a Workbench workspace (「用这个 key 连接 workbench」「接入云端日志」). Connecting is a one-step action: no extra confirmation, no manual pull or restore afterwards.
+## Intent and ownership
 
-## What connecting means
+Initialize or attach the resolved project memory root to Workbench. Workbench
+creation + Key binding is the default; explicit local/offline initialization is
+independent. A Key selects the workspace, not the directory name. Use the
+plugin-injected memory root (nearest owner of `.vibe/`, or Session directory for
+a fresh project), not a nested Git repository. Git source synchronization remains
+the user's responsibility. Only AGENTS.md and eligible `.vibe/` files sync;
+Workbench is the authoritative shared log, not an independent historical backup.
 
-- One workspace has one Key. The Key alone decides which cloud workspace the local project binds to; the local directory name is irrelevant, so two machines with different folder names reach the same workspace with the same Key.
-- The bound root is the project memory root injected by the plugin (the directory that owns `.vibe/`, or the Session directory for a fresh project), never a Git sub-repository inside it. All sub-repositories share the root's `AGENTS.md` and `.vibe/`.
-- After binding, the plugin syncs `AGENTS.md` and the whole `.vibe/` with the cloud every 10 seconds while OpenCode runs. The cloud copy is the single authoritative project log.
-- This Skill never creates `AGENTS.md` or `.vibe/` locally. Creation belongs to Workbench; an empty local root receives both from the first sync. There is no local initialization path in this framework.
+Loading this Skill is not consent to create, import, rebind or resolve conflicts.
+An explicit connect request with a Key authorizes connecting to that workspace,
+not changing an existing binding. Do not write it into any file yourself or echo the Key in replies, Task, memory,
+shell arguments or logs; only the connector owns private credential storage. Use the native workspace tools when available.
 
-## Flow
+## Choose the path
 
-1. Take the Key from the user's message. Do not write it into any file, Task, progress note or memory, and do not repeat it back in replies.
-   - A brand-new project has no local `AGENTS.md` or `.vibe/` and may not have a Key yet. In that case ask for an existing Key, or create a workspace first through `b-workbench-remote-ops` (administrator Token) and use the returned Key. Never run a local project initialization to produce those files.
-2. Call `workspace_status`.
-   - Not bound: continue.
-   - Already bound to the workspace this Key belongs to: report that it is already connected and show the sync state; stop.
-   - Bound to a different workspace: tell the user which workspace (name and type) this root is bound to, and ask whether to disconnect it first. Only after a yes, call `workspace_disconnect`, then continue. Never rebind silently.
-3. Call `workspace_connect` with `key`. The server address is a machine-level setting (`WORKBENCH_URL`) read by the plugin. Only when the plugin reports it missing, ask the user for the address once and pass it as `serverUrl`.
-4. On success the plugin stores the binding, the Key and the sync state in the device-private directory outside `.vibe/`, records the workspace type, and runs the first sync immediately.
-5. Read the result and report in a few lines: workspace name and type, number of files downloaded, number uploaded, and number of conflicts.
+- **Local/offline:** only when explicitly selected. Resolve root and supported
+  type (`engineering-dev` currently). Run the installed
+  `${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/runtime/opencode/plugins/vibe-v2/team/init-local.ts`
+  with Node `--experimental-strip-types` and arguments `root engineering-dev`.
+  It uses the canonical distributed six-file template without network or Key,
+  rejects an existing root/ancestor memory or binding, and never overwrites logs
+  or creates fake Session/Task state. Report actual output and residual paths if
+  rollback fails; stop. Do not fall back to remote creation.
+- **Remote, no Key yet:** ask for an existing Key or obtain explicit authorization
+  to create via `b-workbench-remote-ops` (blank template or import existing logs).
+  Creation and import are server operations, not local initialization. Never
+  overwrite existing logs or silently create blank instead of importing.
+- **Remote, Key supplied:** use the binding flow below; no redundant confirmation
+  for the explicitly requested first connection.
 
-## First-sync merge (performed by the plugin, reported by you)
+## Bind and check actual results
 
-- Same path, same content: already in sync.
-- Only local: uploaded. Only in the cloud: downloaded.
-- Same path, different content: the cloud version lands at the path, the local content goes to the device-local conflict store outside `.vibe/`, and the conflict is listed for the user. Do not choose a side; hand the decision to the conflict flow (`workspace_resolve_conflict`) once the user decides.
-- Files that are not UTF-8 text, exceed 1 MiB, or are temporary files are skipped with a warning. They are not conflicts.
+1. Call `workspace_status` if available (`not_bound` or `bound:false` is unbound).
+   It reports the current workspace ID/type and sync status, not the identity of
+   a newly supplied Key. Never infer that two Keys reach the same workspace.
+2. Call `workspace_connect` with `key`; use configured `WORKBENCH_URL` (or existing
+   binding URL) and supply `serverUrl` only if needed. Use a verified HTTPS URL
+   for public networks, never bypass certificate validation. For a missing URL,
+   ask once. If the tool returns `bound_to_other`, show current identity/type
+   and obtain permission to disconnect; only then call `workspace_disconnect`
+   and reconnect. Do not disconnect based on an unverified Key.
+3. Distinguish `connected`, `already_connected` and `bound_to_other` from the
+   returned `sync.ok`, `lastError`, `halted`, `warnings`, `conflicts` and `pending`.
+   Binding success does not prove first sync success. Report only available
+   facts, including warnings/conflicts; no fabricated transfer counts.
+4. If native tools are unavailable, run the installed sibling `connect.ts` with
+   the resolved root and credentials from `WORKBENCH_URL`/`WORKBENCH_KEY` in the
+   process environment, not command-line arguments. It binds only; report
+   `/reload` to load automatic sync, then verify status once when requested.
+   Do not claim the CLI performed first sync. If it refuses an existing binding,
+   use native tools after reload or report the limitation, not private-state edits.
 
-## Failure handling
+## Synchronization and conflicts
 
-- Key rejected or unknown: say so plainly; ask the user to re-check the Key (it is shown only once, when the workspace is created). Do not retry with variations.
-- Workspace archived: the Key is no longer valid; nothing is bound.
-- Server unreachable: report it, keep local files untouched, and note that the plugin retries by itself with backoff once the connection returns. Binding succeeds only after the server has accepted the Key.
-- Never delete or overwrite local files to make a connection succeed.
+Automatic sync runs while OpenCode runs (normally every 10 seconds); use
+`workspace_status` for status and `workspace_sync` only as an explicit or
+necessary immediate fallback, not polling. Initial reconciliation for eligible
+files: equal content is already in sync; local-only uploads, remote-only downloads;
+different content at the same path preserves the local version privately and
+applies remote. Unsafe, oversized, non-UTF-8 paths may be skipped with warnings;
+`.vibe/.sync` and `.tmp-` entries are excluded. Skipping is not deletion or conflict.
 
-## Boundaries
+Use `workspace_resolve_conflict` only with the user's decision and exact path:
+`keep_remote`, `keep_local`, `merged` (requires content), `accept_delete`, or
+`keep_modified` as appropriate. `keep_local`/`keep_modified` uses the saved main
+conflict copy, not necessarily the latest local edit. Subsequent distinct local
+contents can be in device-private recoveries; keep them private and do not delete
+them automatically. If result is `cloud_changed`, present the refreshed state
+and obtain a new decision; do not blindly repeat the previous resolution.
 
-- Reconnecting with the same Key after `workspace_disconnect` follows the first-sync merge again.
-- `workspace_disconnect` only removes this machine's binding; local files stay.
-- Sync status questions after connecting use `workspace_status`; do not poll it.
+## Failure and recovery
+
+Rejected/unknown Key or archived workspace: report the actual error and ask the
+user to verify credentials; do not guess, rotate or retry blindly. An initial
+failed bind is distinct from a failed sync after binding. Existing sync retries
+transient failures with backoff and halts on authorization/archive failures;
+report and use the existing recovery path rather than editing state. Never delete
+or overwrite files to force connection. Same remote identity (normalized URL +
+workspace ID) resumes retained private state; a different identity does not
+inherit it. Disconnect removes only this device binding and Key, retaining local
+logs and private recovery state. No direct manipulation of device state.
+
+Finish with root, workspace/type where known, binding and actual sync outcome,
+material warnings or next action. No need for a separate document or Task merely
+to report a simple connection.
 
 ## V2 operating rules
 
-- For registered Tasks, use Runtime lifecycle events in `docs/03-STATE-MACHINE.md`; never edit Task JSON directly.
-
-- Follow the current project `AGENTS.md` and Session policy.
-- Use a persistent `.vibe/tasks/<task-id>.json` only when V2 Task policy warrants it.
-- Write `.vibe/sessions/<session-id>/current-session.md` only for resumable unfinished work or a blocker.
-- Update `.vibe/progress.md` only for durable project facts.
-- Use only the V2 Task JSON and V2 Project Memory locations described above for durable state.
-- Report confirmed facts, assumptions, verification performed, and material limitations.
+Follow project `AGENTS.md` and effective Policy (frozen policy for existing Task work). Use Runtime lifecycle events, never edit registered Task JSON. Persist only warranted Task/Project Memory facts under the injected root and exact recovery path (`docs/05-MEMORY-CONTRACT.md`). Report evidence and limits; Main Agent owns strict review.

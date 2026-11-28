@@ -1,3 +1,4 @@
+import { MAX_BODY, MAX_DOCUMENT_BODY, MAX_IMPORT_BODY } from "../../../../../shared/team-contracts/limits.ts";
 export class TeamError extends Error {
   readonly code:string;readonly status:number;readonly details?:unknown;
   constructor(code:string,status=0,details?:unknown){super(code);this.code=code;this.status=status;this.details=details;}
@@ -11,7 +12,7 @@ export class TeamClient {
   async request(path:string,method="GET",body?:unknown,headers:Record<string,string>={},deadline=Date.now()+10000,signal?:AbortSignal):Promise<Record<string,any>> {
     if(deadline<=Date.now()||signal?.aborted)throw new TeamError("budget_exhausted");
     const encoded=body===undefined?undefined:JSON.stringify(body);
-    if(encoded!==undefined&&Buffer.byteLength(encoded)>2*1024*1024)throw new TeamError("request_too_large");
+    if(encoded!==undefined&&Buffer.byteLength(encoded)>(path==="/workspaces/import"&&method==="POST"?MAX_IMPORT_BODY:method==="PUT"&&/^\/workspaces\/[^/]+\/documents\/.+/u.test(path)?MAX_DOCUMENT_BODY:MAX_BODY))throw new TeamError("request_too_large");
     const controller=new AbortController(),abort=()=>controller.abort();signal?.addEventListener("abort",abort,{once:true});
     const timer=setTimeout(abort,Math.max(1,deadline-Date.now()));
     try {

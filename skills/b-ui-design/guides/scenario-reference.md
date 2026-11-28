@@ -33,6 +33,13 @@ keyboard/focus support, adequate contrast, non-color state cues and responsive
 reflow. Distinguish normative WCAG requirements from recommendations (for example,
 44px touch targets are a useful stronger preference, not the universal AA floor).
 Validate contrast for actual foreground/background pairs rather than a palette name.
+For WCAG 2.2 AA, check text contrast (1.4.3: 4.5:1 normal, 3:1 large text),
+non-text contrast (1.4.11), reflow (1.4.10), visible and unobscured focus
+(2.4.7, 2.4.11) and target size (2.5.8: 24 CSS px or applicable exception).
+These checks have criterion-specific exceptions; verify applicability instead of
+using a single pixel rule. Respect reduced-motion preferences for nonessential
+motion. Record which criteria and real states were checked; a sample is not a
+conformance claim.
 
 Do not add libraries, Google Fonts, remote imagery or charts by default. If a real
 decision needs the full upstream searchable catalog, propose that separately with

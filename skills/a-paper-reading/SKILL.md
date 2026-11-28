@@ -9,115 +9,35 @@ metadata:
 
 # Paper Reading
 
-## Purpose
+## Mental model
 
-Help the user understand a paper at the depth required for the current decision, presentation, reproduction, or research task.
+Reconstruct the paper's claim → assumptions → method → evidence → limitations chain at the depth the user needs. A paper is evidence for a claim under specific conditions, not an implementation specification or proof of general applicability. Read the supplied version and identify title, authors, publication/version and source; distinguish unavailable sections from what was actually inspected.
 
-## Reading Levels
+## Reading levels
 
-### L0 — Relevance Screen
+Choose the lowest useful level and deepen selectively; the levels are not a compulsory sequence.
 
-Goal: decide whether the paper deserves more time.
+| Level | Goal and key material |
+|---|---|
+| L0 — Relevance screen | Question, claimed contribution, method family, dataset/experiment context, headline result and why it is or is not relevant. |
+| L1 — Rapid understanding | Motivation, central idea, workflow, major experiments, conclusion, author-stated limits and essential terminology. |
+| L2 — Structured deep read | Definitions and assumptions, components/data flow, equations/algorithms, experimental design, baselines, metrics, ablations and claim-to-result links. |
+| L3 — Reproduction read | Pipeline, data/splits/preprocessing, algorithm/model, hyperparameters, train/inference, software/hardware, evaluation protocol, code/artifact availability, missing details and smallest reproduction experiment. |
+| L4 — Critical and transfer read | Novelty, alternative explanations, causal/statistical strength, robustness, generalization, contrary evidence, what can transfer to the user's project and what needs new tests. |
 
-Extract:
+## Evidence and method
 
-- research question;
-- claimed contribution;
-- method family;
-- dataset/experiment context;
-- headline result;
-- relevance to the user's problem;
-- reasons to continue or stop.
+- Distinguish author claims, demonstrated results and your interpretation. Anchor important statements to page/section/figure/table/equation; inspect figures and tables, including axes, legends, units and captions, where available. If access or extraction is incomplete, state that limit instead of filling gaps.
+- Explain an equation by its role, symbols, shapes/units where meaningful, assumptions and how it connects to computation. For algorithm questions trace inputs, transformations, outputs and training versus inference. Do not invent a derivation or missing hyperparameters.
+- Test whether the evidence actually answers the claim: comparable baseline and protocol, dataset split/leakage risk, sample size/variation, uncertainty, ablations and alternative explanations as relevant. Distinguish correlation, controlled intervention and author speculation; do not infer superiority across incomparable benchmarks.
+- For L3, separate documented settings, code/config evidence and reproduction assumptions. A plan is not a reproduced result. For L4, compare the paper's assumptions/resources/data distribution with the user's project; identify the transfer gap and a small falsifiable experiment before recommending adoption. For multiple papers, compare like-for-like settings and dates. Seek related work only when needed for the requested critique; label it as external evidence.
 
-### L1 — Rapid Understanding
+## Output and persistence
 
-Goal: explain the paper accurately in plain language.
+Give the conclusion, requested depth of explanation, source anchors, assumptions/limitations and relevant next question. Notes are ordinary project documents, not a new memory store. When a durable note is wanted, default to `.vibe/docs/papers/<paper-slug>/reading-note.md`; add `reproduction-plan.md` (L3+) or `transfer-notes.md` (L4) only when useful. Honor an authorized alternative location. Include bibliographic identity and reading level.
 
-Cover:
-
-- problem and motivation;
-- core idea;
-- workflow;
-- major experiments;
-- main conclusion;
-- limitations stated by authors;
-- key terms the user must know.
-
-### L2 — Structured Deep Read
-
-Goal: reconstruct the argument section by section.
-
-Cover:
-
-- assumptions and definitions;
-- method components and data flow;
-- equations/algorithms with variable meanings;
-- experiment design, baselines, metrics, and ablations;
-- how each result supports or fails to support each claim;
-- hidden dependencies and ambiguities.
-
-### L3 — Reproduction Read
-
-Goal: create a reproduction plan.
-
-Extract:
-
-- full pipeline;
-- data and preprocessing;
-- model/algorithm details;
-- hyperparameters;
-- training/inference procedure;
-- hardware/software environment;
-- evaluation protocol;
-- missing details requiring inference;
-- implementation references;
-- smallest reproduction experiment and risks.
-
-### L4 — Critical and Transfer Read
-
-Goal: judge validity and transfer lessons into the user's work.
-
-Analyze:
-
-- novelty relative to prior work;
-- causal strength and alternative explanations;
-- statistical/methodological weaknesses;
-- robustness and generalizability;
-- contradictory evidence;
-- what can be reused, adapted, or rejected;
-- concrete implications for the user's project;
-- new experiments or research questions.
-
-## Reading Rules
-
-- Distinguish author claims from demonstrated evidence and your interpretation.
-- Cite page/section/figure/table/equation locations when the document supports it.
-- Inspect figures and tables, not only extracted text.
-- Explain equations by role, variables, assumptions, and derivation path as needed.
-- Do not invent missing experimental details.
-- For multiple papers, normalize comparison dimensions.
-- Choose the lowest level that satisfies the user's goal; deepen selectively.
-
-## Output Location
-
-Notes are ordinary project documents; the layout below is a readability convention, not a framework-managed store. Default to `.vibe/docs/papers/<paper-slug>/` unless the user or the project `AGENTS.md` names another location:
-
-```text
-<papers-root>/<paper-slug>/
-  reading-note.md
-  reproduction-plan.md   # L3+
-  transfer-notes.md      # L4
-```
-
-The note begins with bibliographic identity, reading level, purpose, and one-paragraph conclusion. When a paper changes a project decision, record that decision in the active Task JSON `decisions` or `.vibe/progress.md`; do not copy the note there.
+An adopted project decision needs the existing authority rules. For registered Tasks use `record_decision` in prepare/implement or the appropriate existing lifecycle event; keep durable decisions in `.vibe/progress.md` where warranted, not copies of paper notes. Do not claim experimental execution or modify the project solely because a paper recommends a technique.
 
 ## V2 operating rules
 
-- For registered Tasks, use Runtime lifecycle events in `docs/03-STATE-MACHINE.md`; never edit Task JSON directly.
-
-- Follow the current project `AGENTS.md` and Session policy.
-- Use a persistent `.vibe/tasks/<task-id>.json` only when V2 Task policy warrants it.
-- Write `.vibe/sessions/<session-id>/current-session.md` only for resumable unfinished work or a blocker.
-- Update `.vibe/progress.md` only for durable project facts.
-- Use only the V2 Task JSON and V2 Project Memory locations described above for durable state.
-- Report confirmed facts, assumptions, verification performed, and material limitations.
+Follow project `AGENTS.md` and effective Policy (frozen policy for existing Task work). Use Runtime lifecycle events, never edit registered Task JSON. Persist only warranted Task/Project Memory facts under the injected root and exact recovery path (`docs/05-MEMORY-CONTRACT.md`). Report evidence and limits; Main Agent owns strict review.

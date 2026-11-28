@@ -8,4 +8,4 @@ __pycache__/
 *.pyc
 .vibe/
 /team-data/
-skills/a-project-archive/archive_root.conf
+skills/**/archive_root.conf

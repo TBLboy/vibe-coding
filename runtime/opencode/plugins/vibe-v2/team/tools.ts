@@ -1,7 +1,7 @@
 import { realpath } from 'node:fs/promises';
 import type { ToolDefinition } from '../host-contract.ts';
 import { loadBinding, connectWorkspace } from './binding.ts';
-import { clearDeviceBinding, stateDir } from './device-state.ts';
+import { clearDeviceBinding, stateDir, boundStateDir, withStateLock, migrateLegacyState, loadDeviceBinding } from './device-state.ts';
 import { listConflicts } from './conflicts.ts';
 import { TeamError } from './client.ts';
 import type { TeamMirror } from './mirror.ts';
@@ -23,12 +23,13 @@ export function workspaceTools(root: string, mirror: TeamMirror, allowed: (sessi
       const binding = await loadBinding(root);
       if (!binding) return { bound: false };
       const state = await mirror.inspect();
-      const conflicts = (await listConflicts(stateDir(await realpath(root)))).map((c) => ({ path: c.path, kind: c.kind }));
+      const conflicts = (await listConflicts(await boundStateDir(await realpath(root)))).map((c) => ({ path: c.path, kind: c.kind }));
       return { bound: true, workspaceId: binding.workspaceId, workspaceType: binding.workspaceType, ...state, conflictList: conflicts };
     } },
     { name: 'workspace_sync', description: 'Force an immediate two-way sync (fallback; sync normally runs automatically).', properties: {}, run: (_, s) => mirror.sync(true, s) },
     { name: 'workspace_disconnect', description: 'Remove this machine binding and Key. Local files, manifest and conflicts are kept.', properties: {}, run: async () => {
-      await clearDeviceBinding(stateDir(await realpath(root)));
+      const dir=stateDir(await realpath(root));
+      await withStateLock(dir,async()=>{await migrateLegacyState(dir,await loadDeviceBinding(dir));await clearDeviceBinding(dir);});
       return { status: 'disconnected' };
     } },
     { name: 'workspace_resolve_conflict', description: 'Apply the user decision for one conflict. Never choose a side without the user.', properties: { path: { type: 'string' }, resolution: { type: 'string', enum: [...RESOLUTIONS] }, content: { type: 'string' } }, required: ['path', 'resolution'], run: (i, s) => {

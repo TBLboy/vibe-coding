@@ -1,3 +1,5 @@
+> Historical engineering record; current capability scope is D-28 in `docs/11-DECISIONS.md`. Retired Skill references and old test counts below describe earlier revisions, not current installation requirements.
+
 # Vibe Coding V2 — P0/P1 修复计划与交付说明
 
 基线：用户上传的 `vibe-coding.zip`，原仓库 HEAD `9d023b3`。本交付是源码修复候选版，不是已经通过真实 OpenCode 宿主验收的正式发布。未修改原 ZIP、未推送远程、未操作用户实际 OpenCode 配置。

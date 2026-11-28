@@ -21,9 +21,11 @@ Only the native slash commands `/fast`, `/balanced`, and `/strict` change the mo
 - `/fast` — switch mode and briefly confirm; do not start a task.
 - `/strict change the database schema` — switch mode, confirm briefly, and execute the supplied request in the same turn.
 
-Ordinary prose, quoted strings, code blocks, model output, and words such as “strict” never change mode. A mode command is a command, not a keyword heuristic.
+Ordinary prose, quoted strings, code blocks, model output, and words such as “strict” never change mode. A mode command is a command, not a keyword heuristic. On successful change, briefly confirm the mode; when the registered Task pointer has a different frozen policy, report that policy, its active or paused/closed pointer state, and that the new mode governs new work. Do not resume or modify an existing Task merely because mode changed.
 
 ## 3. Mode behavior
+
+All modes use the same Agent, Skills and Project Memory. Mode selects engineering process and quality gates, not intelligence or permissions to skip correctness. Ordinary consultation, explanation and read-only investigation without a durable deliverable or tracking need do not create a Task or invoke a reviewer in any mode. This includes preliminary investigation for a possible future change; implementation or an agreed durable engineering deliverable is different. Do not recast actual implementation as consultation to bypass strict review. A registered Task always follows its own frozen policy.
 
 ### Fast
 
@@ -31,8 +33,8 @@ Ordinary prose, quoted strings, code blocks, model output, and words such as “
 
 - No reviewer invocation, review record, or review gate.
 - Task is optional; do not create one for trivial one-turn work.
-- Create a Task only when durable tracking/recovery is useful: cross-session work, a blocker, multiple persistent deliverables, a material decision, high risk, or explicit acceptance criteria that must persist.
-- Skip formal clarification/planning/breakdown when the request is clear and low risk.
+- Create a Task only when durable tracking/recovery is useful: cross-session work, a blocker, one or more durable deliverables, a material decision/risk, or explicit acceptance criteria that must persist.
+- Take the shortest correct path even across multiple files. Skip unnecessary formal clarification/planning/breakdown; use relevant Skills and sufficient evidence when useful.
 - Verification remains required and proportional to risk.
 
 ### Balanced (default)
@@ -40,17 +42,17 @@ Ordinary prose, quoted strings, code blocks, model output, and words such as “
 `understand normally → plan as needed → implement → verify → deliver`
 
 - No reviewer invocation, review record, or review gate.
-- Task is optional, not one-per-user-message. Create it for non-trivial multi-step or multi-file work, a durable deliverable, explicit acceptance criteria, a blocker, material risk/decision, or recovery needs.
+- Task is optional, not one-per-user-message. Create it for non-trivial coordination across steps/files/modules, a durable deliverable, persistent acceptance criteria, a blocker, material risk/decision, or recovery needs. File count alone is not a persistence signal; simple work can be as light as Fast.
 - Business clarification, technical selection, and task breakdown are capabilities, not mandatory stages.
 - Verification remains required and proportional to risk.
 
 ### Strict
 
-`clarify → necessary technical decisions → task breakdown → implement → verify → independent review → deliver`
+`prepare as needed → execute agreed work → verify → independent review → deliver`
 
-- A Task is mandatory.
-- Before substantial implementation, make the business rules, scope, `doneWhen`, and material technical decisions explicit. Break down the work when it reduces risk or ambiguity.
-- Reviewer invocation is mandatory after verification.
+- A Task is mandatory for engineering implementation (including small edits) and engineering work needing durable tracking (including agreed deliverables), not ordinary consultation as defined above.
+- Before executing that tracked work, make the business rules, scope, `doneWhen`, and material technical decisions explicit. Break down the work when it reduces risk or ambiguity.
+- Reviewer invocation is mandatory after verification of a strict Task. No prescribed sequence of Skills or separate design/report files; use only what supports the agreed outcome.
 - A Task cannot complete until the reviewer returns `go`.
 - Reviewer `conditional` or fixable `no-go` findings cause a bounded repair cycle: fix only required findings → re-verify → re-review.
 - Maximum: two automatic repair rounds after the initial review. If a third review still requires changes, block, report the unresolved findings, and stop automatic retries. Any further attempt requires a new explicit user request. If a product/business decision is required, block immediately and ask the user.
@@ -70,6 +72,8 @@ The framework has one lifecycle, not three separate workflow implementations:
 A stage name is not a requirement to create a separate command, Agent, file, or state object.
 
 ## 5. Verification
+
+Mode and risk are distinct. Assess the actual consequences, affected contracts/consumers, data and security, uncertainty and rollback. `quick` is local/reversible with targeted checks; `standard` changes normal behavior and requires adjacent regression/integration as relevant; `strict` covers consequential contract/data/migration/security/permission/concurrency changes, critical failure or difficult recovery. File count, duration and code volume alone do not determine risk. Fast and Balanced may execute quick or standard work with the appropriate evidence; neither may implement strict-risk work. Stop, explain the concrete risk and request explicit `/strict`; pause/cancel old work as appropriate and start a new strict Task. Runtime enforces declared risk, not arbitrary shell edits. Strict Tasks require review even for quick work.
 
 Verification is required for code changes. Automated tests are not mandatory when they are not applicable; an alternative targeted check and a reason must be recorded in the result. Examples:
 
@@ -93,3 +97,7 @@ The final response must state:
 - material limitations or checks not run.
 
 Keep it concise. Do not include a tool-by-tool diary.
+
+## Personal Workbench refinement
+
+This is a small personal framework. Workbench creation + local Key binding is the primary initialization route. Explicit local initialization is supported using the same published engineering-dev template; Workbench may instead create a workspace from existing valid engineering logs without template overlay. Sync remains AGENTS.md and .vibe/ except device-private data; Git stays independent. No team accounts, sync dashboard, dedicated conflict management, new Runtime objects or product metrics.

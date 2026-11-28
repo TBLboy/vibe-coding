@@ -75,3 +75,50 @@ test("Session context carries the absolute memory root and the registered Task",
   assert.match(text, /Session recovery file: \/proj\/\.vibe\/sessions\/ses_a\/current-session\.md/);
   assert.match(renderModeInstructions("fast"), /No Task is registered/);
 });
+
+
+test("compact context distinguishes new work from a differently frozen Task", () => {
+  for (const mode of ["fast", "balanced", "strict"] as const) {
+    for (const frozen of ["fast", "balanced", "strict"] as const) {
+      for (const active of [true, false]) {
+        const facts = { memoryRoot: "/proj with space", activeTask: { taskID: "t1", policy: frozen, active } };
+        const text = renderModeInstructions(mode, "session/one", facts);
+        assert.equal(text, renderModeInstructions(mode, "session/one", facts));
+        assert.ok(text.includes(`New-work policy (${mode}):`));
+        assert.ok(text.includes(`frozen policy ${frozen}, ${active ? "active" : "paused/closed"}`));
+        assert.ok(text.includes("Session recovery file: /proj with space/.vibe/sessions/session%2Fone/current-session.md"));
+        assert.ok(text.includes("vibe-reviewer follows its read-only strict review contract"));
+        assert.ok(text.includes("never edit directly"));
+        assert.ok(text.includes("do not register it again"));
+        if (mode !== frozen) {
+          assert.ok(text.includes(`Only if continuing that existing Task, apply frozen policy (${frozen}):`));
+          assert.doesNotMatch(text.split("Only if continuing that existing Task")[1], /Always create\/register|action=start/);
+        } else {
+          assert.ok(!text.includes("Only if continuing that existing Task"));
+        }
+        assert.equal(text.includes("reviewer returns go"), mode === "strict" || frozen === "strict");
+      }
+    }
+  }
+});
+
+test("mode experience instructions distinguish consultation, tracking and risk without weakening review", () => {
+  for (const mode of ["fast", "balanced", "strict"] as const) {
+    const text = renderModeInstructions(mode);
+    assert.match(text, /Ordinary consultation\/read-only explanation or investigation without durable tracking needs creates no Task or Reviewer call in any mode/);
+    assert.match(text, /Stop before strict-risk implementation under fast\/balanced policy; require explicit \/strict and a new strict Task/);
+    assert.match(text, /not file count/);
+  }
+  assert.match(renderModeInstructions("fast"), /even for clear multi-file work/);
+  assert.match(renderModeInstructions("balanced"), /direct for simple work/);
+  assert.match(renderModeInstructions("strict"), /implementation \(even small\)/);
+  assert.match(renderModeInstructions("strict"), /no mandatory separate documents or Skill sequence/);
+  assert.match(renderModeInstructions("strict"), /reviewer returns go/);
+});
+
+test("mode switch prompt uses returned frozen policy and never resumes a pointer automatically", () => {
+  const prompt = buildModeCommandPrompt("fast", "", false, "token");
+  assert.match(prompt, /if its result reports a different frozen Task policy/);
+  assert.match(prompt, /Do not imply a paused\/closed Task is active or resume it automatically/);
+  assert.match(prompt, /do not start implementation/);
+});

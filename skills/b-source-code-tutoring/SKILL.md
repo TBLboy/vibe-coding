@@ -10,104 +10,32 @@ metadata:
 
 # Source Code Tutoring
 
-Teach the implementation, not only the architecture label. Build the explanation from actual classes, methods, variables, messages, callbacks, and call sites in the repository.
+## Purpose
 
-This Skill is explicit-only. Use it when the user asks to learn or trace code. Do not automatically turn a short code question into a full tutorial.
+Teach the actual implementation using concrete source anchors, execution order, data and state rather than architecture labels. This Skill is explicit-only for learning, tracing or line-by-line explanation, not a quick definition, code review, broad onboarding or unsolicited implementation. Adapt to the user's familiarity and question; no edits or live side effects by default.
 
-## Core Contract
+## Source-grounded method
 
-For every explanation, establish this chain:
+Choose a narrow real path or the function the user names. Trace concrete input → entry function/callback → guards and state mutation in actual source order → constructed output/message → downstream consumer → result callback or terminal/reset state. Do not impose a state mutation or callback where none exists.
 
-```text
-concrete input
-→ entry function/callback
-→ object and state mutation
-→ branch/guard evaluation
-→ constructed output/message
-→ downstream consumer
-→ result callback or terminal state
-```
+Locate the callers, registration/framework trigger, crossing types and next consumer; read necessary surrounding source and the definitions of generated types (IDL/schema/action) where relevant. Explain pre-existing state, branch conditions/early returns, key lines in order, mutations and why later code reads them, return values/effects and what makes the function execute again. Use one concrete example value consistently, marked illustrative if not observed. Resolve dynamic dispatch, scheduling and configuration only where evidence supports it. For async flows distinguish causal order from assumed timing; include error/cancellation/reset paths if they explain the state lifecycle.
 
-Do not start with abstract labels such as "orchestrator", "master-worker", or "state machine". Use those only after the source-level explanation, as a compact name for the observed code structure.
+Start with observed code, not abstract pattern names. Name a pattern afterward if it compresses the established understanding. Label pseudocode and any illustrative timestamps; never invent fields, events, consumers or runtime success. Correct previous illustrations when source differs. Distinguish static path, actual observed trace and unverified downstream behavior; one path does not prove the entire architecture.
 
-## Reading Workflow
+## Explanation shape
 
-1. Select one narrow, real execution path. Prefer the smallest runnable or testable path over the user's final complex feature.
-2. Locate the entry point, the next direct call, the data type crossing each boundary, and the terminal side effect.
-3. Read only the necessary source around those symbols. Do not begin by listing every directory or module.
-4. For each important function, explain:
-   - caller and triggering condition;
-   - input fields and pre-existing object state;
-   - important lines in execution order;
-   - fields mutated and why later code reads them;
-   - return value/message and its next consumer.
-5. Use one concrete value trace throughout when possible, such as `task_type="test_gripper"`, `request_id="r-1"`, or `user_id=42`.
-6. Stop at the next boundary and let the user choose whether to continue. A boundary can be an RPC/Action call, queue publish, database write, subprocess, driver call, or framework callback.
+For non-trivial paths use these views in order (see `references/teaching-template.md` for a detailed optional template):
 
-## Required Explanation Shape
+- **Source anchors:** actual files, symbols, relevant lines and unread boundaries.
+- **Concrete runtime trace:** one input through ordered events; distinguish illustrative sequence from measured timing.
+- **State lifecycle:** for asynchronous/stateful/multi-step paths, variable/object, initial value, writers, readers, effect, terminal/reset. Separate context, lifecycle, busy/pending, policy step state, cache and correlation/epoch IDs when relevant.
+- **Code-level interpretation:** actual lines in order, connecting fields to consumers. For line-by-line requests cover every requested line; never substitute pseudocode for the implementation.
+- **Engineering model:** concise explanation/pattern only after grounding it in the source.
 
-When explaining a non-trivial flow, present sections in this order. `references/teaching-template.md` in this Skill is the fill-in template.
+For a focused question use just the relevant views. At the natural next boundary (RPC, queue, database, subprocess, callback, driver), identify what consumes the object and what remains unread. Stop when the requested learning scope is satisfied; continue across boundaries without unnecessary questions if the user requested an end-to-end trace. Give a compact input → decisions/state → output → consumer summary when useful.
 
-### A. Source Anchors
-
-Name the real files, classes, methods, and relevant line locations. State which source facts are confirmed and which downstream behavior is not yet read.
-
-### B. Concrete Runtime Trace
-
-Use an ordered time/event trace with a single example input. Do not invent timestamps, event names, object fields, or behavior; mark illustrative timing explicitly when the repository does not define it.
-
-### C. State Lifecycle Table
-
-For asynchronous, stateful, or multi-step code, include a table with the variable/object, initial value, writers, readers, effect on the next step, and terminal/reset value. Distinguish context, lifecycle state, busy/pending flags, policy step state, cached data, and correlation/epoch identifiers.
-
-### D. Code-Level Interpretation
-
-Explain key lines in source order. Connect each concrete object and field assignment to its next consumer. For line-by-line requests, do not skip lines or replace the implementation with pseudo-code.
-
-### E. Engineering Model
-
-Only after the source explanation, name a pattern if useful. The pattern is a compact description of observed source facts, not a replacement for the call trace.
-
-## Function-Level Questions
-
-When the user supplies a function, answer:
-
-1. Who calls it and what framework/event invokes it?
-2. What object state must already exist?
-3. Which branch conditions can return early?
-4. Which attributes, collections, or external systems does it mutate?
-5. What does it return or send, and who consumes it next?
-6. Which variables affect whether the function runs again?
-
-## Accuracy Rules
-
-- Read the actual implementation before asserting field assignments or routing behavior.
-- Label pseudo-code as pseudo-code and correct prior illustrative statements when source differs.
-- State when a framework-generated type comes from an IDL, schema, or action definition and show the defining file.
-- Do not infer runtime success from static source; distinguish an existing code path from verified behavior.
-- Do not silently broaden one execution path into a claim about the whole architecture.
-
-## Learning Loop
-
-After each path, provide:
-
-```text
-Input → state setup → guard → decision → message/output → downstream execution → result/state release
-```
-
-When the user wants a persistent note, write it to `.vibe/docs/code-notes/<topic>.md` (or where the user chooses), recording source anchors, the concrete trace, state lifecycle, confirmed interpretation, source gaps, and the next reading target. Record in `.vibe/progress.md` only a durable architectural fact that future work depends on.
-
-## Exclusions
-
-Do not use this Skill for a quick one-line definition, code review, broad onboarding without a selected execution path (`a-codebase-onboarding`), or implementation planning before reading the relevant path.
+When the user wants a persistent note, use `.vibe/docs/code-notes/<topic>.md` or their requested path. Include source anchors, concrete trace, state lifecycle where relevant, confirmed interpretation, gaps and next reading target. Record only durable architectural facts in `.vibe/progress.md` when justified; do not create Tasks or execute code merely to teach a path.
 
 ## V2 operating rules
 
-- For registered Tasks, use Runtime lifecycle events in `docs/03-STATE-MACHINE.md`; never edit Task JSON directly.
-
-- Follow the current project `AGENTS.md` and Session policy.
-- Use a persistent `.vibe/tasks/<task-id>.json` only when V2 Task policy warrants it.
-- Write `.vibe/sessions/<session-id>/current-session.md` only for resumable unfinished work or a blocker.
-- Update `.vibe/progress.md` only for durable project facts.
-- Use only the V2 Task JSON and V2 Project Memory locations described above for durable state.
-- Report confirmed facts, assumptions, verification performed, and material limitations.
+Follow project `AGENTS.md` and effective Policy (frozen policy for existing Task work). Use Runtime lifecycle events, never edit registered Task JSON. Persist only warranted Task/Project Memory facts under the injected root and exact recovery path (`docs/05-MEMORY-CONTRACT.md`). Report evidence and limits; Main Agent owns strict review.

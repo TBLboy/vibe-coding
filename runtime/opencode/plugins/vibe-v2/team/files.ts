@@ -1,4 +1,4 @@
-import { lstat, mkdir, readdir, readFile, writeFile, rename, unlink, realpath, open } from "node:fs/promises";
+import { lstat, mkdir, readdir, readFile, writeFile, rename, unlink, realpath, open, link } from "node:fs/promises";
 import { resolve, sep, dirname } from "node:path";
 import { randomBytes, randomUUID } from "node:crypto";
 import { validateServerPath } from "../../../../../shared/team-contracts/layout.ts";
@@ -22,7 +22,7 @@ export class SafeFiles {
     for(let i=0;i<parts.length;i++) {
       const name=parts[i], candidate=resolve(parent,name), last=i===parts.length-1;
       const names=await readdir(parent);
-      if(!names.includes(name) && names.some(n=>n.toLowerCase()===name.toLowerCase()))throw new Error("case collision");
+      if(names.some(n=>n!==name && n.toLowerCase()===name.toLowerCase()))throw new Error("case collision");
       try {const s=await lstat(candidate);if(s.isSymbolicLink() || (!last&&!s.isDirectory()) || (last&&!s.isFile()))throw new Error("symlink or filesystem collision");}
       catch(error){if(!missing(error))throw error;if(!last){if(!create)return target;await mkdir(candidate,{mode:0o700});}}
       parent=candidate;
@@ -38,9 +38,9 @@ export class SafeFiles {
   }
   async write(relative:string,bytes:string|Uint8Array,expected?:string|null):Promise<void> {
     const target=await this.path(relative,true), tmp=resolve(dirname(target),`.tmp-${randomUUID()}`);
-    try {await writeFile(tmp,bytes,{flag:"wx",mode:0o600});await this.path(relative);
+    try {await writeFile(tmp,bytes,{flag:"wx",mode:0o600,flush:true});await this.path(relative);
       if(expected!==undefined){const current=await this.read(relative);if((current===null?null:hashContent(current))!==expected)throw new Error("local_changed");}
-      await rename(tmp,target);}
+      if(expected===null)await link(tmp,target);else await rename(tmp,target);}
     finally {await unlink(tmp).catch(error=>{if(!missing(error))throw error;});}
   }
   async remove(relative:string,expected?:string):Promise<void> {

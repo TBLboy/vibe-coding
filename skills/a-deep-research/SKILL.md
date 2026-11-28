@@ -9,47 +9,26 @@ metadata:
 
 # Deep Research
 
-## Purpose
+## Mental model and depth
 
-Research to support a decision, not to collect links. Use this for broad technical, product, commercial, competitive, roadmap, or due-diligence questions, and for precise implementation-path or library/technology selection (run it as a quick scan or standard research with the candidate options fixed up front).
+Research reduces uncertainty that could change a decision. Define the decision, options (including current/no-change where credible), constraints, audience, scope and useful stopping point. Ask only for unavailable decision-critical facts. For a focused lookup use `b-web-research-tooling`; this Skill owns synthesis, trade-offs and recommendations across technical, product, market, strategy or due-diligence questions.
 
-## Scope
+Choose a quick scan for orientation or a bounded implementation question; standard research for comparisons and selection; deep decision research for high-cost, high-impact or hard-to-reverse choices. Depth follows uncertainty and stakes, not source count or report length.
 
-Classify the requested depth:
+## Research method
 
-- **quick scan**: terminology and early signal; proceed with stated assumptions;
-- **standard research**: comparison, selection, planning, or competitor assessment;
-- **deep decision research**: high-cost, strategic, externally published, or difficult-to-reverse decisions.
+- Map decision-critical questions and plausible hypotheses before reading deeply. Prioritize unknowns by how much their answer can change the decision. Check existing project constraints, versions and actual usage before comparing alternatives.
+- Choose evidence that can resolve each question: primary documents, standards, upstream source/releases, direct measurements, maintained references or filings as appropriate. Use `b-web-research-tooling` for online retrieval; use local source/tests or safe isolated probes for project feasibility when authorized. Record publisher, date/version, claim and applicable conditions. Do not confuse vendor promises with measured results or source repetition with independent evidence.
+- Compare viable options on common, decision-derived dimensions; separate hard disqualifiers from preferences. Normalize units, baseline, workload, platform, cost assumptions and time horizon where relevant. Mark incomparable results instead of inventing a ranking; avoid false precision and arbitrary weighted scores.
+- Seek counterexamples, contradictory evidence, failure modes, switching/maintenance costs and conditions that would reverse the recommendation. Separate observed facts, analysis and assumptions; explain unresolved disagreement rather than averaging incompatible claims.
+- Stop when more research is unlikely to alter the recommendation, or when a targeted experiment or user decision is needed. Acknowledge inaccessible evidence, uncertainty and limits. No forced full literature survey for a narrow question.
 
-For standard or deep work, establish the decision, audience, deadline, included and excluded scope, constraints, and deliverable before research. Ask only for an unavailable, decision-critical fact.
+## Decision-ready result
 
-## Evidence Method
+Lead with recommendation and reasons, supporting sources and applicability, alternatives and trade-offs, key uncertainties, fallback/reversal conditions, and the smallest next validation action. A quick scan can be a few paragraphs; a durable decision report may be saved to `.vibe/docs/` when useful. Cite material external claims near the conclusion they support; avoid unsupported certainty.
 
-1. Build a research map before deep reading individual sources.
-2. Prefer primary sources, official documentation, maintained upstream material, public filings, and direct evidence.
-3. Use `b-web-research-tooling` when web search or retrieval is needed; use current official documentation for library or service details.
-4. Compare serious options on the same dimensions.
-5. Seek contrary evidence, failure cases, and conditions that invalidate the leading recommendation.
-6. Separate facts, analysis, assumptions, open questions, and recommendations.
-
-## Output
-
-Write a decision-ready report with conclusion first, evidence citations, alternatives, trade-offs, risks, confidence, and the smallest next validation action when evidence is insufficient. When it changes the active project, record the chosen decision and its binding constraints in the active Task JSON `decisions` and, if durable, in `.vibe/progress.md`.
-
-## Completion Gate
-
-- every material claim has a traceable source;
-- options are compared fairly;
-- contrary evidence and uncertainty are visible;
-- the recommendation has conditions and a fallback.
+A recommendation is not approval to implement or deploy. When an authorized choice affects registered work, use Runtime `record_decision` in prepare/implement; follow `docs/03-STATE-MACHINE.md` and the registered-criteria supersession rule in `docs/06-AGENT-CONTRACT.md` where applicable. Record durable project decisions in `.vibe/progress.md` as warranted; do not directly edit Task fields or create a Task merely to hold research notes.
 
 ## V2 operating rules
 
-- For registered Tasks, use Runtime lifecycle events in `docs/03-STATE-MACHINE.md`; never edit Task JSON directly.
-
-- Follow the current project `AGENTS.md` and Session policy.
-- Use a persistent `.vibe/tasks/<task-id>.json` only when V2 Task policy warrants it.
-- Write `.vibe/sessions/<session-id>/current-session.md` only for resumable unfinished work or a blocker.
-- Update `.vibe/progress.md` only for durable project facts.
-- Use only the V2 Task JSON and V2 Project Memory locations described above for durable state.
-- Report confirmed facts, assumptions, verification performed, and material limitations.
+Follow project `AGENTS.md` and effective Policy (frozen policy for existing Task work). Use Runtime lifecycle events, never edit registered Task JSON. Persist only warranted Task/Project Memory facts under the injected root and exact recovery path (`docs/05-MEMORY-CONTRACT.md`). Report evidence and limits; Main Agent owns strict review.

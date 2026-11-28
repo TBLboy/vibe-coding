@@ -1,8 +1,10 @@
 import { lstat, readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { SafeFiles } from "./files.ts";
+import { decodeText, pathsCollide, MAX_DOCUMENT_BYTES } from "../../../../../shared/team-contracts/limits.ts";
 import { validateSyncPath } from '../../../../../shared/team-contracts/layout.ts';
 
-export const MAX_SYNC_BYTES = 1024 * 1024;
+export const MAX_SYNC_BYTES = MAX_DOCUMENT_BYTES;
 export interface ScanResult { files: string[]; warnings: string[] }
 
 const absolute = (root: string, rel: string): string => join(root, ...rel.split('/'));
@@ -18,23 +20,27 @@ export async function scanSyncFiles(root: string, check: () => void = () => {}):
     try {
       const s = await lstat(absolute(root, rel));
       if (s.isSymbolicLink()) { warnings.push(`skipped (symlink): ${rel}`); return; }
-      if (!s.isFile()) return;
+      if (!s.isFile()) { warnings.push(`skipped (not regular): ${rel}`); return; }
       size = s.size;
     } catch (error) { if (missing(error)) return; throw error; }
     if (size > MAX_SYNC_BYTES) { warnings.push(`skipped (over 1 MiB): ${rel}`); return; }
-    const bytes = await readFile(absolute(root, rel));
-    try { new TextDecoder('utf-8', { fatal: true }).decode(bytes); }
+    let bytes:Buffer|null;
+    try{bytes=await new SafeFiles(root).read(rel);}catch(e){warnings.push(`skipped (unsafe filesystem path): ${rel}`);return;}
+    if (bytes === null) return;
+    try { decodeText(bytes); }
     catch { warnings.push(`skipped (not UTF-8 text): ${rel}`); return; }
     files.push(rel);
   };
   const walk = async (rel: string): Promise<void> => {
     check();
     let entries;
-    try { entries = await readdir(absolute(root, rel), { withFileTypes: true }); }
+    try { const s = await lstat(absolute(root, rel)); if (!s.isDirectory() || s.isSymbolicLink()) {warnings.push(`skipped (not regular directory): ${rel}`);return;} entries = await readdir(absolute(root, rel), { withFileTypes: true }); }
     catch (error) { if (missing(error)) return; throw error; }
     for (const entry of entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))) {
       const child = `${rel}/${entry.name}`;
-      if (child === '.vibe/.sync') continue;
+      if (entry.name.startsWith('.tmp-')) continue;
+      if (child.toLowerCase() === '.vibe/.sync') continue;
+      if (!validateSyncPath(child).ok) { warnings.push(`skipped (invalid path): ${child}`); continue; }
       if (entry.isSymbolicLink()) { warnings.push(`skipped (symlink): ${child}`); continue; }
       if (entry.isDirectory()) await walk(child); else await consider(child);
     }
@@ -42,5 +48,6 @@ export async function scanSyncFiles(root: string, check: () => void = () => {}):
   await consider('AGENTS.md');
   await walk('.vibe');
   files.sort();
+  for(const path of files)if(files.some(other=>pathsCollide(path,other)))throw new Error("case collision in local sync paths");
   return { files, warnings };
 }

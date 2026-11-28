@@ -9,41 +9,23 @@ metadata:
 
 # Project Context Briefing
 
-## Purpose
+## Mental model
 
-Prepare another solver to help effectively when context is scattered across the project, logs, configuration, tests, and prior attempts. This packages a problem; it does not substitute for solving it.
+A brief gives another solver enough independent context to answer a specific question without replaying the conversation. Optimize for the recipient's ability to reconstruct the problem, not completeness of project history. Preparing a brief is not solving the problem or authorizing publication.
 
-## Gather
+## Select evidence and adapt to the recipient
 
-Read only evidence relevant to the target question: the current Session's `current-session.md`, the active Task JSON, `AGENTS.md`, `.vibe/progress.md`, business rules, architecture, exact errors, reproduction steps, affected code/configuration, environment, constraints, and attempts already made. Include full error excerpts where needed and point to larger artifacts by path.
+- Identify audience (another AI, teammate, vendor, issue tracker, forum or expert), requested diagnosis/decision, relevant scope and permitted disclosure. Read only context needed: current Session/Task if present, applicable project rules, active requirements, progress, code/config, logs/tests, exact errors and prior attempts. Do not assume all these files exist.
+- Establish a coherent snapshot: revision/version, environment, relevant input/configuration, expected behavior and its authority, observed behavior, reproduction conditions, exact evidence, constraints and attempts with results. Distinguish present facts from obsolete attempts and known working baselines. Quote the minimal decisive error excerpt; link larger local artifacts by path only if the recipient can access them. Include enough sanitized context to reproduce independently; do not require inaccessible project links to understand the question.
+- Separate confirmed facts, assumptions, unknowns and the requested help. Preserve material failed approaches, contradictions and uncertainty, not every operation. If reproduction is unverified or logs are missing, say so rather than inventing a complete sequence.
+- For external audiences, minimize and redact credentials, private endpoints/identifiers, personal data and proprietary code beyond authorized scope. Redaction must preserve diagnostic meaning (e.g. consistent placeholders). Do not send, post, upload or change visibility without explicit authorization; preparing a shareable brief is not permission to transmit.
 
-Classify every material statement as **confirmed**, **assumption**, **unknown**, or **need help**. Never fill gaps with plausible details.
+## Deliverable
 
-## Audience Adaptation
+Lead with goal and exact question, then only relevant system context, expected/actual behavior, reproducible evidence, environment/constraints, prior attempts and unknowns. Adapt to the recipient's format; no compulsory seven-section document for a simple question. Check that a recipient who has not read the conversation can understand the request, distinguish facts from hypotheses, and know what response is needed.
 
-Choose the appropriate form for an AI prompt, teammate handoff, GitHub issue, forum post, vendor request, or expert consultation. State the desired answer and exact decision or diagnosis needed.
-
-## Output
-
-Use this order:
-
-1. Goal and exact question.
-2. Relevant system and project background.
-3. Expected versus actual behavior.
-4. Reproduction and exact evidence.
-5. Environment, dependencies, interfaces, and constraints.
-6. Attempts and observed results.
-7. Unknowns and requested help.
-
-Return the brief as a standalone document; save it as `.vibe/docs/briefs/<topic>.md` when it should persist, or where the user asks. If the brief supports an active Task, reference its location from the Task `nextAction` or the Session's `current-session.md`; do not paste it into project memory. Remove secrets and unnecessary personal data before sharing externally.
+Return a standalone brief; when persistence is useful save under `.vibe/docs/briefs/<topic>.md` or the requested location. Do not paste the full brief into Project Memory. A related Task may reference the brief through a material `record_decision` in prepare/implement when appropriate; otherwise use an existing recovery note only for resumable unfinished work. Do not directly edit registered `nextAction` or create fake Task/Session records merely for a handoff. Follow the actual Runtime lifecycle.
 
 ## V2 operating rules
 
-- For registered Tasks, use Runtime lifecycle events in `docs/03-STATE-MACHINE.md`; never edit Task JSON directly.
-
-- Follow the current project `AGENTS.md` and Session policy.
-- Use a persistent `.vibe/tasks/<task-id>.json` only when V2 Task policy warrants it.
-- Write `.vibe/sessions/<session-id>/current-session.md` only for resumable unfinished work or a blocker.
-- Update `.vibe/progress.md` only for durable project facts.
-- Use only the V2 Task JSON and V2 Project Memory locations described above for durable state.
-- Report confirmed facts, assumptions, verification performed, and material limitations.
+Follow project `AGENTS.md` and effective Policy (frozen policy for existing Task work). Use Runtime lifecycle events, never edit registered Task JSON. Persist only warranted Task/Project Memory facts under the injected root and exact recovery path (`docs/05-MEMORY-CONTRACT.md`). Report evidence and limits; Main Agent owns strict review.

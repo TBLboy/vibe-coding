@@ -9,57 +9,32 @@ metadata:
 
 # Engineering Landing
 
-## Purpose and mental model
+## Mental model
 
-Implement an approved task as a controlled change to a living system. Correctness is the new capability **plus** preservation of unrelated existing contracts. The unit of change is a coherent behavioral delta, not a file or line count. A small patch can be high impact; a large deletion can be correct when its responsibilities are accounted for.
+Implement an authorized behavioral delta in a living system: correctness is new behavior plus preservation of unaffected contracts. A patch is not complete until it reaches production callers, handles relevant failures and has meaningful evidence. Do not turn analysis into edits.
 
-## Before Editing
+## Before editing: authority and risk
 
-Confirm approved rules, non-goals, `doneWhen`, blocking dependencies and required C decisions. Read the relevant spec for non-trivial work (`a-engineering-spec`). A registered Task must be active; from `prepare` use `begin_implementation` with declared risk before edits, or confirm it is already in `implement` with its frozen policy. Do not call that event again in `implement` (e.g. repair/resume). Explicitly labeled spikes are experimental, not production completion.
+Confirm scope/non-goals, rules, `doneWhen`, relevant spec and blocking dependencies/C decisions. Inspect existing diff/status; preserve unrelated user changes. For registered work, from prepare call `begin_implementation` with risk, or confirm already in implement (repair/resume); do not repeat the event in implement. Spikes are experimental.
 
-## Risk routing
+Risk is a verification floor, not a mode ceiling: `quick` local reversible edits need targeted check; `standard` changed behavior and adjacent regression (real wiring when relevant); `strict` consequential public contracts, data/migration, safety/security/permissions, concurrency/critical failure or difficult rollback require bound evidence and Strict review. Under fast/balanced stop before strict-risk implementation, request explicit `/strict`, pause/cancel old work as appropriate and start a new strict Task. Reassess actual consequences, uncertainty and recovery as scope expands; file count alone is not risk. Never mutate frozen Policy. Register strict implementation before edits, even for small changes. Strict Tasks always require review; fast/balanced Tasks never invoke it. Skip unnecessary documents, not evidence.
 
-Risk sets the verification floor independently of mode:
+## Controlled change
 
-- `quick`: reversible local low-impact edit; targeted check/read-back; Task only when policy warrants it.
-- `standard`: changed behavior plus adjacent regression, exact commands/results and material decisions in the Task when registered.
-- `strict`: consequential public contract, destructive data or migration, safety/security/permissions, concurrency or critical failure paths, or difficult rollback; bind acceptance evidence and use independent strict review. Classify by consequences, not line count.
+- **Reconstruct:** find actual callers, defaults/configuration, state/resource owners, effects and tests. Separate approved behavior, observed behavior and existing failures. A green baseline is not product authority.
+- **Bound:** map affected contracts and capabilities as `add`, `modify`, `preserve`, `replace`, `remove` or `unknown` with owner and evidence. Include public consumers, defaults, errors, cleanup, persistence and operational assumptions. Every removed responsibility needs a replacement or authorized retirement; unknown external consumers remain unknown. A small change needs only inline reasoning, not another durable ledger.
+- **Choose a complete slice:** trace rule → behavior → interface/wiring → implementation → test. Prefer existing extension points and smallest coherent solution; no disconnected stubs, unused interfaces, placeholder success or broad cleanup. For fragile retained behavior use characterization/contract checks before changing it when feasible; do not preserve known defects as requirements. Consider compatible expansion → migration → removal where justified; identify rollback or roll-forward for irreversible effects.
+- **Implement and check:** follow local ownership, dependency direction and error contracts. Add focused behavior tests; run narrow checks and inspect the diff after meaningful slices. Verify real registration/configuration/entrypoint, failure, retries, timeout/cancellation and cleanup where relevant. Avoid silent fallbacks, swallowed exceptions, hardcoded environment assumptions and logging secrets. Do not deploy, push, migrate real data or use destructive Git operations without authority.
+- **Reconcile:** forward trace changed rules to actual execution and evidence; backward start from old contracts and trace removed duties, callers, defaults and failure paths. Absence of references is not proof of absence of a contract. Inspect test/config changes and unrelated diff; unexplained losses are unresolved. See `references/change-method.md` for an optional preservation/slicing example.
 
-Strict risk under fast/balanced: stop before further implementation, request explicit `/strict`, pause/cancel the old Task as appropriate and start a new strict Task; never change frozen policy. Reassess risk when affected behavior, dependencies or uncertainty expands. Fast/balanced may run deeper tests, but cannot invoke Reviewer. Strict policy always requires review even for a low-risk change.
+## Discoveries and handoff
 
-## Analysis method: reconstruct → bound → implement → reconcile
+If code contradicts approved semantics, or a C decision (product, public interface, safety, data, cost, irreversible choice) emerges, stop affected work and clarify or revisit design. A local reversible choice is independent; B material recoverable deviations use `record_decision` in prepare/implement, with spec/evidence updated before proceeding. Materially changed goal/acceptance requires a new approved Task, not edits to registered criteria. Reassess risk; never weaken tests or broaden scope silently.
 
-1. **Reconstruct before touching.** Locate actual production callers, configuration/defaults, state and resource owners, tests and dependent entrypoints for the target behavior. Inspect the current diff/status without overwriting unrelated work. Identify approved vs observed behavior, including error paths and implicit contracts. A green baseline is useful but not proof of intended behavior; capture existing failures separately.
-2. **Make a change/preservation ledger.** For affected abilities and contracts, classify `add`, `modify`, `preserve`, `replace`, `remove`, or `unknown`; map current code/callers to planned owner and regression evidence. Include public imports, config defaults, failure/cleanup, persistence, side effects, operational constraints and external consumers where relevant. Every removed responsibility needs a replacement or justified authorized retirement. Unknown external users remain unknown. A local edit needs only a short mental/inline ledger; do not create another durable artifact.
-3. **Choose the smallest complete delta.** Trace requirement → behavior → interface/wiring → implementation → test. Inspect existing extension points before adding abstractions. A complete slice covers implementation, actual registration/routing/configuration, error behavior, and necessary tests/docs. Do not land unused interfaces, placeholder success, or unconnected code as finished. Avoid broad cleanup; if a shared change is essential, map its consumers and explain the coupling. Escalate unapproved semantic, public-contract or irreversible changes through the existing C authority.
-4. **Protect baseline and stage the change.** Add characterization/contract tests for fragile retained behavior when feasible before refactoring, or record an equivalent baseline check. Do not enshrine a known bug as an approved rule. Prefer independent reversible slices; when changing a shared API/data contract, consider compatible expansion, consumer migration, then removal only after evidence and approval. Plan rollback or roll-forward for irreversible effects. Do not use destructive Git commands or touch unrelated dirty files.
-5. **Implement and check each slice.** Follow local conventions, dependency direction, ownership and error contracts. Add focused behavior tests alongside code. Run narrow checks after meaningful slices, inspect the actual diff, and trace at least one real entrypoint. Preserve behavior on failures, timeout/cancellation, cleanup and retries where relevant. Avoid silent fallback, hardcoded environment assumptions, swallowed exceptions or tests that only assert a helper's existence. Log meaningful failures without leaking sensitive data.
-6. **Handle discoveries explicitly.** If code disagrees with approved requirements or introduces a new C decision, stop the affected path and use `a-business-clarify` or `a-architecture-decision`. For a material recoverable spec deviation, record the B decision through Runtime, update existing spec and acceptance evidence before proceeding. Reassess risk and impact; do not silently broaden the task, redefine requirements, weaken tests or change mode. Preserve unrelated user edits.
-7. **Reconcile forward and backward.** Forward: show each new/changed rule reaches production via real call paths, including failures and required integration. Backward: revisit the preservation ledger from the original behavior rather than the new implementation; trace removed responsibilities, affected callers, old defaults and regressions. Classify unexplained losses as unresolved, not as incidental cleanup. Inspect actual changes against non-goals, including changes to tests/configuration. If material unknowns remain, do not report complete.
-8. **Handoff to verification.** Select checks via `a-verification`, bind covered artifacts before final checks using Runtime, and report exact results, changed files, preserved/retired capabilities and gaps. Use `b-branch-engineering-review` for a separate branch audit when requested; this Skill is implementation-time protection, not independent merge approval.
+Use `a-verification` to select and execute final checks. For registered work bind artifacts with `begin_verification` before final checks, submit actual `verification_passed` or `verification_failed`; invalidate stale evidence, reverify after changes. Use `block` and recovery note when needed. Main Agent handles Strict authorization, Reviewer and close through `docs/03-STATE-MACHINE.md`; this Skill is not independent merge approval. Use `b-branch-engineering-review` only for separately requested branch audits.
 
-## Decision rules and anti-patterns
-
-- A reversible local implementation decision may be made directly; B material recoverable decisions are recorded; C product semantics, public interface, safety, data, cost or irreversible choices require user approval. Follow the Agent contract.
-- Prefer a coherent end-to-end slice over separate disconnected stubs; prefer a narrow adapter over widespread vendor-specific branching if it demonstrably isolates change.
-- Deletion is not inherently bad; absence of references is not proof of absence of a contract. Avoid accidental cleanup, feature-driven framework rewrites, default changes disguised as refactors and false compatibility claims.
-- Do not silently undo the user's existing work, auto-migrate real data, deploy, push or perform external side effects beyond authorization. Use isolated test environments.
-
-For a material refactor or contract change consult `references/change-method.md` for a worked preservation ledger and slicing example.
-
-## Status and outputs
-
-During implement, use Runtime `record_decision` for registered Task decisions. If blocked, `block` and update the current Session recovery note. Run exploratory checks during implement; before final checks call `begin_verification` with covered artifacts, then submit `verification_passed` or `verification_failed` as specified in `docs/03-STATE-MACHINE.md`. If covered files/requirements/tests change, invalidate and re-run. Do not send a failed/missing required check as passed. Strict review is Runtime-owned; follow the Agent contract for authorization, repairs, and close. No direct Task JSON edits or invented lifecycle events.
-
-Completion requires all approved acceptance criteria, production wiring, preserved/approved-retired behavior, relevant regression and fresh evidence, and strict review when required. Report what changed, why, verification, and material limitations. Update `.vibe/progress.md` only for durable project facts.
+Completion requires approved acceptance, production wiring, retained/authorized-retired behavior, fresh evidence and required review. Report changed behavior, meaningful decisions, evidence and limitations; update progress only for durable facts. When implementation changes a documented mechanism, reconcile the affected current technical knowledge and navigation references; preserve prior decisions/history and approved business rules. Do not claim a changed behavior is verified without current evidence.
 
 ## V2 operating rules
 
-- For registered Tasks, use Runtime lifecycle events in `docs/03-STATE-MACHINE.md`; never edit Task JSON directly.
-
-- Follow the current project `AGENTS.md` and Session policy.
-- Use a persistent `.vibe/tasks/<task-id>.json` only when V2 Task policy warrants it.
-- Write `.vibe/sessions/<session-id>/current-session.md` only for resumable unfinished work or a blocker.
-- Update `.vibe/progress.md` only for durable project facts.
-- Use only the V2 Task JSON and V2 Project Memory locations described above for durable state.
-- Report confirmed facts, assumptions, verification performed, and material limitations.
+Follow project `AGENTS.md` and effective Policy (frozen policy for existing Task work). Use Runtime lifecycle events, never edit registered Task JSON. Persist only warranted Task/Project Memory facts under the injected root and exact recovery path (`docs/05-MEMORY-CONTRACT.md`). Report evidence and limits; Main Agent owns strict review.

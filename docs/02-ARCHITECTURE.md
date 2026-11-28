@@ -12,11 +12,11 @@ One of `fast`, `balanced`, or `strict`. Policy determines how much process is re
 
 ### Task
 
-An optional durable work unit created only when persistence/recovery is useful, except strict where it is mandatory. A Task snapshots its policy at start and keeps it until completion/cancellation.
+An optional durable work unit created only when persistence/recovery is useful, except strict engineering implementation and engineering work needing durable tracking where it is mandatory (not ordinary consultation). A Task snapshots its policy at start and keeps it until completion/cancellation.
 
 ### Project Memory
 
-A small set of human-readable project facts: project `AGENTS.md`, optional requirements/decision notes, `.vibe/sessions/<session-id>/current-session.md`, `.vibe/progress.md`, and task files when needed. It is not a transcript.
+A small set of human-readable project facts: project `AGENTS.md`, requirements, docs, indexed lessons, `.vibe/sessions/<session-id>/current-session.md`, `.vibe/progress.md`, and task files when needed. It is not a transcript. Agent-owned selective retrieval and knowledge maintenance follow `05-MEMORY-CONTRACT.md`; Runtime injects identifiers and paths, not the memory contents.
 
 ## 2. Runtime boundaries
 
@@ -37,7 +37,7 @@ Project files
        └─ tasks/<task-id>.json (only when a Task exists)
 ```
 
-The plugin owns Session mode commands/injection, a minimal per-Session active-Task pointer, and the strict-review permission gate. It does not run an independent project state service, watch every tool call, write project logs, or maintain an operation ledger.
+The plugin owns Session mode commands/injection, a minimal per-Session active-Task pointer, and the strict-review permission gate, including a bounded read-only evidence locator tied to that gate. It does not run an independent project state service, watch every tool call, write project logs, or maintain an operation ledger.
 
 ## 3. What is not a first-class concept
 

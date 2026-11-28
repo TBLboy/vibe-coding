@@ -5,15 +5,16 @@ import { parseManifest, serializeManifest, hashContent, type Manifest } from '..
 import { validateChanges } from '../../../../../shared/team-contracts/change-feed.ts';
 import { validateSyncPath } from '../../../../../shared/team-contracts/layout.ts';
 import { loadCredentials, type Credentials } from './binding.ts';
-import { stateDir } from './device-state.ts';
+import { stateDir, workspaceStateDir, migrateLegacyState, withStateLock } from './device-state.ts';
 import { SafeFiles } from './files.ts';
 import { TeamClient, TeamError, object } from './client.ts';
+import { decodeText, validText } from "../../../../../shared/team-contracts/limits.ts";
 import { scanSyncFiles, MAX_SYNC_BYTES } from './scan.ts';
 import { planPull, planPush } from './sync-plan.ts';
-import { clearConflict, getConflict, listConflicts, recordConflict } from './conflicts.ts';
+import { clearConflict, getConflict, listConflicts, recordConflict, preserveRecovery } from './conflicts.ts';
 
 const hash = (b: Buffer | null): string | null => (b === null ? null : hashContent(b));
-const active = new Set<string>();
+
 
 export interface SyncResult { ok: boolean; cursor: number; warnings: string[]; lastError: string | null; lastSyncAt: number | null; pending: number; conflicts: number; halted: string | null }
 
@@ -50,6 +51,9 @@ export class TeamMirror {
     if (h === null) delete this.manifest.entries[path];
     else Object.defineProperty(this.manifest.entries, path, { value: { version, hash: h }, enumerable: true, configurable: true, writable: true });
   }
+  private selectState(dir:string):void {
+    if(this.dir!==dir){this.dir=dir;this.halted=null;this.nextAttempt=0;this.failures=0;this.lastError=null;this.lastSyncAt=null;this.conflictCount=0;this.warnings.clear();this.pending=0;this.manifest={schemaVersion:1,cursor:0,entries:{}};}
+  }
   private async loadManifest(): Promise<Manifest> {
     try { return parseManifest(await readFile(join(this.dir, 'manifest.json'), 'utf8')); }
     catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { schemaVersion: 1, cursor: 0, entries: {} }; throw new TeamError('manifest_corrupt'); }
@@ -57,7 +61,7 @@ export class TeamMirror {
   private async save(): Promise<void> {
     await mkdir(this.dir, { recursive: true, mode: 0o700 });
     const tmp = join(this.dir, '.tmp-' + randomUUID());
-    try { await writeFile(tmp, serializeManifest(this.manifest), { flag: 'wx', mode: 0o600 }); await rename(tmp, join(this.dir, 'manifest.json')); }
+    try { await writeFile(tmp, serializeManifest(this.manifest), { flag: 'wx', mode: 0o600, flush:true }); await rename(tmp, join(this.dir, 'manifest.json')); }
     finally { await rm(tmp, { force: true }); }
   }
   private prefix(): string { return `/workspaces/${this.creds!.workspaceId}`; }
@@ -69,7 +73,7 @@ export class TeamMirror {
       const d = object(await this.request(this.docUrl(path)));
       if (d.path !== path || !Number.isSafeInteger(d.version) || d.version < 1) throw new TeamError('invalid_response');
       if (d.content === null) return { version: d.version, hash: null, content: null };
-      if (typeof d.content !== 'string' || hashContent(d.content) !== d.hash) throw new TeamError('invalid_content_hash');
+      if (typeof d.content !== 'string' || !validText(d.content) || Buffer.byteLength(d.content)>MAX_SYNC_BYTES || hashContent(d.content) !== d.hash) throw new TeamError('invalid_content_hash');
       return { version: d.version, hash: d.hash, content: d.content };
     } catch (error) { if (error instanceof TeamError && error.status === 404) return null; throw error; }
   }
@@ -78,8 +82,12 @@ export class TeamMirror {
   private async applyRemote(path: string, content: string | null, version: number, h: string | null): Promise<void> {
     this.check();
     const snap = await this.files.read(path), e = this.entry(path), plan = planPull(e, hash(snap), h);
+    if (snap !== null) { if (snap.length > MAX_SYNC_BYTES) {this.warn(`blocked (over 1 MiB): ${path}`);throw new TeamError('local_file_too_large');} try{decodeText(snap);}catch{this.warn(`blocked (not UTF-8): ${path}`);throw new TeamError('local_invalid_utf8');} }
+    if (content !== null && (!validText(content) || Buffer.byteLength(content)>MAX_SYNC_BYTES)) throw new TeamError('invalid_content');
     if (plan.action === 'conflict') {
-      await recordConflict(this.dir, { path, kind: plan.kind, local: snap === null ? null : snap.toString('utf8'), remote: content, baseVersion: e?.version ?? 0, remoteVersion: version });
+      const local=snap===null?null:decodeText(snap), previous=await getConflict(this.dir,path);
+      await recordConflict(this.dir, { path, kind: plan.kind, local, remote: content, baseVersion: e?.version ?? 0, remoteVersion: version });
+      if(previous && previous.local!==local)this.warn(`additional recovery saved in device-private recoveries: ${path}`);
       this.warn(`conflict: ${path}`);
     }
     if (plan.action !== 'adopt') {
@@ -94,10 +102,10 @@ export class TeamMirror {
       this.check();
       const v = await this.request(`${this.prefix()}/changes?since=${this.manifest.cursor}&limit=200`);
       validateChanges(this.manifest.cursor, v.changes);
-      if (typeof v.hasMore !== 'boolean' || (v.hasMore && v.changes.length === 0)) throw new TeamError('invalid_batch');
+      if (v.nextSeq !== (v.changes.at(-1)?.seq ?? this.manifest.cursor) || typeof v.hasMore !== 'boolean' || (v.hasMore && v.changes.length === 0)) throw new TeamError('invalid_batch');
       for (const c of v.changes as { seq: number; path: string; op: string; version: number; hash?: string; content?: string }[]) {
         const known = this.entry(c.path);
-        if (!validateSyncPath(c.path).ok) this.warn(`skipped (invalid path): ${c.path}`);
+        if (!validateSyncPath(c.path).ok) throw new TeamError('unsafe_remote_path');
         else if (!known || known.version < c.version) {
           if (c.op === 'delete') await this.applyRemote(c.path, null, c.version, null);
           else {
@@ -117,12 +125,13 @@ export class TeamMirror {
     scan.warnings.forEach((w) => this.warn(w));
     for (const path of [...new Set([...scan.files, ...Object.keys(this.manifest.entries)])].sort()) {
       this.check();
+      if (!validateSyncPath(path).ok) throw new TeamError('unsafe_manifest_path');
       const snap = await this.files.read(path), plan = planPush(this.entry(path), hash(snap));
       if (plan.action === 'noop') continue;
       let content: string | null = null;
       if (snap !== null) {
         if (snap.byteLength > MAX_SYNC_BYTES) continue;
-        try { content = new TextDecoder('utf-8', { fatal: true }).decode(snap); } catch { continue; }
+        try { content = decodeText(snap); } catch { continue; }
       }
       this.pending++;
       try {
@@ -142,10 +151,8 @@ export class TeamMirror {
   /** Apply the user's decision for one conflict. If the cloud moved on since the conflict was recorded, only the record is refreshed and nothing is overwritten. */
   async resolveConflict(path: string, resolution: string, content: string | undefined, signal?: AbortSignal): Promise<Record<string, unknown>> {
     const real = await realpath(this.root);
-    if (active.has(real)) throw new TeamError('sync_busy');
-    active.add(real);
-    try {
-      this.creds = await loadCredentials(this.root); this.dir = stateDir(real); this.manifest = await this.loadManifest();
+    return withStateLock(stateDir(real), async () => {
+      this.creds = await loadCredentials(this.root); await migrateLegacyState(stateDir(real),this.creds); this.selectState(workspaceStateDir(stateDir(real),this.creds)); this.manifest = await this.loadManifest();
       this.signal = signal; this.deadline = Date.now() + (this.options.budgetMs ?? 5000);
       this.client = new TeamClient(this.creds.serverUrl, this.creds.key);
       const conflict = await getConflict(this.dir, path);
@@ -156,27 +163,33 @@ export class TeamMirror {
         const updated = await recordConflict(this.dir, { path, kind: conflict.kind, local: conflict.local, remote: doc?.content ?? null, baseVersion: conflict.baseVersion, remoteVersion: cloudVersion });
         return { status: 'cloud_changed', path, kind: updated.kind, remote: updated.remote, remoteVersion: cloudVersion };
       }
+      if (!['keep_remote','accept_delete','keep_local','keep_modified','merged'].includes(resolution)) throw new TeamError('invalid_resolution');
+      const localBefore=await this.files.read(path);
+      if(localBefore!==null && localBefore.length>MAX_SYNC_BYTES)throw new TeamError('local_file_too_large');
+      const localText=localBefore===null?null:decodeText(localBefore);
+      if(localText!==conflict.remote && localText!==conflict.local && hash(localBefore)!==(this.entry(path)?.hash??null)){await preserveRecovery(this.dir,path,localText,{baseVersion:conflict.baseVersion,remoteVersion:conflict.remoteVersion});this.warn(`additional recovery saved in device-private recoveries: ${path}`);}
       if (resolution === 'keep_remote' || resolution === 'accept_delete') {
         if (!doc) throw new TeamError('cloud_document_missing');
         if (resolution === 'accept_delete' && doc.content !== null) throw new TeamError('cloud_not_deleted');
-        const snap = await this.files.read(path);
+        const snap = localBefore;
         if (doc.content === null) { if (snap !== null) await this.files.remove(path, hash(snap)!); }
         else if (hash(snap) !== doc.hash) await this.files.write(path, doc.content, hash(snap));
         this.setEntry(path, doc.version, doc.hash);
       } else {
         const next = resolution === 'merged' ? content : conflict.local;
         if (resolution === 'merged' && typeof next !== 'string') throw new TeamError('content_required');
-        const snap = await this.files.read(path);
+        const snap = localBefore;
         if (next === null || next === undefined) {
-          if (snap !== null) await this.files.remove(path, hash(snap)!);
           const r = await this.request(this.docUrl(path), 'DELETE', undefined, { 'if-match': String(cloudVersion) });
-          if (!Number.isSafeInteger(r.version) || r.version < 1) throw new TeamError('invalid_response');
+          if (!Number.isSafeInteger(r.version) || r.version < 1 || r.hash!==null) throw new TeamError('invalid_response');
+          if (snap !== null) await this.files.remove(path, hash(snap)!);
           this.setEntry(path, r.version, null);
         } else {
+          if (!validText(next)) throw new TeamError('invalid_content');
           if (Buffer.byteLength(next) > MAX_SYNC_BYTES) throw new TeamError('document_too_large');
-          if (hash(snap) !== hashContent(next)) await this.files.write(path, next, hash(snap));
           const r = await this.request(this.docUrl(path), 'PUT', { content: next }, { 'if-match': String(cloudVersion) });
           if (!Number.isSafeInteger(r.version) || r.version < 1 || r.hash !== hashContent(next)) throw new TeamError('invalid_response');
+          if (hash(snap) !== hashContent(next)) await this.files.write(path, next, hash(snap));
           this.setEntry(path, r.version, hashContent(next));
         }
       }
@@ -184,13 +197,16 @@ export class TeamMirror {
       await clearConflict(this.dir, path);
       this.conflictCount = (await listConflicts(this.dir)).length;
       return { status: 'resolved', path, resolution, remainingConflicts: this.conflictCount };
-    } finally { active.delete(real); }
+    });
   }
 
   /** Read-only: how many local changes are waiting and how many conflicts are unresolved. */
   async inspect(): Promise<SyncResult> {
+    const dir=stateDir(await realpath(this.root));
+    return withStateLock(dir, async()=>{
     this.creds = await loadCredentials(this.root);
-    this.dir = stateDir(await realpath(this.root));
+    await migrateLegacyState(dir,this.creds);
+    this.selectState(workspaceStateDir(dir,this.creds));
     this.manifest = await this.loadManifest();
     const scan = await scanSyncFiles(this.root);
     let pending = 0;
@@ -199,18 +215,20 @@ export class TeamMirror {
     }
     this.conflictCount = (await listConflicts(this.dir)).length;
     return { ...this.status(), pending };
+    });
   }
 
   async sync(force = false, signal?: AbortSignal, budgetMs?: number): Promise<SyncResult> {
     const now = (this.options.now ?? Date.now)();
-    if (this.halted && !force) return this.status(false);
-    if (!force && now < this.nextAttempt) return this.status(false);
+
     const real = await realpath(this.root);
-    if (active.has(real)) return this.status(false);
-    active.add(real);
-    try {
+    try { return await withStateLock(stateDir(real), async()=>{
       this.creds = await loadCredentials(this.root);
-      this.dir = stateDir(real);
+      const nextDir=workspaceStateDir(stateDir(real),this.creds);
+      this.selectState(nextDir);
+      if (this.halted && !force) return this.status(false);
+      if (!force && now < this.nextAttempt) return this.status(false);
+      await migrateLegacyState(stateDir(real),this.creds);
       this.manifest = await this.loadManifest();
       this.workspace = { type: this.creds.workspaceType };
       this.signal = signal; this.deadline = Date.now() + (budgetMs ?? this.options.budgetMs ?? 10000); this.pending = 0;
@@ -220,12 +238,12 @@ export class TeamMirror {
       this.conflictCount = (await listConflicts(this.dir)).length;
       this.lastSyncAt = now; this.lastError = null; this.halted = null; this.failures = 0; this.nextAttempt = 0;
       return this.status(true);
-    } catch (error) {
+    }); } catch (error) {
       const te = error instanceof TeamError ? error : null;
       this.lastError = te ? (te.status === 410 ? 'workspace_archived' : te.code) : error instanceof Error && /busy|symlink|collision|local_changed/iu.test(error.message) ? error.message : 'local_sync_failed';
       if (te && (te.status === 401 || te.status === 403 || te.status === 410)) this.halted = this.lastError;
       if (te && (['network_unavailable', 'budget_exhausted'].includes(te.code) || te.status >= 500)) this.nextAttempt = now + Math.min(120000, 15000 * 2 ** Math.min(this.failures++, 3));
       return this.status(false);
-    } finally { active.delete(real); }
+    }
   }
 }

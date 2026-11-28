@@ -1,6 +1,6 @@
 import { realpath } from 'node:fs/promises';
 import { TeamClient, TeamError, object } from './client.ts';
-import { loadDeviceBinding, loadKey, saveDeviceBinding, saveKey, stateDir, validateDeviceBinding, type DeviceBinding } from './device-state.ts';
+import { loadDeviceBinding, loadKey, saveDeviceBinding, saveKey, stateDir, validateDeviceBinding, migrateLegacyState, withStateLock, workspaceStateDir, type DeviceBinding } from './device-state.ts';
 
 export interface Credentials extends DeviceBinding { key: string }
 
@@ -23,14 +23,17 @@ export type ConnectResult =
 /** Bind a project root to a workspace by Key. Never rebinds silently; the Key is stored only in the device-private directory. */
 export async function connectWorkspace(root: string, input: { serverUrl: string; key: string }, signal?: AbortSignal): Promise<ConnectResult> {
   const dir = await dirOf(root);
+  return withStateLock(dir, async () => {
   const url = validateDeviceBinding({ workspaceId: 'pending', workspaceType: 'pending', serverUrl: input.serverUrl }).serverUrl;
   if (!/^[A-Za-z0-9_-]{32}$/u.test(input.key)) throw new TeamError('invalid_credentials');
   const result = await new TeamClient(url, input.key).request('/connect', 'POST', {}, {}, Date.now() + 5000, signal);
   const ws = object(result.workspace);
   const next = validateDeviceBinding({ workspaceId: ws.id, workspaceType: ws.type, serverUrl: url });
   const existing = await loadDeviceBinding(dir);
-  if (existing && existing.workspaceId !== next.workspaceId) return { status: 'bound_to_other', workspaceId: existing.workspaceId, workspaceType: existing.workspaceType };
+  if (existing && workspaceStateDir(dir,existing) !== workspaceStateDir(dir,next)) return { status: 'bound_to_other', workspaceId: existing.workspaceId, workspaceType: existing.workspaceType };
+  await migrateLegacyState(dir, existing);
   await saveKey(dir, input.key);
   await saveDeviceBinding(dir, next);
   return { status: existing ? 'already_connected' : 'connected', workspaceId: next.workspaceId, workspaceName: String(ws.name ?? ''), workspaceType: next.workspaceType };
+  });
 }

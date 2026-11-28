@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { mkdtemp, readdir, rm } from 'node:fs/promises';
+import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { clearConflict, getConflict, listConflicts, recordConflict } from '../runtime/opencode/plugins/vibe-v2/team/conflicts.ts';
@@ -37,6 +37,10 @@ test('a repeated conflict keeps the earliest local content and refreshes only th
   assert.equal(again.remoteVersion, 3);
   assert.equal(again.createdAt, '2026-11-27T00:00:00.000Z');
   assert.equal((await listConflicts(dir)).length, 1);
+  const recoveryDir=join(dir,'recoveries');
+  const saved=await readdir(recoveryDir);assert.equal(saved.length,1);
+  assert.equal(JSON.parse(await readFile(join(recoveryDir,saved[0]),'utf8')).local,'L2');
+  await recordConflict(dir,{...base,local:'L2'});assert.equal((await readdir(recoveryDir)).length,1);
 });
 
 test('deletion conflicts keep null sides; clear removes only that path and leaves no temp files', async (t) => {

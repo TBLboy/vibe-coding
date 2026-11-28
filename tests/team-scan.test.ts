@@ -56,3 +56,9 @@ test('a project with no .vibe and no AGENTS.md scans to an empty result', async 
   const root = await fixture(t);
   assert.deepEqual(await scanSyncFiles(root), { files: [], warnings: [] });
 });
+
+
+test('refinement: .vibe symlink never traversed', {skip:process.platform==='win32'},async t=>{
+ const root=await fixture(t),outside=await fixture(t);await put(outside,'secret.md','private');
+ const {symlink}=await import('node:fs/promises');await symlink(outside,join(root,'.vibe'),'dir');const scan=await scanSyncFiles(root);assert.deepEqual(scan.files,[]);assert.equal(scan.warnings.length,1);
+});

@@ -19,6 +19,8 @@ async function harness(t: { after(fn: () => Promise<void>): void }) {
   const tools = new Map<string, ToolDefinition>(); const commands = new Map<string, CommandDefinition>();
   const sessions = new Map<string, { directory: string; parentID?: string; agent?: string; outcome?: string }>([["main", { directory: root }], ["other", { directory: root }], ["review", { directory: root, parentID: "main", agent: "vibe-reviewer" }], ["wrong", { directory: root, parentID: "other", agent: "vibe-reviewer" }]]);
   const transcripts = new Map<string, unknown[]>();
+  const permissionChecks: {action:string;resources:string[]}[] = [];
+  const denied = new Set<string>();
   let after!: (event: ToolAfterEvent) => Promise<void>;
   let callNumber=0;
   let permission!: (event: PermissionEvent) => Promise<void>;
@@ -29,7 +31,7 @@ async function harness(t: { after(fn: () => Promise<void>): void }) {
     command: { transform: async fn => fn({ add: d => { commands.set(d.name,d); } }) },
     tool: { transform: async fn => fn({ add: d => { tools.set(d.name,d); } }), hook: async (_,fn) => { after=fn; } },
     session: { get: async ({sessionID}) => sessions.get(sessionID), context: async ({sessionID}) => structuredClone(transcripts.get(sessionID) ?? []), prompt: async p => { queued = p; }, hook: async (_, fn) => { contextHook = fn; } },
-    permission: { hook: async (_, fn) => { permission = fn; } },
+    permission: { assert: async input => { permissionChecks.push({action:input.action,resources:input.resources}); if (denied.has(input.action) || input.resources.some(path => denied.has(path))) throw new Error("Host permission denied"); }, hook: async (_, fn) => { permission = fn; } },
   };
   await setup(ctx);
   const taskPath = resolve(root,".vibe/tasks/t1.json");
@@ -52,7 +54,7 @@ async function harness(t: { after(fn: () => Promise<void>): void }) {
       {type:"idle", id:"msg_idle", outcome:"succeeded"},
     ]);
   };
-  return {base,root,ctx,records,tools,commands,sessions,transcripts,call,ctl,step,read,write,fresh,permit,ready,authorize,complete,launch,finished,queued:()=>queued, context:async(sessionID:string)=>{const e={sessionID,system:[] as {type:"text";text:string}[]};await contextHook(e);return e.system[0]?.text;}};
+  return {base,root,ctx,records,tools,commands,sessions,transcripts,permissionChecks,denied,permission,call,ctl,step,read,write,fresh,permit,ready,authorize,complete,launch,finished,queued:()=>queued, context:async(sessionID:string)=>{const e={sessionID,system:[] as {type:"text";text:string}[]};await contextHook(e);return e.system[0]?.text;}};
 }
 
 test("production setup: explicit mode command queues and consumes a session token", async t => {
@@ -266,4 +268,119 @@ test("a background reviewer requiring a user decision blocks immediately", async
   await h.context("main");
   const task = await h.read(); assert.equal(task.status,"blocked");
   assert.equal(task.review?.repairRounds,0); assert.match(await h.ctl("close"),/Rejected/);
+});
+
+
+test("context hook retains strict frozen policy when Session switches to fast", async t => {
+  const h = await harness(t); await h.ready();
+  await h.commands.get("fast")!.execute({sessionID:"main",prompt:{text:""}});
+  const token = (h.queued() as {text:string}).text.match(/token=([\w-]+)/)![1];
+  assert.equal(await h.call("vibe_set_session_mode",{mode:"fast",token}),"Session mode changed to fast. Registered Task t1 (active) retains frozen strict policy if continued. New work uses fast.");
+  const context = await h.context("main");
+  assert.match(context, /Authoritative Session mode: fast/);
+  assert.match(context, /New-work policy \(fast\):/);
+  assert.match(context, /Only if continuing that existing Task, apply frozen policy \(strict\):/);
+  assert.match(context, /reviewer returns go/);
+  assert.equal((await h.read()).policy,"strict");
+  await h.authorize();
+  assert.equal((await h.permit()).effect,"allow");
+});
+
+test("mode switch result distinguishes active and inactive frozen pointers without changing either", async t => {
+  const h = await harness(t);
+  const switchMode = async (mode: "fast" | "balanced" | "strict", sessionID = "main") => {
+    await h.commands.get(mode)!.execute({sessionID,prompt:{text:""}});
+    const token = (h.queued() as {text:string}).text.match(/token=([\w-]+)/)![1];
+    return h.call("vibe_set_session_mode", {mode,token}, sessionID);
+  };
+  assert.equal(await switchMode("fast"), "Session mode changed to fast.");
+  await h.fresh("balanced");
+  assert.match(await h.ctl("start"), /started/);
+  const before = await readFile(resolve(h.root,".vibe/tasks/t1.json"));
+  assert.equal(await switchMode("strict"), "Session mode changed to strict. Registered Task t1 (active) retains frozen balanced policy if continued. New work uses strict.");
+  assert.equal(await switchMode("fast", "other"), "Session mode changed to fast.");
+  assert.deepEqual(await readFile(resolve(h.root,".vibe/tasks/t1.json")), before);
+  assert.equal((await h.permit()).effect,"deny");
+  assert.equal(await switchMode("balanced"), "Session mode changed to balanced.");
+  assert.match(await h.step("block", {reason:"Need user decision"}), /blocked/);
+  assert.match(await h.ctl("pause"), /paused/);
+  const paused = await readFile(resolve(h.root,".vibe/tasks/t1.json"));
+  assert.equal(await switchMode("strict"), "Session mode changed to strict. Registered Task t1 (paused/closed) retains frozen balanced policy if continued. New work uses strict.");
+  assert.deepEqual(await readFile(resolve(h.root,".vibe/tasks/t1.json")), paused);
+  assert.match(await h.context("main"), /frozen policy balanced, paused\/closed/);
+});
+
+
+test("Reviewer locator reuses consumed strict permit and real child identity without changing Task or storage", async t => {
+  const h = await harness(t);
+  await writeFile(resolve(h.root,"consumer.ts"),"const a = A;\n");
+  const request = {kind:"text",query:"const a"};
+  const search = (session="review",agent="vibe-reviewer",input:Record<string,unknown>=request) => h.call("vibe_review_search",input,session,agent);
+  assert.match(await search(),/Rejected/);
+  await h.ready(); await h.authorize();
+  assert.match(await search(),/Rejected/); // A permit has not been consumed.
+  const permit = await h.permit();
+  assert.equal(permit.effect,"allow");
+  const task = await h.read(); const storage = structuredClone(h.records);
+  assert.deepEqual(JSON.parse(await search()).matches,[{path:"consumer.ts",line:1}]); // A fresh child may begin before binding.
+  assert.deepEqual(JSON.parse(await search("review","vibe-reviewer",{kind:"artifacts"})).matches,[{path:"src.txt"}]);
+  assert.deepEqual(await h.read(),task); assert.deepEqual(h.records,storage);
+  assert.match(await search("main","vibe-main"),/Rejected/);
+  assert.match(await search("main","vibe-reviewer"),/Rejected/);
+  assert.match(await search("wrong"),/Rejected/);
+  h.sessions.set("different-root",{directory:h.base,parentID:"main",agent:"vibe-reviewer"});
+  assert.match(await search("different-root"),/Rejected/);
+  await h.launch(permit.id);
+  h.sessions.set("other-child",{directory:h.root,parentID:"main",agent:"vibe-reviewer"});
+  assert.match(await search("other-child"),/Rejected/);
+  assert.deepEqual(JSON.parse(await search()).matches,[{path:"consumer.ts",line:1}]);
+  assert.ok(h.permissionChecks.some(p=>p.action==="vibe_review_search"));
+  assert.ok(h.permissionChecks.some(p=>p.action==="read" && p.resources.includes("consumer.ts")));
+  h.finished();
+  assert.match(await search(),/Rejected/);
+  // Normal tool steps preceding the terminal verdict remain accepted.
+  h.transcripts.get("review")!.splice(1,0,{type:"assistant",agent:"vibe-reviewer",finish:"tool-calls",time:{created:1,completed:2},content:[{type:"tool",name:"vibe_review_search",state:{status:"completed"}},{type:"tool",name:"read",state:{status:"completed"}}]});
+  await h.context("main"); assert.equal((await h.read()).review?.verdict,"go");
+  assert.match(await search(),/Rejected/);
+});
+
+test("Reviewer locator fails closed when host permission API is unavailable or denies result", async t => {
+  const h=await harness(t); await h.ready(); await h.authorize(); const permit=await h.permit(); await h.launch(permit.id);
+  const query={kind:"files",query:"src.txt"};
+  const search=()=>h.call("vibe_review_search",query,"review","vibe-reviewer");
+  h.denied.add("vibe_review_search"); await assert.rejects(search,/Host permission denied/); h.denied.clear();
+  h.denied.add("src.txt"); await assert.rejects(search,/Host permission denied/); h.denied.clear();
+  assert.deepEqual(JSON.parse(await search()).matches,[{path:"src.txt"}]);
+  const hostAssert=h.ctx.permission.assert; h.ctx.permission.assert=undefined;
+  assert.match(await search(),/Rejected/); h.ctx.permission.assert=hostAssert;
+  await h.ctl("reset_review"); assert.match(await search(),/Rejected/);
+});
+
+test("Reviewer locator matches location-relative read permissions in nested Git worktree", async t => {
+  const h=await harness(t);
+  execFileSync("git",["init","-q",h.root]);
+  await mkdir(resolve(h.root,"nested")); await writeFile(resolve(h.root,"nested/consumer.ts"),"evidence");
+  h.sessions.get("review")!.directory=resolve(h.root,"nested");
+  // Actual host metadata identifies its worktree root for the nested Location.
+  const get=h.ctx.session.get; h.ctx.session.get=async input=>input.sessionID==="review"?{...h.sessions.get("review"),location:{directory:resolve(h.root,"nested"),project:{directory:h.root}}}:get(input);
+  await h.ready(); await h.authorize(); const permit=await h.permit(); await h.launch(permit.id);
+  const search=()=>h.call("vibe_review_search",{kind:"files",query:"src.txt"},"review","vibe-reviewer");
+  h.denied.add("../src.txt"); await assert.rejects(search,/Host permission denied/); h.denied.clear();
+  assert.deepEqual(JSON.parse(await search()).matches,[{path:"src.txt"}]);
+  assert.ok(h.permissionChecks.some(p=>p.action==="read"&&p.resources.includes("../src.txt")));
+});
+
+
+test("Reviewer permission hook cannot promote a later allow into write, command, or protected read access", async t => {
+  const h = await harness(t);
+  for (const [action,resource] of [["shell","git status"],["edit","src.txt"],["grep","A"],["glob","*.ts"],["subagent","general"],["skill","a-verification"],["webfetch","https://example.com"],["vibe_task_control","*"],["external_directory","/tmp/*"],["read","src/.ENV.production"],["read","../.git/config"],["read","src/credentials.json"]]) {
+    const event: PermissionEvent = {sessionID:"review",agent:"vibe-reviewer",action,resources:[resource],effect:"allow"};
+    await h.permission(event); assert.equal(event.effect,"deny",`${action} ${resource}`);
+  }
+  const missingAgent: PermissionEvent = {sessionID:"review",action:"edit",resources:["src.txt"],effect:"allow"};
+  await h.permission(missingAgent); assert.equal(missingAgent.effect,"deny");
+  for (const [agent,sessionID,action,resource] of [["vibe-reviewer","review","read","src.txt"],["vibe-reviewer","review","vibe_review_search","*"],["vibe-main","main","edit","src.txt"]]) {
+    const event: PermissionEvent = {sessionID,agent,action,resources:[resource],effect:"allow"};
+    await h.permission(event); assert.equal(event.effect,"allow");
+  }
 });

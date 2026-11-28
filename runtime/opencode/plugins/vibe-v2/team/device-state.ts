@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, rm, writeFile, lstat, open } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { assertId } from '../../../../../shared/team-contracts/binding.ts';
@@ -23,7 +23,7 @@ export function validateDeviceBinding(value: unknown): DeviceBinding {
   let url: URL;
   try { url = new URL(String(c.serverUrl)); } catch { throw new Error('invalid serverUrl'); }
   if (!['http:', 'https:'].includes(url.protocol) || url.search || url.hash || url.username || url.password) throw new Error('invalid serverUrl');
-  return { workspaceId: c.workspaceId, workspaceType: c.workspaceType, serverUrl: url.origin + (url.pathname === '/' ? '' : url.pathname) };
+  return { workspaceId: c.workspaceId, workspaceType: c.workspaceType, serverUrl: url.origin + (url.pathname.replace(/\/+$/u, '')) };
 }
 
 async function writePrivate(dir: string, name: string, text: string): Promise<void> {
@@ -66,4 +66,31 @@ export async function saveNotified(dir: string, reason: string | null): Promise<
 export async function clearDeviceBinding(dir: string): Promise<void> {
   await rm(join(dir, 'binding.json'), { force: true });
   await rm(join(dir, 'credentials.json'), { force: true });
+}
+
+export function workspaceStateDir(dir: string, binding: DeviceBinding): string {
+  const b=validateDeviceBinding(binding);
+  return join(dir,'workspaces',createHash('sha256').update(JSON.stringify([b.serverUrl,b.workspaceId])).digest('hex'));
+}
+const legacyNames=['manifest.json','conflicts','status.json','recoveries'];
+async function exists(path:string):Promise<boolean> {try {await lstat(path);return true;} catch(e){if((e as NodeJS.ErrnoException).code==='ENOENT')return false;throw e;}}
+/** Call under the private project lock, before changing binding. Unowned legacy files are retained separately. */
+export async function migrateLegacyState(dir:string, binding:DeviceBinding|null):Promise<void>{
+  const present=[];for(const name of legacyNames)if(await exists(join(dir,name)))present.push(name);
+  if(!present.length)return;
+  const dest=binding?workspaceStateDir(dir,binding):join(dir,'legacy-unowned-'+randomUUID());
+  await mkdir(dest,{recursive:true,mode:0o700});
+  for(const name of present){if(await exists(join(dest,name)))throw new Error('legacy state collision; preserve both copies');}
+  for(const name of present)await rename(join(dir,name),join(dest,name));
+}
+export async function boundStateDir(realRoot:string):Promise<string>{
+  const dir=stateDir(realRoot), binding=await loadDeviceBinding(dir);
+  if(!binding)throw new Error('not_bound');
+  return workspaceStateDir(dir,binding);
+}
+/** Serialize state-changing operations across processes. A crash leaves a fail-closed lock; remove only after confirming no owner is running. */
+export async function withStateLock<T>(dir:string,work:()=>Promise<T>):Promise<T>{
+  await mkdir(dir,{recursive:true,mode:0o700});const file=join(dir,'operation.lock');
+  let handle;try{handle=await open(file,'wx',0o600);}catch(e){if((e as NodeJS.ErrnoException).code==='EEXIST')throw new Error('sync busy');throw e;}
+  try{await handle.writeFile(JSON.stringify({pid:process.pid,at:Date.now()}));return await work();}finally{await handle.close();await rm(file,{force:true});}
 }

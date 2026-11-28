@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import tempfile
+import shutil
 import unittest
 
 
@@ -15,6 +16,9 @@ SPEC = importlib.util.spec_from_file_location("v2installer", ROOT / "scripts" / 
 assert SPEC and SPEC.loader
 installer = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(installer)
+
+
+RETIRED_SKILLS = ['a-project-archive', 'b-multi-role-ux-audit', 'b-concise-communication', 'b-plan-stress-test', 'b-jetson-robot-policy-deployment', 'b-opencode-model-config']
 
 
 class InstallerTests(unittest.TestCase):
@@ -38,7 +42,11 @@ class InstallerTests(unittest.TestCase):
             self.assertIn(installer.PLUGIN_SPEC, installed["plugin"])
             self.assertEqual(installed["default_agent"], "vibe-main")
             self.assertTrue((home / "skills" / "a-verification" / "SKILL.md").is_file())
-            self.assertTrue((home / "skills" / "b-opencode-model-config" / "SKILL.md").is_file())
+            self.assertEqual((home / "skills" / "b-web-research-tooling" / "SKILL.md").read_bytes(),
+                             (ROOT / "skills" / "b-web-research-tooling" / "SKILL.md").read_bytes())
+            self.assertEqual(len(list((home / "skills").glob("*/SKILL.md"))), 22)
+            for retired in RETIRED_SKILLS:
+                self.assertFalse((home / "skills" / retired).exists(), retired)
             for skill, reference in [
                 ("a-architecture-decision", "decision-method.md"),
                 ("a-engineering-landing", "change-method.md"),
@@ -200,6 +208,47 @@ class InstallerTests(unittest.TestCase):
             self.assertNotIn("skills/old/SKILL.md", managed)
             self.assertNotIn("skills/edited/SKILL.md", managed)
             installer.verify(source, home)
+
+    def test_upgrade_removes_six_retired_skills_but_preserves_user_files(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            old = base / "previous"
+            shutil.copytree(ROOT, old, ignore=shutil.ignore_patterns("node_modules", "__pycache__", ".git"))
+            for name in RETIRED_SKILLS:
+                skill = old / "skills" / name
+                skill.mkdir()
+                (skill / "SKILL.md").write_text(f"---\nname: {name}\n---\n", encoding="utf-8")
+                (skill / "scripts").mkdir()
+                (skill / "scripts" / "old_helper.py").write_text("# previous helper\n", encoding="utf-8")
+            home = base / "opencode"
+            home.mkdir()
+            config = {"plugin": ["user-plugin"], "model": "user/example", "provider": {"user": {}}, "mcp": {"private": {"type": "remote", "url": "https://example.invalid"}}}
+            (home / "opencode.json").write_text(json.dumps(config), encoding="utf-8")
+            installer.install(old, home)
+            archive_setting = home / "skills/a-project-archive/archive_root.conf"
+            archive_setting.write_text("/user/archive\n", encoding="utf-8")
+            edited = home / "skills/b-plan-stress-test/SKILL.md"
+            edited.write_text("user-edited skill", encoding="utf-8")
+            custom = home / "skills/custom/SKILL.md"
+            custom.parent.mkdir()
+            custom.write_text("user-owned skill", encoding="utf-8")
+            installer.install(ROOT, home)
+            installer.verify(ROOT, home)
+            state = json.loads((home / installer.STATE_FILE).read_text(encoding="utf-8"))["managed_files"]
+            for name in RETIRED_SKILLS:
+                self.assertFalse(any(key.startswith(f"skills/{name}/") for key in state), name)
+                self.assertFalse((home / "skills" / name / "scripts/old_helper.py").exists(), name)
+                if name != "b-plan-stress-test":
+                    self.assertFalse((home / "skills" / name / "SKILL.md").exists(), name)
+            self.assertEqual(archive_setting.read_text(), "/user/archive\n")
+            self.assertEqual(edited.read_text(), "user-edited skill")
+            self.assertEqual(custom.read_text(), "user-owned skill")
+            installed = json.loads((home / "opencode.json").read_text())
+            for key in config:
+                self.assertEqual(installed[key], config[key] + [installer.PLUGIN_SPEC] if key == "plugin" else config[key])
+            installer.uninstall(home)
+            self.assertEqual(json.loads((home / "opencode.json").read_text()), config)
+            self.assertTrue(edited.exists() and archive_setting.exists() and custom.exists())
 
 
 if __name__ == "__main__":

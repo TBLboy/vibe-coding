@@ -9,49 +9,33 @@ metadata:
 
 # Engineering Spec
 
-## Purpose
+## Mental model
 
-Remove implementation ambiguity without rewriting the entire project design. A specification is created per meaningful task or coherent task group.
+Translate approved behavior and architecture into implementable contracts without inventing product rules or prescribing reversible code details. A spec closes consequential implementation ambiguity: another competent engineer should know where behavior lives, how it works and how to prove it, while retaining implementation freedom.
 
-## Required Sections
+## Design from real paths
 
-Write the spec for the Task — as the reply for small work, or as `.vibe/docs/specs/<task-id>.md` when it must outlive the conversation — and include:
+Start with objective, non-goals, approved rules/acceptance, current production paths, relevant architecture decisions and constraints. For each changed behavior trace trigger → entrypoint → owner → state/effects → response/failure → acceptance. Identify affected callers, files/modules and existing extension points; record unchanged contracts and necessary integration/config wiring. State the target delta rather than restating all project design.
 
-1. Task objective and non-goals.
-2. Related business rules and acceptance criteria (the Task `doneWhen`).
-3. Existing behavior and evidence.
-4. Target behavior.
-5. Files/modules/components likely affected.
-6. Interface and schema changes.
-7. State, concurrency, transaction, and lifecycle behavior.
-8. Validation, error handling, retry, timeout, and idempotency.
-9. Security/privacy implications.
-10. Logging, metrics, and diagnostics.
-11. Compatibility, migration, feature flag, rollout, and rollback.
-12. Test matrix and acceptance evidence.
-13. Open questions and authority level.
+Choose relevant design dimensions, not thirteen mandatory sections:
 
-## Rules
+| Dimension | Specify when material |
+|---|---|
+| Responsibilities and interfaces | owner/caller, signatures or data shape, validation, semantic pre/postconditions, existing consumers |
+| State and data | source of truth, schema/defaults, transitions, invariants, transaction/atomicity, concurrency/ordering |
+| Failure behavior | errors, retries/timeouts, idempotency, partial failure, cancellation and cleanup |
+| Security/privacy | authorization, trust boundaries, input handling, secrets, sensitive effects |
+| Operations | necessary logs/diagnostics, environment constraints, compatibility, migration, flags/rollout, rollback/data implications |
+| Verification | rule → affected path → observable oracle, positive/negative and retained behavior, environment and limitations |
 
-- Describe outcomes and contracts, not line-by-line code.
-- Do not invent new product behavior to make implementation convenient.
-- Reuse existing patterns when they remain valid; record deviations as Task `decisions`.
-- Use `a-deep-research` when a non-trivial technical choice is unresolved.
-- Reopen business clarification (`a-business-clarify`) when implementation exposes a genuine product ambiguity.
-- Make assumptions explicit and temporary.
-- Under strict policy, the spec's acceptance criteria and technical decisions must be captured before substantial implementation.
+Specify only meaningful decisions and constraints; do not invent flags, metrics, layers or migration when not required. A local UI change might need behavior, component/state boundary and acceptance only; an API change needs semantic error/permission contracts and consumers; a data migration needs integrity, compatible sequence, recovery and representative evidence. Do not require pseudocode or line-by-line instructions unless ambiguity warrants it.
 
-## Completion Gate
+## Decisions, output and completion
 
-The task can be implemented by another competent Agent without needing to rediscover the business intent, while retaining freedom over low-level reversible details.
+Use existing patterns where sound; record material recoverable deviations through Runtime `record_decision` or durable progress. Use `a-deep-research` for feasibility uncertainty, `a-architecture-decision` for unresolved structural tradeoffs and `a-business-clarify` for genuine semantic ambiguity. Mark assumptions, validation plan and blocking questions; C decisions require user approval before affected implementation. No silent scope changes or frozen criteria edits.
+
+Return inline spec for small work or `.vibe/docs/specs/<task-id>.md` (or meaningful work slug before a Task exists) when durable. Under strict policy capture scope, acceptance and material technical decisions before substantial implementation. A complete spec connects approved rules to real ownership/wiring and observable acceptance, describes relevant failures and compatibility, and leaves no material product or technical ambiguity hidden. Do not claim the design is implemented or verified.
 
 ## V2 operating rules
 
-- For registered Tasks, use Runtime lifecycle events in `docs/03-STATE-MACHINE.md`; never edit Task JSON directly.
-
-- Follow the current project `AGENTS.md` and Session policy.
-- Use a persistent `.vibe/tasks/<task-id>.json` only when V2 Task policy warrants it.
-- Write `.vibe/sessions/<session-id>/current-session.md` only for resumable unfinished work or a blocker.
-- Update `.vibe/progress.md` only for durable project facts.
-- Use only the V2 Task JSON and V2 Project Memory locations described above for durable state.
-- Report confirmed facts, assumptions, verification performed, and material limitations.
+Follow project `AGENTS.md` and effective Policy (frozen policy for existing Task work). Use Runtime lifecycle events, never edit registered Task JSON. Persist only warranted Task/Project Memory facts under the injected root and exact recovery path (`docs/05-MEMORY-CONTRACT.md`). Report evidence and limits; Main Agent owns strict review.

@@ -3,6 +3,7 @@ import test from 'node:test';
 import { mkdtemp, mkdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { saveDeviceBinding,stateDir } from '../runtime/opencode/plugins/vibe-v2/team/device-state.ts';
 import { teamContext } from '../runtime/opencode/plugins/vibe-v2/team/context.ts';
 
 test('failure notice is injected once per distinct reason and cleared on recovery', async (t) => {
@@ -12,6 +13,7 @@ test('failure notice is injected once per distinct reason and cleared on recover
   t.after(async () => { if (saved === undefined) delete process.env.OPENCODE_CONFIG_DIR; else process.env.OPENCODE_CONFIG_DIR = saved; await rm(base, { recursive: true, force: true }); });
   const root = join(base, 'proj');
   await mkdir(root);
+  await saveDeviceBinding(stateDir(root),{workspaceId:"ws_1",workspaceType:"engineering-dev",serverUrl:"https://example.test"});
   let lastError: string | null = null;
   const mirror: any = { workspace: { type: 'engineering-dev' }, status: () => ({ lastError, lastSyncAt: null, pending: 0 }) };
   const ctx = () => teamContext(root, mirror);

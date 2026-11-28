@@ -1,3 +1,5 @@
+> Historical engineering record; current capability scope is D-28 in `docs/11-DECISIONS.md`. Retired Skill references and old test counts below describe earlier revisions, not current installation requirements.
+
 # Verification Snapshot
 
 Date: 2026-10-29

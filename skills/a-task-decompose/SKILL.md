@@ -9,78 +9,27 @@ metadata:
 
 # Task Decompose
 
-## Purpose
+## Mental model
 
-Turn an approved goal into an ordered, dependency-aware set of work items that the main Agent can execute and verify one at a time.
+Decompose by independently valuable engineering outcomes and uncertainty, not directories, commands or required workflow stages. A good slice connects behavior to real integration and verification; it leaves the system coherent at each boundary.
 
-## Decomposition Principles
+## Plan the slices
 
-1. Prefer vertical slices that produce an observable result over horizontal piles such as "build all models" then "build all APIs".
-2. Each task must be independently understandable and verifiable.
-3. Each implementation task must reference one or more business rules, unless it is pure infrastructure or research and explicitly marked as such.
-4. Separate discovery/spike tasks from production implementation.
-5. Separate implementation from verification when verification requires a distinct environment or authority.
-6. Do not create a task for every command or file edit.
-7. Split a task when it has multiple unrelated completion conditions, multiple owners, or hidden internal phases.
-8. Preserve dependencies and critical-path blockers.
+- Start from approved goals, non-goals, acceptance criteria, existing contracts and material design decisions. Map every affected rule to an outcome or explicit no-change disposition; infrastructure/research items state their purpose instead of inventing business IDs.
+- Prefer vertical slices: implementation, real wiring and relevant tests together. Keep tightly coupled invariants in one slice rather than delivering unsafe intermediate states. Split independent outcomes, distinct risk/authority, separate environments or uncertainties that need their own proof.
+- Separate discovery/spikes from production changes: hypothesis, evidence to collect, stop condition, conditional repair only if justified. Separate final host/deployment acceptance when environment or authorization differs; do not let passing local tests imply those gates passed.
+- Order by dependencies, not document order. Identify blocking decisions and prerequisites; check for cycles and missing producers/consumers. Protect data/safety and shared contracts before work depending on them. Avoid tasks for individual edits, artificial phases or parallel writers. Use clarification, research, architecture, specification, implementation, verification, alignment and retrospective only where useful; strict review remains the existing gate, not a separate invented Task phase.
 
-## Lifecycle Coverage
+## Plan item vs registered Task
 
-Check each increment against the lifecycle and decide intentionally which stages need their own work item:
+For each planned item capture title, goal (observable outcome), scope/non-goals, rule/decision references, dependencies/blockers, `doneWhen`, verification strategy (not fabricated results), and optional suggested mode/risk. Keep dependencies in the plan, not new JSON schema fields. An item is too big if unrelated completion claims cannot be isolated, or unresolved semantics make implementation guesswork; too small if it has no independent outcome.
 
-```text
-business clarification → requirement baseline → research → architecture decision
-→ task decomposition → engineering spec → implementation → verification
-→ (strict only) independent review → alignment → retrospective
-```
+A plan is not Runtime state. Do not pre-create registered-looking Task JSON for future work. Only when starting work that warrants persistence, create a fresh schema-valid Task with `goal`, `doneWhen`, current Session policy (frozen on start), active/prepare, empty decisions and verification `not_run`, then call `vibe_task_control(action=start)`. Record material decisions through Runtime; actual verification results only after checks. Follow `docs/03-STATE-MACHINE.md` and `schemas/task.schema.json`; never add dependency/strategy fields or change frozen policy. Strict-risk work requires explicit strict mode and a new strict Task. One registered active Task per Session.
 
-Not every increment needs a separate item in every stage, but skipped stages must be intentional and stated.
+## Output and completion
 
-## Task Contract
-
-Every non-trivial work item maps onto the V2 Task JSON:
-
-- `id`, `title` — one outcome, one verb;
-- `goal` — objective expressed as an outcome;
-- `doneWhen` — observable completion conditions, each verifiable;
-- `policy` — frozen from the Session mode when the Task starts;
-- `decisions` — related business rules and decisions it depends on;
-- `verification` — strategy now, results later;
-- `blocker` / `nextAction` — dependencies and the next mechanical step.
-
-Order the items dependency-first, not merely chronologically. Only items that need durable tracking or recovery become files under `.vibe/tasks/`; the rest stay in the plan.
-
-## Sizing Test
-
-A task is probably too large when:
-
-- its title contains multiple unrelated verbs;
-- it spans unrelated modules;
-- its completion cannot be demonstrated with a focused evidence set;
-- it requires reopening business clarification mid-implementation;
-- failure would make it unclear which assumption was wrong.
-
-A task is probably too small when it is only a single mechanical edit with no independent outcome.
-
-## Output
-
-The ordered task list with dependencies, plus the Task JSON files that warrant persistence. Under strict policy, the breakdown is captured before substantial implementation.
-
-## Completion Gate
-
-- all in-scope rules are covered by tasks or explicitly need no change;
-- dependencies and blockers are explicit;
-- no implementation task requires guessing unresolved business semantics;
-- every task has verifiable completion conditions;
-- the next ready task can be selected mechanically.
+Return an ordered plan of independently verifiable outcomes with dependency/authority boundaries. Under strict policy capture the necessary breakdown before substantial implementation. Complete when every in-scope rule is mapped, dependencies have no unresolved cycle, blockers and conditional work are explicit, each item has credible acceptance, and the next ready item is clear. Preserve remaining plan items as plans; do not manufacture Task completion.
 
 ## V2 operating rules
 
-- For registered Tasks, use Runtime lifecycle events in `docs/03-STATE-MACHINE.md`; never edit Task JSON directly.
-
-- Follow the current project `AGENTS.md` and Session policy.
-- Use a persistent `.vibe/tasks/<task-id>.json` only when V2 Task policy warrants it.
-- Write `.vibe/sessions/<session-id>/current-session.md` only for resumable unfinished work or a blocker.
-- Update `.vibe/progress.md` only for durable project facts.
-- Use only the V2 Task JSON and V2 Project Memory locations described above for durable state.
-- Report confirmed facts, assumptions, verification performed, and material limitations.
+Follow project `AGENTS.md` and effective Policy (frozen policy for existing Task work). Use Runtime lifecycle events, never edit registered Task JSON. Persist only warranted Task/Project Memory facts under the injected root and exact recovery path (`docs/05-MEMORY-CONTRACT.md`). Report evidence and limits; Main Agent owns strict review.

@@ -30,7 +30,7 @@ You are taking over a clean-room Vibe Coding V2 rewrite. Your job is to refine a
 - The mode change tool must require a one-time token created by the explicit command handler. No token or a reused/mismatched token must not change mode.
 - Existing Task policy remains frozen; mode applies to new work.
 - Fast/balanced never invoke reviewer. Strict requires verification then reviewer `go` before Task completion.
-- Strict reviewer is read-only, has no shell/glob/grep access, and cannot edit files. The plugin permission hook denies invocation without a one-time permit for the active strict Task.
+- Strict reviewer is read-only, has native read and the bounded `vibe_review_search` locator; no native shell/glob/grep, edits or test execution. The plugin permission hook denies invocation without a one-time permit for the active strict Task.
 - Maximum two automatic review repair rounds; then block and stop automatic retries.
 - Trivial one-turn work creates no Task and no memory write.
 - The Session-specific `.vibe/sessions/<session-id>/current-session.md` is recovery state; project-level `.vibe/progress.md` is durable project memory. Do not update either after every action.

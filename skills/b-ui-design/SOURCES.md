@@ -50,3 +50,7 @@ The current bundle intentionally does not include the full Taste Skill because i
   renamed to avoid nested Skill discovery; its content is unchanged.
 - Only the selected text references are copied; source CLIs, hooks, binaries, scripts, data catalogs, remote assets, and plugin configuration are not copied.
 - Future updates require a new review of source content, license, commit, and routing impact. Do not silently replace a pinned snapshot.
+
+## Supplemental design quality reference
+
+WCAG 2.2 (W3C Recommendation, 5 October 2023): https://www.w3.org/TR/2023/REC-WCAG22-20231005/ — criteria 1.4.3, 1.4.10, 1.4.11, 2.4.7, 2.4.11 and 2.5.8 inform the scoped checks in `guides/scenario-reference.md`. This is a reference, not a new bundled upstream snapshot, executable dependency, or claim of conformance. The existing pinned source files and lock are unchanged.

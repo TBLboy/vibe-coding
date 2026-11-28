@@ -24,7 +24,7 @@ A Task is one JSON file at. Its ID must be unique, path-safe, and match `[A-Za-z
 .vibe/tasks/<task-id>.json
 ```
 
-Do not create a Task file for trivial fast/balanced work. Strict always creates one. The shape is defined in `schemas/task.schema.json` and reflected by `runtime/core/task-machine.ts`.
+Do not create a Task file for trivial fast/balanced work or ordinary consultation without durable tracking needs in any mode. Strict engineering implementation and engineering work needing durable tracking require one. The shape is defined in `schemas/task.schema.json` and reflected by `runtime/core/task-machine.ts`.
 
 Required fields:
 
@@ -71,7 +71,8 @@ Final reviewer verdict is `go`, `conditional`, or `no-go`. A `go` result has no 
 - Task execution state and acceptance criteria → Task JSON.
 - Current unfinished work needed for recovery → `.vibe/sessions/<session-id>/current-session.md` (Session-scoped; exact path is injected by the plugin).
 - Durable project milestones/decisions/limitations → `.vibe/progress.md` and project-specific source docs when appropriate.
-- Project rules → root `AGENTS.md`.
+- Project rules → root `AGENTS.md` (user-approved).
+- Approved durable business rules → active per-work requirements; technical rationale → relevant docs; reusable experience → indexed lessons. See `05-MEMORY-CONTRACT.md` for scope, maintenance and claim-specific authority.
 
 Do not add a second canonical copy of the same fact to make a report look complete.
 

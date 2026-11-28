@@ -22,18 +22,19 @@ Four concepts only:
 
 - **Session** — user-facing context and current mode.
 - **Policy** — `fast`, `balanced` or `strict`; controls process depth.
-- **Task** — optional persistent work unit; always created in strict mode.
+- **Task** — optional persistent work unit; mandatory for strict engineering implementation or engineering work needing durable tracking; ordinary consultation without tracking needs creates none.
 - **Project Memory** — project rules and durable facts, not an action transcript.
 
 ## Non-negotiable decisions
 
 - No compatibility with, or migration from, any previous framework.
-- No independent reviewer toggle. `fast` and `balanced` never invoke the reviewer; `strict` requires reviewer `go` before Task completion. Native background reviewer launches stay pending until Runtime reads the bound child's successful terminal result; see the [completion protocol](docs/03-STATE-MACHINE.md).
-- Team-workspace development is opt-in. This branch (`feat/team-workspace-plugin`) carries the OpenCode plugin; explicit connection plus safe plugin mirroring are in [the team plugin guide](runtime/opencode/plugins/vibe-v2/team/README.md). The headless workbench server lives on `feat/team-workspace-workbench`, and the real-server/two-client acceptance (`tests/team-e2e.test.ts`) stays on the combined baseline `feat/team-workspace`. Live OpenCode SDK activation and production deployment remain separate gates.
+- No independent reviewer toggle. `fast` and `balanced` Task policies never invoke the reviewer; a `strict` Task requires reviewer `go` before completion, regardless of later Session switches. Reviewer can independently locate current files/lines and inspect Runtime verification paths using its bounded read-only locator; no arbitrary shell or test execution. Native background reviewer launches stay pending until Runtime reads the bound child's successful terminal result; see the [completion protocol](docs/03-STATE-MACHINE.md).
+- Personal Workbench creation + Key binding is the primary initialization path. Explicit offline initialization and existing log import are supported. See [plugin guide](runtime/opencode/plugins/vibe-v2/team/README.md); the paired server is in the sibling `team-workspace-workbench` tree. `tests/workbench-e2e.test.ts` exercises a real local server. Live OpenCode and cloud deployment remain separate gates.
 - Task policy is frozen when the Task starts; changing Session mode affects new work only.
 - No Goal runtime, Run state machine, event-sourced operation ledger, SQLite projection, standalone Evidence model, default MCPs or third-party workflow plugins.
 - No logs for file reads, searches, shell commands, ordinary retries or intermediate actions.
 - Each Session has its own `current-session.md` for resumable unfinished work/blockers; project-level `progress.md` is for durable facts. Neither is rewritten for every action by ritual.
+- Context is acquired selectively; native OpenCode compaction and existing Task/Memory recovery are used without a second context service or changes to model/provider configuration. See [context and integration contract](docs/08-OPENCODE-INTEGRATION.md).
 - Core tests have no third-party package dependency.
 
 ## Start here
@@ -55,7 +56,7 @@ docs/                             Canonical product and engineering contracts
 schemas/task.schema.json          Minimal persisted Task shape
 runtime/core/                     Small pure TypeScript reference logic
 runtime/opencode/                 OpenCode config, plugin adapter, Agent prompts
-skills/                           Managed V2 capability Skills (Workbench creation lives on the server; local Skills only connect and operate)
+skills/                           Managed V2 capability Skills (Workbench primary initialization; explicit local initialization and log import)
 tests/                            Core behavior tests
 ```
 
@@ -99,7 +100,7 @@ No legacy upgrade/uninstall scripts, compatibility shims, old-state migration, t
 
 ## Optional V2 capability Skills
 
-The V2 installer includes a user-approved, managed capability pack under `skills/`. These Skills restore focused abilities such as codebase onboarding, clarification, architecture/specification, implementation, verification, research, code tutoring, model configuration, UX audit, and plan stress testing. `vibe-main` contains the trigger routing table, and every trigger carries the user's own-language aliases next to the English wording — a colloquial request such as 归档 routes to the registered Skill instead of an improvised flow. They are V2-compatible: they use `AGENTS.md`, `.vibe` memory, and optional Task JSON only; they do not recreate the old Project Log, Goal, Run, ledger, SQLite, standalone Evidence, or dynamic subagent architecture.
+The V2 installer includes a user-approved, managed capability pack under `skills/`. The 22 managed Skills cover focused abilities such as codebase onboarding, clarification, architecture/specification, implementation, verification, research, online information search, code tutoring, UI design and Workbench operations. Concise communication is the Main Agent’s default style, not a separate Skill. The retired Git archive workflow is not part of the current pack; Workbench synchronization does not replace independent backups. `vibe-main` contains the trigger routing table, and every trigger carries the user's own-language aliases next to the English wording — a colloquial request such as 初始化 routes to the registered Skill instead of an improvised flow. They are V2-compatible: they use `AGENTS.md`, `.vibe` memory, and optional Task JSON only; they do not recreate the old Project Log, Goal, Run, ledger, SQLite, standalone Evidence, or dynamic subagent architecture.
 
 ## P0/P1 repair candidate
 
