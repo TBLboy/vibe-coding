@@ -24,7 +24,7 @@ AGENTS.md                     Stable project rules and constraints
 .vibe/lessons/<id>.md          One lesson per file
 ```
 
-Do not create an empty optional file just because the template mentions it. Initialization creates `AGENTS.md`, `.vibe/progress.md`, `.vibe/docs/`, and the initializing Session's own `current-session.md` (initialization is the start of work); it never pre-creates `tasks/` or `requirements/`.
+Workbench is the primary initializer; explicit offline initialization uses its exact published template. The engineering-dev template contains `AGENTS.md`, `.vibe/progress.md`, `.vibe/docs/.gitkeep`, `.vibe/requirements/README.md`, `.vibe/tasks/.gitkeep`, `.vibe/lessons/README.md`. No Session or Task record is fabricated. Optional records are created only when warranted. Existing logs can be imported unchanged at workspace creation.
 
 ## docs/
 
@@ -104,3 +104,7 @@ Do not add event arrays, tool histories, Run objects, standalone Evidence, or re
 ## Memory quality bar
 
 Before writing, ask: “Would the next agent make a worse decision or lose meaningful progress if this fact were omitted?” If not, do not write it.
+
+## Relevant memory consumption
+
+Consult relevant active requirements, lessons, docs/progress and Session/Task records when the current work needs them; verify against actual code and authority. Do not auto-inject all memory, invent missing facts, or add a mandatory retrieval stage.

@@ -93,3 +93,7 @@ The final response must state:
 - material limitations or checks not run.
 
 Keep it concise. Do not include a tool-by-tool diary.
+
+## Personal Workbench refinement
+
+This is a small personal framework. Workbench creation + local Key binding is the primary initialization route. Explicit local initialization is supported using the same published engineering-dev template; Workbench may instead create a workspace from existing valid engineering logs without template overlay. Sync remains AGENTS.md and .vibe/ except device-private data; Git stays independent. No team accounts, sync dashboard, dedicated conflict management, new Runtime objects or product metrics.

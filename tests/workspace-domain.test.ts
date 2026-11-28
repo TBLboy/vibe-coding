@@ -44,3 +44,12 @@ test("rename and archive: archived space leaves the list and its Key reports arc
     assert.throws(() => getWorkspace(store, workspace.id), (e) => e instanceof ApiError && e.status === 404);
   } finally { store.close(); }
 });
+
+
+test('refinement: import transaction rolls back workspace, key, document, versions, change and seq on second file failure',()=>{
+ const s=openTeamDatabase(':memory:');try{
+ s.db.exec(`CREATE TRIGGER fail_import BEFORE INSERT ON document WHEN NEW.path='.vibe/progress.md' BEGIN SELECT RAISE(ABORT,'fixture failure'); END;`);
+ assert.throws(()=>createWorkspace(s,{name:'Fail',type:'engineering-dev',files:[{path:'AGENTS.md',content:'a'},{path:'.vibe/progress.md',content:'b'}]},NOW,true));
+ for(const table of ['workspace','workspace_key','document','document_version','change','workspace_seq'])assert.equal((s.db.prepare(`SELECT count(*) AS n FROM ${table}`).get() as any).n,0,table);
+ }finally{s.close();}
+});

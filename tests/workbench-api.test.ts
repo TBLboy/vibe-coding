@@ -74,3 +74,29 @@ test('archive: Key stops working with 410 and the space leaves the list', async 
   assert.equal((await h.call('/api/workspaces', ADMIN)).json.workspaces.length, 0);
   assert.equal((await h.call('/api/workspaces/' + workspace.id + '/key', ADMIN)).status, 404);
 });
+
+
+test('refinement: exact UTF-8 including worst JSON expansion, BOM, CRLF and NUL; route limits and early auth',async t=>{
+ const h=await harness(t);const {workspace,key}=await h.create();const prefix='/api/workspaces/'+workspace.id;
+ const content='\0'.repeat(1024*1024-5)+'\ufeff\r\n';const path=prefix+'/documents/.vibe/docs/large.md';
+ const put=await h.call(path,key,{method:'PUT',headers:{'if-match':'0'},body:{content}});assert.equal(put.status,200);
+ assert.equal((await h.call(path,key)).json.content,content);
+ const changes=await h.call(prefix+'/changes?since=0',key);assert.equal(changes.status,200);assert.equal(changes.json.changes.at(-1).content,content);
+ assert.equal((await h.call(path,key,{method:'PUT',headers:{'if-match':'1'},body:{content:content+'x'}})).status,413);
+ assert.equal((await h.call(path,key,{method:'PUT',headers:{'if-match':'1'},body:{content:'\ud800'}})).status,422);
+ assert.equal((await h.call(path,null,{method:'PUT',headers:{'if-match':'1'},body:{content}})).status,401);
+ assert.equal((await h.call('/api/workspaces',ADMIN,{method:'POST',body:{name:'x',padding:content}})).status,413);
+});
+
+test('refinement: import permissions, exact source files, rejection without new workspace',async t=>{
+ const h=await harness(t);const {key}=await h.create();const files=[{path:'AGENTS.md',content:'\ufeffrules\r\n'},{path:'.vibe/progress.md',content:'progress\0'},{path:'.vibe/docs/empty.md',content:''}];const payload={name:'Imported',type:'engineering-dev',files};
+ assert.equal((await h.call('/api/workspaces/import',null,{method:'POST',body:payload})).status,401);
+ assert.equal((await h.call('/api/workspaces/import',key,{method:'POST',body:payload})).status,403);
+ const r=await h.call('/api/workspaces/import',ADMIN,{method:'POST',body:payload});assert.equal(r.status,201);
+ const feed=(await h.call('/api/workspaces/'+r.json.workspace.id+'/changes?since=0',r.json.key)).json.changes;
+ assert.deepEqual(feed.map((x:any)=>({path:x.path,content:x.content})),files);
+ for(const invalidFiles of [[files[0]],[...files,files[0]],[...files,{path:'.vibe/.SYNC/a',content:'x'}],[...files,{path:'.vibe/docs/CON.txt',content:'x'}],[...files,{path:'.vibe/docs/EMPTY.md',content:'x'}],[...files,{path:'.vibe/docs/empty.md/x',content:'x'}],[...files,{path:'.vibe/docs/large',content:'x'.repeat(1048577)}]]){
+  const bad=await h.call('/api/workspaces/import',ADMIN,{method:'POST',body:{...payload,files:invalidFiles}});assert.ok([422,413].includes(bad.status),String(bad.status));
+ }
+ assert.equal((await h.call('/api/workspaces',ADMIN)).json.workspaces.length,2);
+});

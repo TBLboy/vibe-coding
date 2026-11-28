@@ -41,8 +41,8 @@ export function getChanges(value: DbLike, query: ChangeQuery): ChangeBatch {
 
   const rows = databaseOf(value).prepare(`
     SELECT s.seq AS head, c.seq, c.path, c.op, c.version, c.created_at,
-           v.content, v.content_hash,
-           d.version AS cur_version, d.content_hash AS cur_hash, d.deleted_at AS cur_deleted, cv.content AS cur_content
+           CAST(v.content AS BLOB) AS content, v.content_hash,
+           d.version AS cur_version, d.content_hash AS cur_hash, d.deleted_at AS cur_deleted, CAST(cv.content AS BLOB) AS cur_content
       FROM workspace_seq AS s
       LEFT JOIN change AS c ON c.workspace_id = s.workspace_id AND c.seq > ?
       LEFT JOIN document AS d
@@ -61,12 +61,12 @@ export function getChanges(value: DbLike, query: ChangeQuery): ChangeBatch {
     op: "upsert" | "delete";
     version: number;
     created_at: string;
-    content: string | null;
+    content: Uint8Array | null;
     content_hash: string | null;
     cur_version: number | null;
     cur_hash: string | null;
     cur_deleted: string | null;
-    cur_content: string | null;
+    cur_content: Uint8Array | null;
   }>;
 
   // The head and rows come from one SQLite statement/snapshot. An absent tail
@@ -86,7 +86,7 @@ export function getChanges(value: DbLike, query: ChangeQuery): ChangeBatch {
     if (row.op === "upsert") {
       if (row.content !== null && row.content_hash !== null) {
         change.hash = row.content_hash;
-        change.content = row.content;
+        change.content = new TextDecoder("utf-8",{fatal:true,ignoreBOM:true}).decode(row.content);
       } else if (row.cur_deleted !== null) {
         // R12: this version was pruned and the document is deleted now; surface it as a delete.
         change.op = "delete";
@@ -94,7 +94,7 @@ export function getChanges(value: DbLike, query: ChangeQuery): ChangeBatch {
         // R12: pruned version of a live document; coalesce into the current state.
         change.version = row.cur_version;
         change.hash = row.cur_hash;
-        change.content = row.cur_content;
+        change.content = new TextDecoder("utf-8",{fatal:true,ignoreBOM:true}).decode(row.cur_content);
       } else throw new Error("change-feed: missing upsert content");
     }
     available.push(change);

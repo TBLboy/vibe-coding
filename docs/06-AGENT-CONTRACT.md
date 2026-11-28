@@ -87,3 +87,7 @@ Never write tool history, model thoughts, routine retries, or empty placeholder 
 ## 8. Completion response
 
 Report the outcome, relevant verification, and material limitations. Do not dump the execution diary. If work is blocked, explain the blocker, what is already established, and the single next decision/action needed.
+
+## Relevant memory consumption
+
+Consult relevant active requirements, lessons, docs/progress and Session/Task records when the current work needs them; verify against actual code and authority. Do not auto-inject all memory, invent missing facts, or add a mandatory retrieval stage.

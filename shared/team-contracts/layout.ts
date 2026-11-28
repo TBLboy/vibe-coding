@@ -40,6 +40,9 @@ export function validateSyncPath(path: unknown): PathValidation {
   const p = base.path;
   if (p === "AGENTS.md") return base;
   if (!p.startsWith(".vibe/")) return { ok: false, reason: "path must be AGENTS.md or under .vibe/" };
-  if (p.startsWith(".vibe/.sync/")) return { ok: false, reason: "path is device-private" };
+  if (p.toLowerCase() === ".vibe/.sync" || p.toLowerCase().startsWith(".vibe/.sync/")) return { ok: false, reason: "path is device-private" };
+  for (const segment of p.split('/')) {
+    if (/[<>:"|?*]/u.test(segment) || /[. ]$/u.test(segment) || /^(?:con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])(?:\.|$)/iu.test(segment) || /[\uD800-\uDFFF]/u.test(segment)) return { ok: false, reason: 'unsafe cross-platform segment' };
+  }
   return base;
 }

@@ -39,3 +39,7 @@ These open items do not authorize adding new workflow concepts or external depen
 | D-26 | Skill routing triggers and Skill `description`s carry the user's own-language aliases first (Chinese now), and the main Agent must match a named workflow action against the routing table before improvising | VIBE-FW-ROUTE-001: English-only triggers let a Chinese request (归档) bypass the registered Skill and produce a silently degraded parallel flow; the alias layer costs nothing and is guarded by a package test |
 | D-27 | Strict review adapts to native background subagents by binding the child at launch and retrieving its successful terminal result on natural parent continuation | User-approved repair for OpenCode 2.3.0's background-only tool; preserve the authorization/identity/freshness gates without timers, polling or parent-authored verdicts. Canonical protocol: `03-STATE-MACHINE.md` |
 | D-21 | Requirement baselines are per work item under `.vibe/requirements/<work>.md` with a `README.md` index; cross-work rules are distilled into `AGENTS.md` | A project runs many pieces of work; one shared requirements file mixes unrelated rules, versions, and change control |
+
+## Product refinement
+
+Keep the four concepts and three modes. Workbench owns the canonical template; distribute the generated offline pack in the companion plugin. Import uses a separate atomic admin endpoint. Device sync state is isolated by normalized server URL + Workspace ID, and repeated conflict recovery remains private. Existing invalid history is retained; no silent destructive cleanup.

@@ -11,3 +11,8 @@ test("workspace paths allow AGENTS.md and .vibe/ only", () => {
   }
   assert.equal(validateWorkspacePath(42).ok, false);
 });
+
+
+test('refinement: exact private and Windows unsafe names rejected',()=>{
+ for(const p of ['.vibe/.sync','.vibe/.SYNC/x','.vibe/docs/CON.txt','.vibe/docs/a:stream','.vibe/docs/a.','.vibe/docs/x ',' .vibe/x','.vibe/docs/LPT¹.txt'])assert.equal(validateWorkspacePath(p).ok,false,p);
+});

@@ -14,7 +14,7 @@ Run `npm run start:team`. Configuration is read only from the server process env
 | `TEAM_DB_PATH` | Default `team-data/workspace.sqlite` |
 | `TEAM_TLS_CERT`, `TEAM_TLS_KEY` | Optional PEM paths; set both for HTTPS or neither for HTTP |
 
-The startup line reports `adminToken: configured`. The data directory must be owner-only on Unix. Stop the server before copying the database files (WAL).
+The startup line reports `adminToken: configured`. The data directory must be owner-only on Unix. Use a consistent SQLite backup (`VACUUM INTO` or online backup) and verify restore. Never copy a live WAL database as independent files.
 
 ## Credentials
 
@@ -27,6 +27,7 @@ The startup line reports `adminToken: configured`. The data directory must be ow
 Admin routes:
 
 - `POST /api/workspaces` with `{name, type?}` creates a workspace (default type `engineering-dev`), writes the type template files and returns `{workspace, key}`. Unknown type: 422 `unsupported_type`.
+- `POST /api/workspaces/import` with `{name,type,files:[{path,content}]}` creates a workspace and Key atomically, using exactly the supplied files; AGENTS.md and .vibe/progress.md required. 32 MiB encoded body, 1 MiB per file. No automatic retry on unknown result.
 - `GET /api/workspaces`, `GET /api/workspaces/{id}`, `PATCH /api/workspaces/{id}` (rename), `DELETE /api/workspaces/{id}` (archive: data kept, Key stops working).
 - `GET /api/workspaces/{id}/key` returns the current Key and requires the admin credential; archived workspaces return 404.
 
@@ -35,7 +36,7 @@ Key routes:
 - `POST /api/connect` validates the Key and returns the workspace.
 - `GET /api/workspaces/{id}/changes?since=0&limit=200` replays the change feed with no sequence gaps (includes tombstones).
 - `GET/PUT/DELETE /api/workspaces/{id}/documents/{path}`. Mutations require `If-Match` (new path `0`); PUT body is `{content}` (UTF-8, at most 1 MiB). Conflicts return 409 with `currentVersion` and `currentHash`.
-- Valid paths: `AGENTS.md` or anything under `.vibe/`, except the device-private `.vibe/.sync/`.
+- Valid paths: `AGENTS.md` or anything under `.vibe/`, except the device-private `.vibe/.sync/` (case-insensitive) and unsafe/colliding cross-platform paths. Document PUT JSON is capped at 7 MiB; normal requests remain 2 MiB.
 - An archived workspace answers 410 `workspace_archived`.
 
 Health: `GET /api/healthz`. Request logs contain route, status and timing only, never bodies, headers or credentials.

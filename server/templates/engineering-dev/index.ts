@@ -4,7 +4,7 @@ export interface TemplateFile { path: string; content: string }
 export interface TemplatePack { type: string; version: number; files: TemplateFile[] }
 
 export const TYPE = "engineering-dev";
-export const VERSION = 2;
+export const VERSION = 3;
 
 const BEGIN = "<!-- VIBE-PROJECT-GENERAL:BEGIN -->";
 const END = "<!-- VIBE-PROJECT-GENERAL:END -->";
@@ -36,7 +36,7 @@ None recorded.
 
 Not yet established.
 
-<!-- Update only when durable project facts change. This is not a command log or a daily diary. -->
+<!-- Maintain current facts, not an append-only diary. Update only on durable changes; distinguish verified and unverified behavior, link relevant authoritative records, reconcile stale summaries. -->
 `;
 
 const requirements = `# Requirements Index
@@ -52,7 +52,7 @@ const lessons = `# Lessons Index
 | id | 类型 | 状态 | 关键词 | 摘要 |
 |---|---|---|---|---|
 
-<!-- 每条经验独立成文件；本表为索引。 -->
+<!-- 每条经验独立成文件；先查索引再写，合并同类机制并维护状态、关键词与摘要。记录触发条件、证据和预防方法，不把未确认原因写成事实。 -->
 `;
 
 export const engineeringDev: TemplatePack = {

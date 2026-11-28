@@ -6,7 +6,7 @@ import { validateServerPath } from "../../shared/team-contracts/layout.ts";
 import { validateWorkspacePath } from "./paths.ts";
 import { withTransaction, type TeamDatabase } from "../store/sqlite.ts";
 
-const MAX_DOCUMENT_BYTES = 1024 * 1024;
+import { MAX_DOCUMENT_BYTES, validText, pathsCollide } from "../../shared/team-contracts/limits.ts";
 const MAX_KEPT_VERSIONS = 20;
 
 export interface WriteDocumentInput {
@@ -71,7 +71,7 @@ function assertInput(input: WriteDocumentInput): void {
   if (!Number.isSafeInteger(input.expectedVersion) || input.expectedVersion < 0) {
     throw new Error("invalid expectedVersion");
   }
-  if (input.content !== null && typeof input.content !== "string") {
+  if (input.content !== null && (typeof input.content !== "string" || !validText(input.content))) {
     throw new Error("invalid document content");
   }
   if (input.content !== null && Buffer.byteLength(input.content, "utf8") > MAX_DOCUMENT_BYTES) {
@@ -85,7 +85,7 @@ interface StoredDocumentRow {
   path: string;
   version: number;
   content_hash: string | null;
-  content: string | null;
+  content: Uint8Array | null;
   updated_at: string;
   deleted_at: string | null;
 }
@@ -97,7 +97,7 @@ function readStoredDocument(db: DatabaseSync, lookup: DocumentLookup): StoredDoc
   }
   const row = db.prepare(`
     SELECT d.id, d.workspace_id, d.path,
-           d.version, d.content_hash, v.content, d.updated_at, d.deleted_at
+           d.version, d.content_hash, CAST(v.content AS BLOB) AS content, d.updated_at, d.deleted_at
       FROM document AS d
       LEFT JOIN document_version AS v
         ON v.document_id = d.id AND v.version = d.version
@@ -106,7 +106,7 @@ function readStoredDocument(db: DatabaseSync, lookup: DocumentLookup): StoredDoc
   if (!row || lookup.version === undefined || lookup.version === row.version) return row;
   return db.prepare(`
     SELECT d.id, d.workspace_id, d.path,
-           v.version, v.content_hash, v.content, v.created_at AS updated_at,
+           v.version, v.content_hash, CAST(v.content AS BLOB) AS content, v.created_at AS updated_at,
            CASE WHEN v.content IS NULL THEN v.created_at ELSE NULL END AS deleted_at
       FROM document AS d
       JOIN document_version AS v ON v.document_id = d.id
@@ -122,7 +122,7 @@ function mapDocument(row: StoredDocumentRow | undefined): DocumentRecord | null 
     path: row.path,
     version: row.version,
     hash: row.content_hash,
-    content: row.content,
+    content: row.content===null?null:new TextDecoder("utf-8",{fatal:true,ignoreBOM:true}).decode(row.content),
     updatedAt: row.updated_at,
     deletedAt: row.deleted_at,
   };
@@ -145,6 +145,10 @@ export function writeDocument(value: DbLike, input: WriteDocumentInput): Documen
   const contentHash = input.content === null ? null : hashContent(input.content);
 
   return transact(value, (db) => {
+    if (input.content !== null) {
+      const paths = db.prepare("SELECT path FROM document WHERE workspace_id=? AND deleted_at IS NULL").all(input.workspaceId) as {path:string}[];
+      if (paths.some(row => pathsCollide(row.path,input.path))) throw new Error("invalid document path collision");
+    }
     const existing = db.prepare(
       "SELECT id, version, content_hash FROM document WHERE workspace_id = ? AND path = ?",
     ).get(input.workspaceId, input.path) as {
